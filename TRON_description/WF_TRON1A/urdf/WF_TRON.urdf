@@ -66,23 +66,6 @@
             </geometry>
         </collision>
     </link>
-
-    <link name="limx_imu">
-        <inertial>
-            <mass value="0.01"/>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
-            <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
-        </inertial>
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.015 0.015 0.004"/>
-            </geometry>
-        </visual>
-        <material name="orange">
-            <color rgba="255 108 10 255"/>
-        </material>
-    </link>
     
     <link name="abad_L_Link">
         <inertial>
@@ -279,12 +262,6 @@
     </link>
 
     <!-- ****************************************** Joint ******************************************************** -->
-    
-    <joint name="limx_imu_joint" type="fixed">
-        <origin rpy="0. 0. 0." xyz="0. 0. 0."/>
-        <parent link="base_Link"/>
-        <child link="limx_imu"/>
-    </joint>
     
     <joint name="abad_L_Joint" type="revolute">
         <origin xyz="55.56E-03 105E-03 -260.2E-03" rpy="0 0 0"/>
