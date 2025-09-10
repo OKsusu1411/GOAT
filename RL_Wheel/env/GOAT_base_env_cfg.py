@@ -18,39 +18,40 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
 from isaaclab.controllers import DifferentialIKControllerCfg
 from isaaclab.controllers.joint_impedance import JointImpedanceControllerCfg
 
+# Robot asset paths
 current_dir = os.path.dirname(__file__)
 TRON_usdpath = os.path.join(current_dir, "../../TRON_description/WF_TRON1A/WF_TRON1A.usd")
-GOAT_usdpath = os.path.join(current_dir, "../../")
+GOAT_usdpath = os.path.join(current_dir, "../../") # Add it later
 
 @configclass
 class GOATBaseEnvCfg(DirectRLEnvCfg):
-    # env
+    # Env
     episode_length_s: int
     decimation: int
     action_space: int
     observation_space: int
     state_space: int
 
-    # ground plane
+    # Ground plane
     plane = AssetBaseCfg(
         prim_path="/World/GroundPlane",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]),
         spawn=GroundPlaneCfg(),
     )
 
-    # light
+    # Light
     dome_light = AssetBaseCfg(
         prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
     )
 
+    # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=3.0, replicate_physics=True)
 
-# ================= TODO: 로봇 cfg 따로 만들기==========================
     # GOAT cfg
     GOAT_cfg: ArticulationCfg = ArticulationCfg(
         prim_path="/World/envs/env_.*/Robot",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=f"../../TRON_description/WF_TRON1A/WF_TRON1A.usd",
+            usd_path=f"../../TRON_description/WF_TRON1A/WF_TRON1A.usd",   # Change to GOAT path later
             translation=[0.0, 0.0, 0.0],
             orientation=[0.0, 0.0, 0.0],
             scale=1.0,
@@ -69,6 +70,7 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
           ),
         ),
 
+        # Initial Joint pos and vel
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.0),
             joint_pos={
@@ -84,6 +86,7 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
             joint_vel={".*": 0.0},
         ),
 
+        # Actuators cfg
         actuators={
             "leg": DCMotorCfg(
                 joint_names_expr=["hip_.*", "thigh_.*", "knee_.*",],       # parameter reference from TRON
@@ -107,6 +110,7 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
         }
     )
 
+    # Impedance Controller
     imp_controller: JointImpedanceControllerCfg = JointImpedanceControllerCfg(
         command_type="p_abs",
         impedance_mode="variable",
