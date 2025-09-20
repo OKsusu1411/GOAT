@@ -1,0 +1,41 @@
+
+
+agent:
+  class: PPO
+  rollouts: 36
+  # rollouts: 36
+  learning_epochs: 4
+  mini_batches: 24 
+  discount_factor: 0.99
+  lambda: 0.95
+  learning_rate: 2.0e-04
+
+  state_preprocessor: RunningStandardScaler
+  state_preprocessor_kwargs: null
+  value_preprocessor: RunningStandardScaler
+  value_preprocessor_kwargs: null
+
+  learning_rate_scheduler: KLAdaptiveLR
+  learning_rate_scheduler_kwargs:
+    kl_threshold: 0.004
+
+  random_timesteps: 0
+  learning_starts: 0
+
+  grad_norm_clip: 1.0
+  ratio_clip: 0.2
+  value_clip: 0.2
+  clip_predicted_values: True
+
+  entropy_loss_scale: 0.005
+  value_loss_scale: 2.0
+  kl_threshold: 0.0
+  rewards_shaper_scale: 0.1
+  time_limit_bootstrap: False
+
+  # logging and checkpoint
+  experiment:
+    directory: "goat_spawn"
+    experiment_name: ""
+    write_interval: auto
+    checkpoint_interval: auto

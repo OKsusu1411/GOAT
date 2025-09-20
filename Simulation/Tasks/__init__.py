@@ -1,0 +1,1 @@
+from . import GOAT_spawn
