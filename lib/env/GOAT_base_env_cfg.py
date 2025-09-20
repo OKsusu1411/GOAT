@@ -6,7 +6,6 @@
 import os
 import isaaclab.sim as sim_utils
 
-from __future__ import annotations
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg
 from isaaclab.envs import DirectRLEnvCfg
@@ -20,8 +19,8 @@ from isaaclab.controllers.joint_impedance import JointImpedanceControllerCfg
 
 # Robot asset paths
 current_dir = os.path.dirname(__file__)
-TRON_usdpath = os.path.join(current_dir, "../../TRON_description/WF_TRON1A/WF_TRON1A.usd")
-GOAT_usdpath = os.path.join(current_dir, "../../") # Add it later
+TRON_USDPATH = os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/WF_TRON.usd")
+GOAT_USDPATH = os.path.join(current_dir, "../../Simulation/Assets/") # Add it later
 
 @configclass
 class GOATBaseEnvCfg(DirectRLEnvCfg):
@@ -51,10 +50,8 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
     GOAT_cfg: ArticulationCfg = ArticulationCfg(
         prim_path="/World/envs/env_.*/Robot",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=f"../../TRON_description/WF_TRON1A/WF_TRON1A.usd",   # Change to GOAT path later
-            translation=[0.0, 0.0, 0.0],
-            orientation=[0.0, 0.0, 0.0],
-            scale=1.0,
+            usd_path=TRON_USDPATH,   # Change to GOAT path later
+            scale=(1.0, 1.0, 1.0),
             activate_contact_sensors=False,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 disable_gravity=False,
@@ -82,9 +79,8 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
                 "knee_R_Joint": 0.0,
                 "wheel_L_Joint": 0.0,
                 "wheel_R_Joint": 0.0,
-            },
-            joint_vel={".*": 0.0},
-        ),
+                },
+            ),
 
         # Actuators cfg
         actuators={
