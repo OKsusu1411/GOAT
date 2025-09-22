@@ -19,8 +19,18 @@ from isaaclab.controllers.joint_impedance import JointImpedanceControllerCfg
 
 # Robot asset paths
 current_dir = os.path.dirname(__file__)
-TRON_USDPATH = os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/WF_TRON.usd")
-GOAT_USDPATH = os.path.join(current_dir, "../../Simulation/Assets/") # Add it later
+TRON_ASSET = {
+    "urdf_path": os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/urdf/WF_TRON.urdf"),
+    "usd_path": os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/usd/WF_TRON.usd"),
+    "usd_place": os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/usd/"),
+    "usd_filename": "WF_TRON.usd"
+}
+GOAT_ASSET = {
+    "urdf_path": os.path.join(current_dir, "../../Simulation/Assets/"),   # Change to GOAT path later
+    "usd_path": os.path.join(current_dir, "../../Simulation/Assets/"),
+    "usd_place": os.path.join(current_dir, "../../Simulation/Assets/"),
+    "usd_filename": "WF_GOAT.usd"
+}
 
 @configclass
 class GOATBaseEnvCfg(DirectRLEnvCfg):
@@ -46,11 +56,26 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
     # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=3.0, replicate_physics=True)
 
+    # URDF to USD conversion
+    urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
+        root_link_name = "base_Link",
+        asset_path = TRON_ASSET["urdf_path"],
+        usd_dir = TRON_ASSET["usd_place"],
+        usd_filename = TRON_ASSET["usd_filename"],
+    )
+    urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
+    
+    # URDF conversion check
+    if urdf_converter.usd_path == TRON_ASSET["usd_path"]:
+        print("urdf convertion success!")
+    else:
+        print("urdf convertion failed!")
+
     # GOAT cfg
     GOAT_cfg: ArticulationCfg = ArticulationCfg(
         prim_path="/World/envs/env_.*/Robot",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=TRON_USDPATH,   # Change to GOAT path later
+            usd_path=urdf_converter.usd_path,
             scale=(1.0, 1.0, 1.0),
             activate_contact_sensors=False,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
