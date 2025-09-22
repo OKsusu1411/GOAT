@@ -1,9 +1,7 @@
 from typing import Any, Mapping, Tuple, Union
-
-import gymnasium
-
-import torch
 from torch.distributions import MultivariateNormal
+import gymnasium
+import torch
 
 
 # speed up distribution construction by disabling checking

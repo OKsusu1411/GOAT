@@ -1,7 +1,6 @@
 from typing import Any, Mapping, Tuple, Union
-
-import torch
 from torch.distributions import Categorical
+import torch
 
 
 # speed up distribution construction by disabling checking

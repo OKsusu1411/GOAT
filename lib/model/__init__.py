@@ -1,8 +1,7 @@
-from skrl.models.torch.base import Model  # isort:skip
-
-from skrl.models.torch.categorical import CategoricalMixin
-from skrl.models.torch.deterministic import DeterministicMixin
-from skrl.models.torch.gaussian import GaussianMixin
-from skrl.models.torch.multicategorical import MultiCategoricalMixin
-from skrl.models.torch.multivariate_gaussian import MultivariateGaussianMixin
-from skrl.models.torch.tabular import TabularMixin
+from lib.model.base import Model
+from lib.model.categorical import CategoricalMixin
+from lib.model.deterministic import DeterministicMixin
+from lib.model.gaussian import GaussianMixin
+from lib.model.multicategorical import MultiCategoricalMixin
+from lib.model.multivariate_gaussian import MultivariateGaussianMixin
+from lib.model.tabular import TabularMixin
