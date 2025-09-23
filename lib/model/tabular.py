@@ -1,10 +1,7 @@
 from typing import Any, Mapping, Optional, Sequence, Tuple, Union
-
 from packaging import version
-
+from .base import Model
 import torch
-
-from skrl.models.torch import Model
 
 
 class TabularMixin:
