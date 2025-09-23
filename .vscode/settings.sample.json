@@ -1,0 +1,12 @@
+{
+    "python.analysis.extraPaths": [
+      "C:/IsaacLab/source/isaaclab",         
+      "C:/IsaacLab/source/isaaclab_tasks",
+      "C:/IsaacLab/source/isaaclab_rl",
+      "C:/IsaacLab/source/isaaclab_mimic",
+      "C:/IsaacLab/source/isaaclab_assets"
+    ],
+    
+  
+    "python.defaultInterpreterPath": "C:/Users/USER/miniconda3/envs/env_isaaclab/python.exe"
+  }
