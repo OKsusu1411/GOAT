@@ -54,7 +54,7 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
     )
 
     # Scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=3.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1, env_spacing=3.0, replicate_physics=True)
 
     # URDF to USD conversion
     urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
