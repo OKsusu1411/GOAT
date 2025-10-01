@@ -61,7 +61,12 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
         root_link_name = "base_Link",
         asset_path = TRON_ASSET["urdf_path"],
         usd_dir = TRON_ASSET["usd_place"],
-        usd_filename = TRON_ASSET["usd_filename"],
+        usd_file_name = TRON_ASSET["usd_filename"],
+        fix_base=False,
+        joint_drive=sim_utils.JointDriveCfg(
+            mode="effort",
+            gains=sim_utils.JointGainsCfg(stiffness=100.0, damping=10.0)
+        ),
     )
     urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
     
