@@ -54,3 +54,6 @@ _build
 
 # Pre-Trained Checkpoints
 /.pretrained_checkpoints/
+
+# Generated Assets
+*.usd
