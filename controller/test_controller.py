@@ -59,11 +59,12 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # PD gain tuning
-    robot.actuators["leg"].stiffness = 40.0
-    robot.actuators["leg"].damping = 2.5
+    # Actuator's PD gain
+    # set to 0 when using external low-level torque controller
+    robot.actuators["leg"].stiffness = 0.0
+    robot.actuators["leg"].damping = 0.0
     robot.actuators["wheel"].stiffness = 0.0
-    robot.actuators["wheel"].damping = 0.8
+    robot.actuators["wheel"].damping = 0.0
 
 
 class InverseDynamicsController:
@@ -139,22 +140,34 @@ class InverseDynamicsController:
         return torque
 
 
-def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
-    # define scene 
-    robot=Articulation(env_cfg.GOAT_cfg)
+def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
+    # define scene
+    robot = Articulation(env_cfg.GOAT_cfg)
     env_cfg.scene.articulations["robot"] = robot
-    scene=InteractiveScene(cfg=env_cfg.scene, sim=sim)
+    scene = InteractiveScene(cfg=env_cfg.scene, sim=sim)
     sim_dt = sim.get_physics_dt()
-    
-    # 7개 조인트만 동작
-    n_j = 6
+
+    # Per one leg
+    n_j_per_leg = 3
+    base_dof = 6  # for floating base
+    num_total_joints = robot.num_dof
+
+    # Define joint indices for each leg
+    # Assuming interleaved joint order: [hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, ...]
+    left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
+    right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
+
+    # Corresponding indices in the dynamics tensors (with floating base offset)
+    left_leg_dyn_indices = left_leg_indices + base_dof
+    right_leg_dyn_indices = right_leg_indices + base_dof
 
     # --- PD 역역학 컨트롤러 초기화 ---
-    pd_inv_dyn_controller = InverseDynamicsController(
-        kp=100.0, kd=20.0,  # 이득(gain) 값은 실제 환경에 맞게 튜닝이 필요합니다.
-        num_envs=scene.num_envs,
-        num_dof=n_j,
-        device=scene.device
+    # Create separate controllers for each leg for independent control
+    left_leg_controller = InverseDynamicsController(
+        kp=100.0, kd=20.0, num_envs=scene.num_envs, num_dof=n_j_per_leg, device=scene.device
+    )
+    right_leg_controller = InverseDynamicsController(
+        kp=100.0, kd=20.0, num_envs=scene.num_envs, num_dof=n_j_per_leg, device=scene.device
     )
 
     # ---------- 환경 준비 ----------
@@ -162,12 +175,12 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
     joint_limits = robot.data.joint_pos_limits
 
     # ---------- 초기값 및 목표값 설정 ----------
-    zero_joint_efforts = torch.zeros(scene.num_envs, n_j, device=sim.device)
+    zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
     q_init = robot.data.default_joint_pos.clone()
-    q_target = q_init[:, :n_j].clone() # 초기 자세를 목표 자세로 설정
+    q_target = q_init[:, : (n_j_per_leg * 2)].clone()  # 초기 자세를 목표 자세로 설정
     q_dot_target = torch.zeros_like(q_target)
     q_ddot_target = torch.zeros_like(q_target)
-    
+
     robot.update(sim_dt)
 
     # --- 제어 로직 루프 --------------------------
@@ -179,35 +192,77 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
                 print("[INFO] Reset state ...")
                 default_joint_pos = robot.data.default_joint_pos.clone()
                 default_joint_vel = robot.data.default_joint_vel.clone()
+                # 강제로 조인트 워프 -> 초기 Configuration 재 설정
                 robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
+                # 내부 버퍼에 토크 저장 -> 텔레포트가 아닌 실제 제어 입력을 위한 명령 신호
                 robot.set_joint_effort_target(zero_joint_efforts)
+                # 버퍼에 쓰인 전체 제어명령 전부 실행
                 robot.write_data_to_sim()
                 robot.reset()
                 robot.update(sim_dt)
             else:
                 # --------- 역역학 제어 로직 ------------
                 # 1) 현재 로봇 상태 읽기
-                joint_pos = robot.data.joint_pos[:, :n_j]
-                joint_vel = robot.data.joint_vel[:, :n_j]
+                joint_pos = robot.data.joint_pos
+                joint_vel = robot.data.joint_vel
 
                 # 2) 물리 엔진으로부터 동역학 파라미터 가져오기
-                mass_matrix = robot.root_physx_view.get_generalized_mass_matrices()[:, :n_j, :n_j]
-                coriolis = robot.root_physx_view.get_coriolis_and_centrifugal_forces()[:, :n_j]
-                gravity = robot.root_physx_view.get_gravity_compensation_forces()[:, :n_j]
+                mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
+                coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_forces()
+                gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
-                # 3) 컨트롤러를 사용하여 토크 계산 (현재 자세 유지)
-                tau = pd_inv_dyn_controller.compute(
-                    dof_pos=joint_pos,
-                    dof_vel=joint_vel,
-                    dof_pos_des=q_target,
-                    dof_vel_des=q_dot_target,
-                    dof_acc_des=q_ddot_target,
-                    mass_matrix=mass_matrix,
-                    coriolis_term=coriolis,
-                    gravity_term=gravity
+                # --- Left Leg Control ---
+                joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
+                joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
+                q_target_left = torch.index_select(q_target, 1, left_leg_indices)
+                q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
+                q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
+
+                mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
+                    2, left_leg_dyn_indices
+                )
+                coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
+                gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
+
+                tau_left = left_leg_controller.compute(
+                    dof_pos=joint_pos_left,
+                    dof_vel=joint_vel_left,
+                    dof_pos_des=q_target_left,
+                    dof_vel_des=q_dot_target_left,
+                    dof_acc_des=q_ddot_target_left,
+                    mass_matrix=mass_matrix_left,
+                    coriolis_term=coriolis_left,
+                    gravity_term=gravity_left,
+                )
+
+                # --- Right Leg Control ---
+                joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
+                joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
+                q_target_right = torch.index_select(q_target, 1, right_leg_indices)
+                q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
+                q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
+
+                mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
+                    2, right_leg_dyn_indices
+                )
+                coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
+                gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
+
+                tau_right = right_leg_controller.compute(
+                    dof_pos=joint_pos_right,
+                    dof_vel=joint_vel_right,
+                    dof_pos_des=q_target_right,
+                    dof_vel_des=q_dot_target_right,
+                    dof_acc_des=q_ddot_target_right,
+                    mass_matrix=mass_matrix_right,
+                    coriolis_term=coriolis_right,
+                    gravity_term=gravity_right,
                 )
 
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
+                tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
+                tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
+                tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
                 robot.set_joint_effort_target(tau)
                 robot.write_data_to_sim()
 
@@ -220,13 +275,13 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
     elif args_cli.test_mode == "plotting":
         log_t = []
         log_q = []
+        n_leg_j = n_j_per_leg * 2
 
         # 새로운 목표 자세 설정
         q_target_plot = q_target.clone()
-        q_target_plot[:, 2] += 0.5
-        q_target_plot[:, 3] += 0.3
-        q_target_plot[:, 4] += 1.0
-        q_target_plot[:, 6] += 1.56
+        q_target_plot[:, 2] += 0.5  # thigh_L_Joint
+        q_target_plot[:, 4] += 1.0  # knee_L_Joint
+        q_target_plot[:, 5] += 1.5  # knee_R_Joint
 
         t = 0.0
         # 초기 상태 리셋
@@ -236,30 +291,66 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
         robot.write_data_to_sim()
         robot.reset()
         robot.update(sim_dt)
-        
+
         # 0초 기록
         log_t.append(0.0)
-        log_q.append(robot.data.joint_pos[:, :n_j].clone())
+        log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
 
         while t <= sim_len:
             # --------- 역역학 제어 로직 ------------
-            joint_pos = robot.data.joint_pos[:, :n_j]
-            joint_vel = robot.data.joint_vel[:, :n_j]
-            mass_matrix = robot.root_physx_view.get_generalized_mass_matrices()[:, :n_j, :n_j]
-            coriolis = robot.root_physx_view.get_coriolis_and_centrifugal_forces()[:, :n_j]
-            gravity = robot.root_physx_view.get_gravity_compensation_forces()[:, :n_j]
+            joint_pos = robot.data.joint_pos
+            joint_vel = robot.data.joint_vel
+            mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
+            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_forces()
+            gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
-            tau = pd_inv_dyn_controller.compute(
-                dof_pos=joint_pos,
-                dof_vel=joint_vel,
-                dof_pos_des=q_target_plot,
-                dof_vel_des=q_dot_target,
-                dof_acc_des=q_ddot_target,
-                mass_matrix=mass_matrix,
-                coriolis_term=coriolis,
-                gravity_term=gravity
+            # Left Leg
+            joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
+            joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
+            q_target_left = torch.index_select(q_target_plot, 1, left_leg_indices)
+            q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
+            q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
+            mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
+                2, left_leg_dyn_indices
             )
-            
+            coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
+            gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
+            tau_left = left_leg_controller.compute(
+                dof_pos=joint_pos_left,
+                dof_vel=joint_vel_left,
+                dof_pos_des=q_target_left,
+                dof_vel_des=q_dot_target_left,
+                dof_acc_des=q_ddot_target_left,
+                mass_matrix=mass_matrix_left,
+                coriolis_term=coriolis_left,
+                gravity_term=gravity_left,
+            )
+
+            # Right Leg
+            joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
+            joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
+            q_target_right = torch.index_select(q_target_plot, 1, right_leg_indices)
+            q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
+            q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
+            mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
+                2, right_leg_dyn_indices
+            )
+            coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
+            gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
+            tau_right = right_leg_controller.compute(
+                dof_pos=joint_pos_right,
+                dof_vel=joint_vel_right,
+                dof_pos_des=q_target_right,
+                dof_vel_des=q_dot_target_right,
+                dof_acc_des=q_ddot_target_right,
+                mass_matrix=mass_matrix_right,
+                coriolis_term=coriolis_right,
+                gravity_term=gravity_right,
+            )
+
+            tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
+            tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
+            tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
             robot.set_joint_effort_target(tau)
             robot.write_data_to_sim()
 
@@ -269,25 +360,26 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
             scene.update(sim_dt)
             t += sim_dt
             log_t.append(t)
-            log_q.append(robot.data.joint_pos[:, :n_j].clone())
+            log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
 
         # --- 결과 플롯 ---
         import matplotlib.pyplot as plt
         import numpy as np
         import math
+
         log_t_np = np.asarray(log_t)
         log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
 
         n_cols = 3
-        n_rows = math.ceil(n_j / n_cols)
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 3*n_rows), sharex=True)
+        n_rows = math.ceil(n_leg_j / n_cols)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
         axes = axes.flatten()
 
-        for i in range(n_j):
+        for i in range(n_leg_j):
             ax = axes[i]
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
-            ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color='r')
-            ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color='g')
+            ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
+            ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
             ax.axhline(q_target_plot[0, i].cpu(), ls="--", label="target", color="k")
             ax.set_title(f"Joint {i}")
             ax.set_ylabel("angle [rad]")
@@ -297,12 +389,13 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
                 ax.legend(loc="best")
         fig.tight_layout()
         plt.show()
-    
+
     elif args_cli.test_mode == "tracking":
         t = 0.0
-        q_target_track = robot.data.default_joint_pos.clone()[:, :n_j]
-        q_target_track[:, 3] += 0.3 
-        
+        # Target joint position
+        q_target_track = robot.data.default_joint_pos.clone()[:, : (n_j_per_leg * 2)]
+        q_target_track[:, 3] += 0.3  # thigh_R_Joint
+
         while simulation_app.is_running():
             if t > sim_len:
                 print("[INFO] Reset state for tracking...")
@@ -314,23 +407,59 @@ def run_simulator(sim : sim_utils.SimulationContext, env_cfg : GOATBaseEnvCfg):
                 robot.update(sim_dt)
 
             # --------- 역역학 제어 로직 ------------
-            joint_pos = robot.data.joint_pos[:, :n_j]
-            joint_vel = robot.data.joint_vel[:, :n_j]
-            mass_matrix = robot.root_physx_view.get_generalized_mass_matrices()[:, :n_j, :n_j]
-            coriolis = robot.root_physx_view.get_coriolis_and_centrifugal_forces()[:, :n_j]
-            gravity = robot.root_physx_view.get_gravity_compensation_forces()[:, :n_j]
+            joint_pos = robot.data.joint_pos
+            joint_vel = robot.data.joint_vel
+            mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
+            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_forces()
+            gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
-            tau = pd_inv_dyn_controller.compute(
-                dof_pos=joint_pos,
-                dof_vel=joint_vel,
-                dof_pos_des=q_target_track,
-                dof_vel_des=q_dot_target,
-                dof_acc_des=q_ddot_target,
-                mass_matrix=mass_matrix,
-                coriolis_term=coriolis,
-                gravity_term=gravity
+            # Left Leg
+            joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
+            joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
+            q_target_left = torch.index_select(q_target_track, 1, left_leg_indices)
+            q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
+            q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
+            mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
+                2, left_leg_dyn_indices
+            )
+            coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
+            gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
+            tau_left = left_leg_controller.compute(
+                dof_pos=joint_pos_left,
+                dof_vel=joint_vel_left,
+                dof_pos_des=q_target_left,
+                dof_vel_des=q_dot_target_left,
+                dof_acc_des=q_ddot_target_left,
+                mass_matrix=mass_matrix_left,
+                coriolis_term=coriolis_left,
+                gravity_term=gravity_left,
             )
 
+            # Right Leg
+            joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
+            joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
+            q_target_right = torch.index_select(q_target_track, 1, right_leg_indices)
+            q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
+            q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
+            mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
+                2, right_leg_dyn_indices
+            )
+            coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
+            gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
+            tau_right = right_leg_controller.compute(
+                dof_pos=joint_pos_right,
+                dof_vel=joint_vel_right,
+                dof_pos_des=q_target_right,
+                dof_vel_des=q_dot_target_right,
+                dof_acc_des=q_ddot_target_right,
+                mass_matrix=mass_matrix_right,
+                coriolis_term=coriolis_right,
+                gravity_term=gravity_right,
+            )
+
+            tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
+            tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
+            tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
             robot.set_joint_effort_target(tau)
             robot.write_data_to_sim()
 
@@ -353,7 +482,6 @@ def main():
     sim.reset()
     print("[INFO]: Setup complete...")
     run_simulator(sim, env_cfg)
-
 
 if __name__ == "__main__":
     main()
