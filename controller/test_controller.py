@@ -76,22 +76,36 @@ class InverseDynamicsController:
     
     τ = M(q) * (q̈_des + Kp*e + Kd*ė) + C(q, q̇) + G(q)
     """
-    def __init__(self, kp: float, kd: float, num_envs: int, num_dof: int, device: str):
+    def __init__(self, kp, kd, num_envs: int, num_dof: int, device: str):
         """
         컨트롤러를 초기화합니다.
 
         Args:
-            kp (float): 비례 이득 (Proportional gain).
-            kd (float): 미분 이득 (Derivative gain).
+            kp (float or torch.Tensor): 비례 이득 (Proportional gain). float 값 또는 (1, num_dof) 크기의 텐서.
+            kd (float or torch.Tensor): 미분 이득 (Derivative gain). float 값 또는 (1, num_dof) 크기의 텐서.
             num_envs (int): 시뮬레이션 환경의 수.
             num_dof (int): 제어할 관절의 수 (degrees of freedom).
             device (str): 연산에 사용할 디바이스 (e.g., "cuda:0" or "cpu").
         """
-        self.kp = torch.full((num_envs, num_dof), kp, device=device)
-        self.kd = torch.full((num_envs, num_dof), kd, device=device)
-        self.num_envs = num_envs
-        self.num_dof = num_dof
-        self.device = device
+        # kp gain
+        if isinstance(kp, float):
+            self.kp = torch.full((num_envs, num_dof), kp, device=device)
+        elif isinstance(kp, torch.Tensor):
+            if kp.shape != (1, num_dof):
+                raise ValueError(f"kp tensor must have shape (1, {num_dof}), but got {kp.shape}")
+            self.kp = kp.to(device).expand(num_envs, -1) # Expand as num_envs
+        else:
+            raise TypeError("kp must be a float or a torch.Tensor of shape (1, num_dof)")
+
+        # kd gain
+        if isinstance(kd, float):
+            self.kd = torch.full((num_envs, num_dof), kd, device=device)
+        elif isinstance(kd, torch.Tensor):
+            if kd.shape != (1, num_dof):
+                raise ValueError(f"kd tensor must have shape (1, {num_dof}), but got {kd.shape}")
+            self.kd = kd.to(device).expand(num_envs, -1) # Expand as num_envs
+        else:
+            raise TypeError("kd must be a float or a torch.Tensor of shape (1, num_dof)")
 
     def compute(
         self,
@@ -147,9 +161,9 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
     scene = InteractiveScene(cfg=env_cfg.scene, sim=sim)
     sim_dt = sim.get_physics_dt()
 
-    # Per one leg
-    n_j_per_leg = 3
-    base_dof = 6  # for floating base
+    # Robot dof
+    leg_dof = 3     # hip, thigh, knee joints
+    base_dof = 6    # for floating base (linear + angular)
     num_total_joints = robot.num_dof
 
     # Define joint indices for each leg
@@ -161,13 +175,10 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
     left_leg_dyn_indices = left_leg_indices + base_dof
     right_leg_dyn_indices = right_leg_indices + base_dof
 
-    # --- PD 역역학 컨트롤러 초기화 ---
+    # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
-    left_leg_controller = InverseDynamicsController(
-        kp=100.0, kd=20.0, num_envs=scene.num_envs, num_dof=n_j_per_leg, device=scene.device
-    )
-    right_leg_controller = InverseDynamicsController(
-        kp=100.0, kd=20.0, num_envs=scene.num_envs, num_dof=n_j_per_leg, device=scene.device
+    leg_controller = InverseDynamicsController(
+        kp=100.0, kd=20.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
     )
 
     # ---------- 환경 준비 ----------
@@ -176,8 +187,8 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
 
     # ---------- 초기값 및 목표값 설정 ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-    q_init = robot.data.default_joint_pos.clone()
-    q_target = q_init[:, : (n_j_per_leg * 2)].clone()  # 초기 자세를 목표 자세로 설정
+    q_init = robot.data.default_joint_pos[:, :(leg_dof * 2)].clone()
+    q_target = q_init[:, :(leg_dof * 2)] + 0.3  # target joint position
     q_dot_target = torch.zeros_like(q_target)
     q_ddot_target = torch.zeros_like(q_target)
 
@@ -224,7 +235,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
                 coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
                 gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
 
-                tau_left = left_leg_controller.compute(
+                tau_left = leg_controller.compute(
                     dof_pos=joint_pos_left,
                     dof_vel=joint_vel_left,
                     dof_pos_des=q_target_left,
@@ -248,7 +259,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
                 coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
                 gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
 
-                tau_right = right_leg_controller.compute(
+                tau_right = leg_controller.compute(
                     dof_pos=joint_pos_right,
                     dof_vel=joint_vel_right,
                     dof_pos_des=q_target_right,
@@ -275,7 +286,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
     elif args_cli.test_mode == "plotting":
         log_t = []
         log_q = []
-        n_leg_j = n_j_per_leg * 2
+        n_leg_j = leg_dof * 2
 
         # 새로운 목표 자세 설정
         q_target_plot = q_target.clone()
@@ -315,7 +326,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
             )
             coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
             gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
-            tau_left = left_leg_controller.compute(
+            tau_left = leg_controller.compute(
                 dof_pos=joint_pos_left,
                 dof_vel=joint_vel_left,
                 dof_pos_des=q_target_left,
@@ -337,7 +348,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
             )
             coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
             gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
-            tau_right = right_leg_controller.compute(
+            tau_right = leg_controller.compute(
                 dof_pos=joint_pos_right,
                 dof_vel=joint_vel_right,
                 dof_pos_des=q_target_right,
@@ -393,7 +404,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
     elif args_cli.test_mode == "tracking":
         t = 0.0
         # Target joint position
-        q_target_track = robot.data.default_joint_pos.clone()[:, : (n_j_per_leg * 2)]
+        q_target_track = robot.data.default_joint_pos.clone()[:, : (leg_dof * 2)]
         q_target_track[:, 3] += 0.3  # thigh_R_Joint
 
         while simulation_app.is_running():
@@ -424,7 +435,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
             )
             coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
             gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
-            tau_left = left_leg_controller.compute(
+            tau_left = leg_controller.compute(
                 dof_pos=joint_pos_left,
                 dof_vel=joint_vel_left,
                 dof_pos_des=q_target_left,
@@ -446,7 +457,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
             )
             coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
             gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
-            tau_right = right_leg_controller.compute(
+            tau_right = leg_controller.compute(
                 dof_pos=joint_pos_right,
                 dof_vel=joint_vel_right,
                 dof_pos_des=q_target_right,
