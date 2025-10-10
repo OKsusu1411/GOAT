@@ -20,15 +20,15 @@ from isaaclab.controllers.joint_impedance import JointImpedanceControllerCfg
 # Robot asset paths
 current_dir = os.path.dirname(__file__)
 TRON_ASSET = {
-    "urdf_path": os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/urdf/WF_TRON.urdf"),
-    "usd_path": os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/usd/WF_TRON.usd"),
-    "usd_place": os.path.join(current_dir, "../../Simulation/Assets/TRON/WF_TRON1A/usd/"),
+    "urdf_path": os.path.join(current_dir, "../assets/TRON/WF_TRON1A/urdf/WF_TRON.urdf"),
+    "usd_path": os.path.join(current_dir, "../assets/TRON/WF_TRON1A/usd/WF_TRON.usd"),
+    "usd_place": os.path.join(current_dir, "../assets/TRON/WF_TRON1A/usd/"),
     "usd_filename": "WF_TRON.usd"
 }
 GOAT_ASSET = {
-    "urdf_path": os.path.join(current_dir, "../../Simulation/Assets/"),   # Change to GOAT path later
-    "usd_path": os.path.join(current_dir, "../../Simulation/Assets/"),
-    "usd_place": os.path.join(current_dir, "../../Simulation/Assets/"),
+    "urdf_path": os.path.join(current_dir, "../assets/"),   # Change to GOAT path later
+    "usd_path": os.path.join(current_dir, "../assets/"),
+    "usd_place": os.path.join(current_dir, "../assets/"),
     "usd_filename": "WF_GOAT.usd"
 }
 
@@ -136,13 +136,13 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
         }
     )
 
-    # Impedance Controller
-    imp_controller: JointImpedanceControllerCfg = JointImpedanceControllerCfg(
-        command_type="p_abs",
-        impedance_mode="variable",
-        stiffness=300.0,
-        damping_ratio=0.5,
-        stiffness_limits=(30, 300),
-        damping_ratio_limits=(0, 1),
-        inertial_compensation=True,
-        gravity_compensation=True,)
+    # # Impedance Controller
+    # imp_controller: JointImpedanceControllerCfg = JointImpedanceControllerCfg(
+    #     command_type="p_abs",
+    #     impedance_mode="variable",
+    #     stiffness=300.0,
+    #     damping_ratio=0.5,
+    #     stiffness_limits=(30, 300),
+    #     damping_ratio_limits=(0, 1),
+    #     inertial_compensation=True,
+    #     gravity_compensation=True,)
