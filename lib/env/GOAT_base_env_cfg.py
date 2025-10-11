@@ -32,14 +32,94 @@ GOAT_ASSET = {
     "usd_filename": "WF_GOAT.usd"
 }
 
+# URDF to USD conversion
+urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
+    root_link_name = "base_Link",
+    asset_path = TRON_ASSET["urdf_path"],
+    usd_dir = TRON_ASSET["usd_place"],
+    usd_file_name = TRON_ASSET["usd_filename"],
+    fix_base=False,
+    joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
+        drive_type="force",
+        gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=100.0, damping=10.0)
+    ),
+)
+urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
+
+# URDF conversion check
+if urdf_converter.usd_path == TRON_ASSET["usd_path"]:
+    print("urdf convertion success!")
+else:
+    print("urdf convertion failed!")
+
+
+GOAT_Cfg: ArticulationCfg = ArticulationCfg(
+    prim_path="/World/Robot",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=urdf_converter.usd_path,
+        scale=(1.0, 1.0, 1.0),
+        activate_contact_sensors=False,
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=False,
+            retain_accelerations=False,
+            linear_damping=0.0,
+            angular_damping=0.0,
+            max_linear_velocity=1000.0,
+            max_angular_velocity=1000.0,
+            max_depenetration_velocity=1.0,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0
+        ),
+    ),
+
+    # Initial Joint pos and vel
+    init_state=ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 0.0),
+        joint_pos={
+            "hip_L_Joint": 0.0,
+            "hip_R_Joint": 0.0,
+            "thigh_L_Joint": 0.0,
+            "thigh_R_Joint": 0.0,
+            "knee_L_Joint": 0.0,
+            "knee_R_Joint": 0.0,
+            "wheel_L_Joint": 0.0,
+            "wheel_R_Joint": 0.0,
+            },
+        ),
+
+    # Actuators cfg
+    actuators={
+        "leg": DCMotorCfg(
+            joint_names_expr=["hip_.*", "thigh_.*", "knee_.*",],       # parameter reference from TRON
+            effort_limit=4.5,
+            saturation_effort=4.5,
+            velocity_limit=15.0,
+            stiffness=40.0,
+            damping=2.5,
+            friction=0.0,
+
+        ),
+        "wheel": DCMotorCfg(
+            joint_names_expr=["wheel_.*"],
+            effort_limit=2.5,
+            saturation_effort=2.5,
+            velocity_limit=15.0,
+            stiffness=0.0,
+            damping=0.8,
+            friction=0.0,
+        )
+    }
+)
+
 @configclass
 class GOATBaseEnvCfg(DirectRLEnvCfg):
     # Env
-    episode_length_s: int
-    decimation: int
-    action_space: int
-    observation_space: int
-    state_space: int
+    episode_length_s: int = 10
+    decimation: int = 3
+    action_space: int = 10
+    observation_space: int = 0
+    state_space: int = 0
 
     # Ground plane
     plane = AssetBaseCfg(
@@ -56,85 +136,8 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
     # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1, env_spacing=3.0, replicate_physics=True)
 
-    # URDF to USD conversion
-    urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
-        root_link_name = "base_Link",
-        asset_path = TRON_ASSET["urdf_path"],
-        usd_dir = TRON_ASSET["usd_place"],
-        usd_file_name = TRON_ASSET["usd_filename"],
-        fix_base=False,
-        joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
-            drive_type="force",
-            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=100.0, damping=10.0)
-        ),
-    )
-    urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
-    
-    # URDF conversion check
-    if urdf_converter.usd_path == TRON_ASSET["usd_path"]:
-        print("urdf convertion success!")
-    else:
-        print("urdf convertion failed!")
-
     # GOAT cfg
-    GOAT_cfg: ArticulationCfg = ArticulationCfg(
-        prim_path="/World/envs/env_.*/Robot",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=urdf_converter.usd_path,
-            scale=(1.0, 1.0, 1.0),
-            activate_contact_sensors=False,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=False,
-                retain_accelerations=False,
-                linear_damping=0.0,
-                angular_damping=0.0,
-                max_linear_velocity=1000.0,
-                max_angular_velocity=1000.0,
-                max_depenetration_velocity=1.0,
-          ),
-          articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-              enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0
-          ),
-        ),
-
-        # Initial Joint pos and vel
-        init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.0),
-            joint_pos={
-                "hip_L_Joint": 0.0,
-                "hip_R_Joint": 0.0,
-                "thigh_L_Joint": 0.0,
-                "thigh_R_Joint": 0.0,
-                "knee_L_Joint": 0.0,
-                "knee_R_Joint": 0.0,
-                "wheel_L_Joint": 0.0,
-                "wheel_R_Joint": 0.0,
-                },
-            ),
-
-        # Actuators cfg
-        actuators={
-            "leg": DCMotorCfg(
-                joint_names_expr=["hip_.*", "thigh_.*", "knee_.*",],       # parameter reference from TRON
-                effort_limit=4.5,
-                saturation_effort=4.5,
-                velocity_limit=15.0,
-                stiffness=40.0,
-                damping=2.5,
-                friction=0.0,
-
-            ),
-            "wheel": DCMotorCfg(
-                joint_names_expr=["wheel_.*"],
-                effort_limit=2.5,
-                saturation_effort=2.5,
-                velocity_limit=15.0,
-                stiffness=0.0,
-                damping=0.8,
-                friction=0.0,
-            )
-        }
-    )
+    GOAT_cfg: ArticulationCfg = GOAT_Cfg
 
     # # Impedance Controller
     # imp_controller: JointImpedanceControllerCfg = JointImpedanceControllerCfg(
