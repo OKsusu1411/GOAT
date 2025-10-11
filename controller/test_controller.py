@@ -20,7 +20,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, Articulation, AssetBaseCfg
 from isaaclab.utils import configclass
-from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
+from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg, GOAT_Cfg
 
 
 @configclass
@@ -30,9 +30,9 @@ class RobotEnvCfg(GOATBaseEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=args_cli.num_envs, env_spacing=3.0, replicate_physics=True)
 
     # robot
-    robot = super.GOAT_cfg.replace(prim_path="/World/envs/env_.*/Robot",
+    robot = GOAT_Cfg.replace(prim_path="/World/Robot",
                                             init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.0),
+            pos=(0.0, 0.0, 1.0),
             joint_pos={
                 "hip_L_Joint": 0.0,
                 "hip_R_Joint": 0.0,
@@ -53,6 +53,17 @@ class RobotEnvCfg(GOATBaseEnvCfg):
     robot.actuators["wheel"].stiffness = 0.0
     robot.actuators["wheel"].damping = 0.0
 
+    # Scene 안에 robot instance가 있어야함
+    scene.robot = robot
+    scene.ground = AssetBaseCfg(
+        prim_path="/World/defaultGroundPlane",
+        spawn=sim_utils.GroundPlaneCfg(),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
+    )
+    # lights
+    scene.dome_light = AssetBaseCfg(
+        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
+    )
 
 class InverseDynamicsController:
     """
@@ -129,6 +140,14 @@ class InverseDynamicsController:
         # q̈_des = q̈_target + Kp * e + Kd * ė
         desired_acc = dof_acc_des + self.kp * pos_error + self.kd * vel_error
 
+ # 디버깅 코드 추가
+        if torch.isnan(desired_acc).any() or torch.isinf(desired_acc).any():
+            print("!!! Invalid value detected in desired_acc !!!")
+            print(desired_acc)
+        if torch.isnan(mass_matrix).any() or torch.isinf(mass_matrix).any():
+            print("!!! Invalid value detected in mass_matrix !!!")
+            print(mass_matrix)
+
         # 3. 역역학 방정식 계산
         # τ = M(q) * q̈_des + C(q, q̇) + G(q)
         # unsqueeze와 squeeze는 행렬-벡터 곱셈을 위한 차원 맞추기입니다.
@@ -141,17 +160,15 @@ class InverseDynamicsController:
         return torque
 
 
-def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
+def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # define scene
-    robot = Articulation(env_cfg.GOAT_cfg)
-    env_cfg.scene.articulations["robot"] = robot
-    scene = InteractiveScene(cfg=env_cfg.scene, sim=sim)
+    robot = scene["robot"]
     sim_dt = sim.get_physics_dt()
 
     # Robot dof
     leg_dof = 3     # hip, thigh, knee joints
     base_dof = 6    # for floating base (linear + angular)
-    num_total_joints = robot.num_dof
+    num_total_joints = 8
 
     # Define joint indices for each leg
     # Assuming interleaved joint order: [hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, ...]
@@ -165,7 +182,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
     leg_controller = InverseDynamicsController(
-        kp=100.0, kd=20.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
+        kp=10.0, kd=5.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
     )
 
     # ---------- 환경 준비 ----------
@@ -206,7 +223,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
 
                 # 2) 물리 엔진으로부터 동역학 파라미터 가져오기
                 mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
-                coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_forces()
+                coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
                 gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
                 # --- Left Leg Control ---
@@ -219,8 +236,8 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
                 mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
                     2, left_leg_dyn_indices
                 )
-                coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
-                gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
+                coriolis_left = coriolis_full.index_select(1, left_leg_indices)
+                gravity_left = gravity_full.index_select(1, left_leg_indices)
 
                 tau_left = leg_controller.compute(
                     dof_pos=joint_pos_left,
@@ -243,8 +260,8 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
                 mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
                     2, right_leg_dyn_indices
                 )
-                coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
-                gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
+                coriolis_right = coriolis_full.index_select(1, right_leg_indices)
+                gravity_right = gravity_full.index_select(1, right_leg_indices)
 
                 tau_right = leg_controller.compute(
                     dof_pos=joint_pos_right,
@@ -299,7 +316,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
             joint_pos = robot.data.joint_pos
             joint_vel = robot.data.joint_vel
             mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
-            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_forces()
+            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
             gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
             # Left Leg
@@ -408,7 +425,7 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
             joint_pos = robot.data.joint_pos
             joint_vel = robot.data.joint_vel
             mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
-            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_forces()
+            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
             gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
             # Left Leg
@@ -470,15 +487,16 @@ def run_simulator(sim: sim_utils.SimulationContext, env_cfg: GOATBaseEnvCfg):
 
 def main():
     """Main function."""
-    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device=args_cli.device)
+    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device="cpu")
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([2.5, 2.5, 4.0], [0.0, 0.0, 0.0])
     
     env_cfg = RobotEnvCfg()
-    
+    scene = InteractiveScene(env_cfg.scene)   # 따로 scene instance 만들어서 run_simulator에 넘기기
+
     sim.reset()
     print("[INFO]: Setup complete...")
-    run_simulator(sim, env_cfg)
+    run_simulator(sim, scene)
 
 if __name__ == "__main__":
     main()
