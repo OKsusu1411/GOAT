@@ -1,6 +1,4 @@
 import argparse
-import os
-import sys
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -18,11 +16,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import torch
-import isaacsim.core.utils.prims as prim_utils
 import isaaclab.sim as sim_utils
-from isaaclab.assets import RigidObject, RigidObjectCfg
-from isaaclab.sim import SimulationContext
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, Articulation, AssetBaseCfg
 from isaaclab.utils import configclass
@@ -30,23 +24,14 @@ from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
 
 
 @configclass
-class RobotSceneCfg(InteractiveSceneCfg):
+class RobotEnvCfg(GOATBaseEnvCfg):
     """Design the scene for inverse dynamics control."""
-    # ground plane
-    ground = AssetBaseCfg(
-        prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
-    )
 
-    # lights
-    dome_light = AssetBaseCfg(
-        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
-    )
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=args_cli.num_envs, env_spacing=3.0, replicate_physics=True)
 
     # robot
-    robot = GOATBaseEnvCfg.GOAT_cfg.replace(prim_path="{ENV_REGEX_NS}/Robot",
-                                             init_state=ArticulationCfg.InitialStateCfg(
+    robot = super.GOAT_cfg.replace(prim_path="/World/envs/env_.*/Robot",
+                                            init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.0),
             joint_pos={
                 "hip_L_Joint": 0.0,
@@ -489,8 +474,7 @@ def main():
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([2.5, 2.5, 4.0], [0.0, 0.0, 0.0])
     
-    scene_cfg = RobotSceneCfg(num_envs=args_cli.num_envs, env_spacing=2.0)
-    env_cfg = GOATBaseEnvCfg(scene=scene_cfg)
+    env_cfg = RobotEnvCfg()
     
     sim.reset()
     print("[INFO]: Setup complete...")
