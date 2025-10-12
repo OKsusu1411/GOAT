@@ -41,7 +41,7 @@ urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
     fix_base=False,
     joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
         drive_type="force",
-        gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=100.0, damping=10.0)
+        gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=0.0, damping=0.0)
     ),
 )
 urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
