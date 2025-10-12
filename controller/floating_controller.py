@@ -29,22 +29,28 @@ class RobotEnvCfg(GOATBaseEnvCfg):
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=args_cli.num_envs, env_spacing=3.0, replicate_physics=True)
 
-    # robot
-    robot = GOAT_Cfg.replace(prim_path="/World/Robot",
-                                            init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 1.0),
-            joint_pos={
-                "hip_L_Joint": 0.0,
-                "hip_R_Joint": 0.0,
-                "thigh_L_Joint": 0.0,
-                "thigh_R_Joint": 0.0,
-                "knee_L_Joint": 0.0,
-                "knee_R_Joint": 0.0,
-                "wheel_L_Joint": 0.0,
-                "wheel_R_Joint": 0.0,
-            },
-        ),
-    )
+        # robot
+    robot = GOAT_Cfg.replace(
+            spawn=GOAT_Cfg.spawn.replace(
+                articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                    enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0, fix_root_link=None  # Floating base link
+                )
+            ),
+
+            init_state=ArticulationCfg.InitialStateCfg(
+                pos=(0.0, 0.0, 1.0),
+                joint_pos={
+                    "hip_L_Joint": 0.0,
+                    "hip_R_Joint": 0.0,
+                    "thigh_L_Joint": 0.0,
+                    "thigh_R_Joint": 0.0,
+                    "knee_L_Joint": 0.0,
+                    "knee_R_Joint": 0.0,
+                    "wheel_L_Joint": 0.0,
+                    "wheel_R_Joint": 0.0,
+                    },
+                ),
+            )
 
     # Actuator's PD gain
     # set to 0 when using external low-level torque controller
@@ -408,7 +414,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
 def main():
     """Main function."""
-    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device="cpu")
+    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device=args_cli.device)
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([2.5, 2.5, 4.0], [0.0, 0.0, 0.0])
     

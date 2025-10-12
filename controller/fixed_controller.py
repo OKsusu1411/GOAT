@@ -30,21 +30,27 @@ class RobotEnvCfg(GOATBaseEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=args_cli.num_envs, env_spacing=3.0, replicate_physics=True)
 
     # robot
-    robot = GOAT_Cfg.replace(prim_path="/World/Robot",
-                                            init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 1.0),
-            joint_pos={
-                "hip_L_Joint": 0.0,
-                "hip_R_Joint": 0.0,
-                "thigh_L_Joint": 0.0,
-                "thigh_R_Joint": 0.0,
-                "knee_L_Joint": 0.0,
-                "knee_R_Joint": 0.0,
-                "wheel_L_Joint": 0.0,
-                "wheel_R_Joint": 0.0,
-            },
-        ),
-    )
+    robot = GOAT_Cfg.replace(
+            spawn=GOAT_Cfg.spawn.replace(
+                articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                    enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0, fix_root_link=True  # Fixed_base link
+                )
+            ),
+
+            init_state=ArticulationCfg.InitialStateCfg(
+                pos=(0.0, 0.0, 1.5),
+                joint_pos={
+                    "hip_L_Joint": 0.0,
+                    "hip_R_Joint": 0.0,
+                    "thigh_L_Joint": 0.0,
+                    "thigh_R_Joint": 0.0,
+                    "knee_L_Joint": 0.0,
+                    "knee_R_Joint": 0.0,
+                    "wheel_L_Joint": 0.0,
+                    "wheel_R_Joint": 0.0,
+                    },
+                ),
+            )
 
     # Actuator's PD gain
     # set to 0 when using external low-level torque controller
@@ -140,14 +146,6 @@ class InverseDynamicsController:
         # q̈_des = q̈_target + Kp * e + Kd * ė
         desired_acc = dof_acc_des + self.kp * pos_error + self.kd * vel_error
 
- # 디버깅 코드 추가
-        if torch.isnan(desired_acc).any() or torch.isinf(desired_acc).any():
-            print("!!! Invalid value detected in desired_acc !!!")
-            print(desired_acc)
-        if torch.isnan(mass_matrix).any() or torch.isinf(mass_matrix).any():
-            print("!!! Invalid value detected in mass_matrix !!!")
-            print(mass_matrix)
-
         # 3. 역역학 방정식 계산
         # τ = M(q) * q̈_des + C(q, q̇) + G(q)
         # unsqueeze와 squeeze는 행렬-벡터 곱셈을 위한 차원 맞추기입니다.
@@ -167,17 +165,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # Robot dof
     leg_dof = 3     # hip, thigh, knee joints
-    base_dof = 6    # for floating base (linear + angular)
     num_total_joints = 8
 
     # Define joint indices for each leg
     # Assuming interleaved joint order: [hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, ...]
     left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
     right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
-
-    # Corresponding indices in the dynamics tensors (with floating base offset)
-    left_leg_dyn_indices = left_leg_indices + base_dof
-    right_leg_dyn_indices = right_leg_indices + base_dof
 
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
@@ -233,8 +226,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
                 q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
 
-                mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
-                    2, left_leg_dyn_indices
+                mass_matrix_left = mass_matrix_full.index_select(1, left_leg_indices).index_select(
+                    2, left_leg_indices
                 )
                 coriolis_left = coriolis_full.index_select(1, left_leg_indices)
                 gravity_left = gravity_full.index_select(1, left_leg_indices)
@@ -257,8 +250,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
                 q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
 
-                mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
-                    2, right_leg_dyn_indices
+                mass_matrix_right = mass_matrix_full.index_select(1, right_leg_indices).index_select(
+                    2, right_leg_indices
                 )
                 coriolis_right = coriolis_full.index_select(1, right_leg_indices)
                 gravity_right = gravity_full.index_select(1, right_leg_indices)
@@ -325,11 +318,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             q_target_left = torch.index_select(q_target_plot, 1, left_leg_indices)
             q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
             q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
-            mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
-                2, left_leg_dyn_indices
+            mass_matrix_left = mass_matrix_full.index_select(1, left_leg_indices).index_select(
+                2, left_leg_indices
             )
-            coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
-            gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
+            coriolis_left = coriolis_full.index_select(1, left_leg_indices)
+            gravity_left = gravity_full.index_select(1, left_leg_indices)
             tau_left = leg_controller.compute(
                 dof_pos=joint_pos_left,
                 dof_vel=joint_vel_left,
@@ -347,11 +340,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             q_target_right = torch.index_select(q_target_plot, 1, right_leg_indices)
             q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
             q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
-            mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
-                2, right_leg_dyn_indices
+            mass_matrix_right = mass_matrix_full.index_select(1, right_leg_indices).index_select(
+                2, right_leg_indices
             )
-            coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
-            gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
+            coriolis_right = coriolis_full.index_select(1, right_leg_indices)
+            gravity_right = gravity_full.index_select(1, right_leg_indices)
             tau_right = leg_controller.compute(
                 dof_pos=joint_pos_right,
                 dof_vel=joint_vel_right,
@@ -408,7 +401,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
 def main():
     """Main function."""
-    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device="cpu")
+    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device="cpu")    # TODO: change to cuda after debugging
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([2.5, 2.5, 4.0], [0.0, 0.0, 0.0])
     
