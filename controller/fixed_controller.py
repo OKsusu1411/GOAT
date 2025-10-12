@@ -4,7 +4,7 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Tutorial on inverse dynamics control for an articulation.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
-parser.add_argument("--test_mode", type=str, default="withstand", choices=["withstand", "tracking", "plotting"])
+parser.add_argument("--test_mode", type=str, default="withstand", choices=["withstand", "plotting"])
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -404,85 +404,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 ax.legend(loc="best")
         fig.tight_layout()
         plt.show()
-
-    elif args_cli.test_mode == "tracking":
-        t = 0.0
-        # Target joint position
-        q_target_track = robot.data.default_joint_pos.clone()[:, : (leg_dof * 2)]
-        q_target_track[:, 3] += 0.3  # thigh_R_Joint
-
-        while simulation_app.is_running():
-            if t > sim_len:
-                print("[INFO] Reset state for tracking...")
-                t = 0.0
-                robot.write_joint_state_to_sim(robot.data.default_joint_pos, robot.data.default_joint_vel)
-                robot.set_joint_effort_target(zero_joint_efforts)
-                robot.write_data_to_sim()
-                robot.reset()
-                robot.update(sim_dt)
-
-            # --------- 역역학 제어 로직 ------------
-            joint_pos = robot.data.joint_pos
-            joint_vel = robot.data.joint_vel
-            mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
-            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
-            gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
-
-            # Left Leg
-            joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
-            joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-            q_target_left = torch.index_select(q_target_track, 1, left_leg_indices)
-            q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
-            q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
-            mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
-                2, left_leg_dyn_indices
-            )
-            coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
-            gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
-            tau_left = leg_controller.compute(
-                dof_pos=joint_pos_left,
-                dof_vel=joint_vel_left,
-                dof_pos_des=q_target_left,
-                dof_vel_des=q_dot_target_left,
-                dof_acc_des=q_ddot_target_left,
-                mass_matrix=mass_matrix_left,
-                coriolis_term=coriolis_left,
-                gravity_term=gravity_left,
-            )
-
-            # Right Leg
-            joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
-            joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
-            q_target_right = torch.index_select(q_target_track, 1, right_leg_indices)
-            q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
-            q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
-            mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
-                2, right_leg_dyn_indices
-            )
-            coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
-            gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
-            tau_right = leg_controller.compute(
-                dof_pos=joint_pos_right,
-                dof_vel=joint_vel_right,
-                dof_pos_des=q_target_right,
-                dof_vel_des=q_dot_target_right,
-                dof_acc_des=q_ddot_target_right,
-                mass_matrix=mass_matrix_right,
-                coriolis_term=coriolis_right,
-                gravity_term=gravity_right,
-            )
-
-            tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-            tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
-            tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
-            robot.set_joint_effort_target(tau)
-            robot.write_data_to_sim()
-
-            # 시뮬레이션 스텝
-            sim.step()
-            robot.update(sim_dt)
-            scene.update(sim_dt)
-            t += sim_dt
 
 
 def main():
