@@ -24,16 +24,26 @@ from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg, GOAT_Cfg
 
 
 @configclass
-class RobotEnvCfg(GOATBaseEnvCfg):
+class RobotSceneCfg(InteractiveSceneCfg):
     """Design the scene for inverse dynamics control."""
+    # Ground
+    ground = AssetBaseCfg(
+        prim_path="/World/defaultGroundPlane",
+        spawn=sim_utils.GroundPlaneCfg(),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
+    )
+    
+    # lights
+    dome_light = AssetBaseCfg(
+        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
+    )
 
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=args_cli.num_envs, env_spacing=3.0, replicate_physics=True)
-
-    # robot
+    # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                    enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0, fix_root_link=True  # Fixed_base link
+                    enabled_self_collisions=True, solver_position_iteration_count=4,
+                    solver_velocity_iteration_count=0, fix_root_link=True       # Fixed_base link
                 )
             ),
 
@@ -59,17 +69,6 @@ class RobotEnvCfg(GOATBaseEnvCfg):
     robot.actuators["wheel"].stiffness = 0.0
     robot.actuators["wheel"].damping = 0.0
 
-    # Scene 안에 robot instance가 있어야함
-    scene.robot = robot
-    scene.ground = AssetBaseCfg(
-        prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
-    )
-    # lights
-    scene.dome_light = AssetBaseCfg(
-        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
-    )
 
 class InverseDynamicsController:
     """
@@ -405,8 +404,8 @@ def main():
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([2.5, 2.5, 4.0], [0.0, 0.0, 0.0])
     
-    env_cfg = RobotEnvCfg()
-    scene = InteractiveScene(env_cfg.scene)   # 따로 scene instance 만들어서 run_simulator에 넘기기
+    scene_cfg = RobotSceneCfg(num_envs=args_cli.num_envs, env_spacing=3.0)
+    scene = InteractiveScene(scene_cfg)
 
     sim.reset()
     print("[INFO]: Setup complete...")
