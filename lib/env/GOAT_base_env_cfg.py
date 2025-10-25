@@ -115,11 +115,11 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
 @configclass
 class GOATBaseEnvCfg(DirectRLEnvCfg):
     # Env
-    episode_length_s: int = 10
-    decimation: int = 3
-    action_space: int = 10
-    observation_space: int = 0
-    state_space: int = 0
+    episode_length_s: int = 10       # Episode length in seconds
+    decimation: int = 3              # Policy frequency = sim_freq / decimation
+    action_space: int = 10           # Dimension of action space vector
+    observation_space: int = 0       # Dimension of observation space vector
+    state_space: int = 0             # Dimension of state space vector for privileged RL
 
     # Ground plane
     plane = AssetBaseCfg(
