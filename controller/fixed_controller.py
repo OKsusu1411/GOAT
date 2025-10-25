@@ -168,8 +168,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # Define joint indices for each leg
     # Assuming interleaved joint order: [hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, ...]
-    left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
-    right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
+    left_leg_indices = torch.tensor([0, 1, 2], device=sim.device, dtype=torch.long)
+    right_leg_indices = torch.tensor([3, 4, 5], device=sim.device, dtype=torch.long)
 
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
@@ -211,7 +211,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 # --------- 역역학 제어 로직 ------------
                 # 1) 현재 로봇 상태 읽기
                 joint_pos = robot.data.joint_pos
-                joint_vel = robot.data.joint_vel
+                joint_vel = robot.data.joint_veltau_left
 
                 # 2) 물리 엔진으로부터 동역학 파라미터 가져오기
                 mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
@@ -268,7 +268,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
                 tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-                tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
+                tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), 0)
                 tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
                 robot.set_joint_effort_target(tau)
                 robot.write_data_to_sim()

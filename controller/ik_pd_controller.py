@@ -111,11 +111,41 @@ class IK_PD_Controller(DifferentialIKController):
     # Initialize Differential IK Controller
     super().__init__(self.diff_ik_cfg, num_envs=num_envs, device=device)
 
+    # Override compute method
+    def compute(
+        self, ee_pos: torch.Tensor, ee_quat: torch.Tensor, jacobian: torch.Tensor, joint_pos: torch.Tensor
+    ) -> torch.Tensor:
+        """Computes the target joint positions that will yield the desired end effector pose.
+
+        Args:
+            ee_pos: The current end-effector position in shape (N, 3).
+            ee_quat: The current end-effector orientation in shape (N, 4).
+            jacobian: The geometric jacobian matrix in shape (N, 6, num_joints).
+            joint_pos: The current joint positions in shape (N, num_joints).
+
+        Returns:
+            The target joint positions commands in shape (N, num_joints).
+        """
+        # compute the delta in joint-space
+        if "position" in self.cfg.command_type:
+            position_error = self.ee_pos_des - ee_pos
+            jacobian_pos = jacobian[:, 0:3]
+            joint_vel = self._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
+        else:
+            position_error, axis_angle_error = compute_pose_error(
+                ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
+            )
+            pose_error = torch.cat((position_error, axis_angle_error), dim=1)
+            joint_vel = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
+        # return the desired joint positions, joint velocity
+        return joint_pos + joint_vel, joint_vel
+
     def compute_torque(
         self,
         ee_pos: torch.Tensor,
         ee_quat: torch.Tensor,
         dof_pos: torch.Tensor,
+        dof_vel: torch.Tensor,
         foot_command: torch.Tensor,
         jacobian: torch.Tensor
     ) -> torch.Tensor:
@@ -125,6 +155,7 @@ class IK_PD_Controller(DifferentialIKController):
             ee_pos (torch.Tensor): Current foot position.
             ee_quat (torch.Tensor): Current foot quaternion.
             dof_pos (torch.Tensor): Current joint position [rad].
+            dof_vel (torch.Tensor): Current joint velocity [rad/s].
             foot_command (torch.Tensor): Reference joint position [xyz + quaternion].
             jacobian (torch.Tensor): Joint Jacobian matrix.
 
@@ -145,24 +176,19 @@ class IK_PD_Controller(DifferentialIKController):
 
         # Left foot IK + PD control
         super().set_command(command = L_foot_command, ee_pos= L_ee_pos, ee_quat= L_ee_quat)
-        L_dof_command = super().compute(ee_pos= L_ee_pos, ee_quat= L_ee_quat, jacobian= L_jacobian, joint_pos= L_dof_pos)
+        L_dof_pos_cmd, L_dof_vel_cmd = super().compute(ee_pos= L_ee_pos, ee_quat= L_ee_quat, jacobian= L_jacobian, joint_pos= L_dof_pos)
+        L_dof_pos_error = L_dof_pos_cmd - L_dof_pos
+        L_dof_vel_error = L_dof_vel_cmd - dof_vel
+        L_torque = self.kp * L_dof_pos_error + self.kd * L_dof_vel_error
 
         # Right foot IK + PD control
         super().set_command(command = R_foot_command, ee_pos= R_ee_pos, ee_quat= R_ee_quat)
-        R_dof_command = super().compute(ee_pos= R_ee_pos, ee_quat= R_ee_quat, jacobian= R_jacobian, joint_pos= R_dof_pos)
+        R_dof_pos_cmd, R_dof_vel_cmd = super().compute(ee_pos= R_ee_pos, ee_quat= R_ee_quat, jacobian= R_jacobian, joint_pos= R_dof_pos)
+        R_dof_pos_error = R_dof_pos_cmd - R_dof_pos
+        R_dof_vel_error = R_dof_vel_cmd - dof_vel
+        R_torque = self.kp * R_dof_pos_error + self.kd * R_dof_vel_error
+        
 
-        # 2. PD 제어 법칙을 이용한 목표 가속도 계산
-        # q̈_des = q̈_target + Kp * e + Kd * ė
-        desired_acc = dof_acc_des + self.kp * pos_error + self.kd * vel_error
-
-        # 3. 역역학 방정식 계산
-        # τ = M(q) * q̈_des + C(q, q̇) + G(q)
-        # unsqueeze와 squeeze는 행렬-벡터 곱셈을 위한 차원 맞추기입니다.
-        torque = (
-            torch.bmm(mass_matrix, desired_acc.unsqueeze(-1)).squeeze(-1)
-            + coriolis_term
-            + gravity_term
-        )
         
         return torque
 
@@ -226,8 +252,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 # 1) 현재 로봇 상태 읽기
                 joint_pos = robot.data.joint_pos
                 joint_vel = robot.data.joint_vel
-
+                joint_pos = robot.data.joint_pos[:, :num_active_joint]
+                joint_vel = robot.data.joint_vel[:, :num_active_joint]
+                
                 # 2) 물리 엔진으로부터 동역학 파라미터 가져오기
+                jacobian = robot.root_physx_view.get_jacobians()
                 mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
                 coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
                 gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
