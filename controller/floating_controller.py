@@ -196,7 +196,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # ---------- 초기값 및 목표값 설정 ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
     q_init = robot.data.default_joint_pos[:, :(leg_dof * 2)].clone()
-    q_target = q_init[:, :(leg_dof * 2)] + 0.3  # target joint position
+    q_target = q_init[:, :(leg_dof * 2)] + 0.4  # target joint position
+    q_target[:, 1:6:2] = q_init[:, 1:6:2] - 0.4  # target joint position
     q_dot_target = torch.zeros_like(q_target)
     q_ddot_target = torch.zeros_like(q_target)
 

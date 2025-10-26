@@ -265,6 +265,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             gravity_term=gravity_right,
         )
 
+        print(robot.data.body_state_b)
         # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
         tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
         tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
