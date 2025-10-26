@@ -226,7 +226,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # ---------- 초기값 및 목표값 설정 ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
     q_init = robot.data.default_joint_pos[:, :n_leg_j].clone()
-    q_target = q_init[:, :n_leg_j] + 0.3  # target joint position
+    q_target = torch.tensor([[-1.1081e-01,  3.1349e-01,  8.4927e-01,  9.3576e-01,  1.7686e-01, 2.9977e-01,  5.6657e-02],   # Left foot position (x, y, z, quat)
+                             [-1.1081e-01, -3.1349e-01,  8.4927e-01,  9.3576e-01, -1.7686e-01, 2.9978e-01, -5.6658e-02]])  # Right foot position (x, y, z, quat)
 
     robot.update(sim_dt)
 
@@ -257,19 +258,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 # --- Left Leg Control ---
                 joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
                 joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-                q_target_left = torch.index_select(q_target, 1, left_leg_indices)
+                q_target_left = q_target[0, :].unsqueeze(0)
                 jacobain_left = jacobian[:, 5, :, :n_leg_j]
 
-                tau_left = leg_controller.compute(
-                    dof_pos=joint_pos_left,
-                    dof_vel=joint_vel_left,
-                    dof_pos_des=q_target_left,
-                    dof_vel_des=q_dot_target_left,
-                    dof_acc_des=q_ddot_target_left,
-                    mass_matrix=mass_matrix_left,
-                    coriolis_term=coriolis_left,
-                    gravity_term=gravity_left,
-                )
+                leg_controller.set_command()
+                tau_left = leg_controller.compute()
 
                 # --- Right Leg Control ---
                 joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
