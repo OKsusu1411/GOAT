@@ -20,9 +20,9 @@ import isaaclab.sim as sim_utils
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, Articulation, AssetBaseCfg
 from isaaclab.utils import configclass
+from isaaclab.utils.math import compute_pose_error
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg, GOAT_Cfg
-
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -44,7 +44,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
             spawn=GOAT_Cfg.spawn.replace(
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
-                    solver_velocity_iteration_count=0, fix_root_link=None       # Floating_base link
+                    solver_velocity_iteration_count=0, fix_root_link=True       # Floating_base link
                 )
             ),
 
@@ -83,10 +83,13 @@ class IK_PD_Controller(DifferentialIKController):
             kp (float or torch.Tensor): 비례 이득 (Proportional gain). float 값 또는 (1, num_dof) 크기의 텐서.
             kd (float or torch.Tensor): 미분 이득 (Derivative gain). float 값 또는 (1, num_dof) 크기의 텐서.
             num_envs (int): 시뮬레이션 환경의 수.
-            num_dof (int): 제어할 관절의 수 (degrees of freedom).
+            num_dof (int): control dof per leg.
             device (str): 연산에 사용할 디바이스 (e.g., "cuda:0" or "cpu").
         """
         self.diff_ik_cfg = diff_ik_cfg
+        self.device = device
+        self.num_envs = num_envs
+        self.num_dof = num_dof
 
         # Initialize Differential IK Controller
         super().__init__(diff_ik_cfg, num_envs=num_envs, device=device)
@@ -132,64 +135,93 @@ class IK_PD_Controller(DifferentialIKController):
             jacobian_pos = jacobian[:, 0:3]
             joint_vel = super()._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
         else:
-            position_error, axis_angle_error = super().compute_pose_error(
+            position_error, axis_angle_error = compute_pose_error(
                 ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
             )
             pose_error = torch.cat((position_error, axis_angle_error), dim=1)
+            print("Pose Error:", pose_error)
             joint_vel = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
+            self.joint_vel = joint_vel
         # return the desired joint positions, joint velocity
-        return (joint_pos + joint_vel), joint_vel
+        return joint_pos + joint_vel
 
     def compute_torque(
         self,
-        ee_pos: torch.Tensor,
-        ee_quat: torch.Tensor,
-        dof_pos: torch.Tensor,
-        dof_vel: torch.Tensor,
-        foot_command: torch.Tensor,
+        link_pose: torch.Tensor,
+        joint_pos: torch.Tensor,
+        joint_vel: torch.Tensor,
+        foot_cmd: torch.Tensor,
         jacobian: torch.Tensor
     ) -> torch.Tensor:
         """
 
         Args:
-            ee_pos (torch.Tensor): Current foot position.
-            ee_quat (torch.Tensor): Current foot quaternion.
-            dof_pos (torch.Tensor): Current joint position [rad].
-            dof_vel (torch.Tensor): Current joint velocity [rad/s].
-            foot_command (torch.Tensor): Reference joint position [xyz + quaternion].
+            link_pose (torch.Tensor): Current all link pose [xyz + quaternion].
+            joint_pos (torch.Tensor): Current joint position [rad].
+            joint_vel (torch.Tensor): Current joint velocity [rad/s].
+            foot_cmd (torch.Tensor): Reference joint pose [num_env, 2(L, R), 7].
             jacobian (torch.Tensor): Joint Jacobian matrix.
 
         Returns:
             torch.Tensor: Joint torque.
         """
-        # Split into left, right foot
-        L_foot_command = foot_command[:, 0]
-        R_foot_command = foot_command[:, 1]
-        L_jacobian          # TODO jacobian 분리하기
-        R_jacobian
-        L_dof_pos           # TODO dof_pos 분리하기
-        R_dof_pos
-        L_ee_pos
-        L_ee_quat
-        R_ee_pos
-        R_ee_quat
+        # Robot dof
+        leg_dof = self.num_dof    # hip, thigh, knee joints
+        base_dof = 6    # for floating base (linear + angular)
+        num_total_joints = 8
+        n_leg_j = leg_dof * 2
+
+        # Define joint indices for each leg
+        # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
+        left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.long)
+        right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.long)
+
+        # Corresponding indices in the dynamics tensors (with floating base offset)
+        left_leg_dyn_indices = left_leg_indices + base_dof
+        right_leg_dyn_indices = right_leg_indices + base_dof
+        
+        # --- Left Leg ---
+        joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
+        joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
+
+        foot_cmd_left = foot_cmd[:, 0, :]
+
+        foot_pos_left = link_pose[:, 6, :3]
+        foot_quat_left = link_pose[:, 6, 3:]
+        jacobian_left = jacobian[:, 6, :, left_leg_indices]
+
+        # --- Right Leg ---
+        joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
+        joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
+
+        foot_cmd_right = foot_cmd[:, 1, :]
+
+        foot_pos_right = link_pose[:, 7, :3]
+        foot_quat_right = link_pose[:, 7, 3:]
+        jacobian_right = jacobian[:, 7, :, right_leg_indices]
 
         # Left foot IK + PD control
-        super().set_command(command = L_foot_command, ee_pos= L_ee_pos, ee_quat= L_ee_quat)
-        L_dof_pos_cmd, L_dof_vel_cmd = super().compute(ee_pos= L_ee_pos, ee_quat= L_ee_quat, jacobian= L_jacobian, joint_pos= L_dof_pos)
-        L_dof_pos_error = L_dof_pos_cmd - L_dof_pos
-        L_dof_vel_error = L_dof_vel_cmd - dof_vel
-        L_torque = self.kp * L_dof_pos_error + self.kd * L_dof_vel_error
+        super().set_command(command = foot_cmd_left, ee_pos=foot_pos_left, ee_quat=foot_quat_left)
+        joint_pos_left_cmd = self.compute(ee_pos=foot_pos_left, ee_quat=foot_quat_left, jacobian=jacobian_left, joint_pos=joint_pos_left)
+        joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
+        # print("Left Joint Pos Error:", joint_pos_left_error)
+        joint_vel_left_error = self.joint_vel - joint_vel_left
+        torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
 
         # Right foot IK + PD control
-        super().set_command(command = R_foot_command, ee_pos= R_ee_pos, ee_quat= R_ee_quat)
-        R_dof_pos_cmd, R_dof_vel_cmd = super().compute(ee_pos= R_ee_pos, ee_quat= R_ee_quat, jacobian= R_jacobian, joint_pos= R_dof_pos)
-        R_dof_pos_error = R_dof_pos_cmd - R_dof_pos
-        R_dof_vel_error = R_dof_vel_cmd - dof_vel
-        R_torque = self.kp * R_dof_pos_error + self.kd * R_dof_vel_error
+        super().set_command(command = foot_cmd_right, ee_pos=foot_pos_right, ee_quat=foot_quat_right)
+        joint_pos_right_cmd = self.compute(ee_pos=foot_pos_right, ee_quat=foot_quat_right, jacobian=jacobian_right, joint_pos=joint_pos_right)
+        joint_pos_right_error = joint_pos_right_cmd - joint_pos_right
+        joint_vel_right_error = self.joint_vel - joint_vel_right
+        torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
         
-
+        # Combine torque inputs
+        torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
+        torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
         
+        # print("Torque:", torque)
+        # TODO : Wheel controller 만들기
         return torque
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
@@ -209,14 +241,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
     right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
 
-    # Corresponding indices in the dynamics tensors (with floating base offset)
-    left_leg_dyn_indices = left_leg_indices + base_dof
-    right_leg_dyn_indices = right_leg_indices + base_dof
+
 
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
     leg_controller = IK_PD_Controller(
-        diff_ik_cfg= diff_ik_cfg, kp=10.0, kd=5.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
+        diff_ik_cfg= diff_ik_cfg, kp=5.0, kd=2.5, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
     )
 
     # ---------- 환경 준비 ----------
@@ -226,8 +256,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # ---------- 초기값 및 목표값 설정 ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
     q_init = robot.data.default_joint_pos[:, :n_leg_j].clone()
-    q_target = torch.tensor([[-1.1081e-01,  3.1349e-01,  8.4927e-01,  9.3576e-01,  1.7686e-01, 2.9977e-01,  5.6657e-02],   # Left foot position (x, y, z, quat)
-                             [-1.1081e-01, -3.1349e-01,  8.4927e-01,  9.3576e-01, -1.7686e-01, 2.9978e-01, -5.6658e-02]])  # Right foot position (x, y, z, quat)
+    q_target = torch.tensor([[-1.1063e-01,  3.0141e-01,  8.4402e-01,  9.7444e-01,  1.7835e-01, 1.3436e-01,  2.4591e-02],   # Left foot position (x, y, z, quat)
+                             [-1.1063e-01, -3.0141e-01,  8.4402e-01,  9.7444e-01, -1.7835e-01, 1.3437e-01, -2.4593e-02]])  # Right foot position (x, y, z, quat)
 
     robot.update(sim_dt)
 
@@ -252,40 +282,28 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 # --------- 역역학 제어 로직 ------------
                 # 1) 현재 로봇 상태 읽기
                 joint_pos = robot.data.joint_pos
+                joint_vel = robot.data.joint_vel
+                link_pose = robot.data.body_link_pose_w
 
                 jacobian = robot.root_physx_view.get_jacobians()
                 
-                # --- Left Leg Control ---
-                joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
-                joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-                q_target_left = q_target[0, :].unsqueeze(0)
-                jacobain_left = jacobian[:, 5, :, :n_leg_j]
+                q_target_left = q_target[0, :]
+                q_target_left = q_target_left.expand(scene.num_envs, -1)
 
-                leg_controller.set_command()
-                tau_left = leg_controller.compute()
+                q_target_right = q_target[1, :]
+                q_target_right = q_target_right.expand(scene.num_envs, -1)
 
-                # --- Right Leg Control ---
-                joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
-                joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
-                q_target_right = torch.index_select(q_target, 1, right_leg_indices)
-                jacobain_right = jacobian[:, 6, :, :n_leg_j]
+                foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
-                tau_right = leg_controller.compute(
-                    dof_pos=joint_pos_right,
-                    dof_vel=joint_vel_right,
-                    dof_pos_des=q_target_right,
-                    dof_vel_des=q_dot_target_right,
-                    dof_acc_des=q_ddot_target_right,
-                    mass_matrix=mass_matrix_right,
-                    coriolis_term=coriolis_right,
-                    gravity_term=gravity_right,
-                )
+                torque = leg_controller.compute_torque(link_pose=link_pose,
+                                                       joint_pos=joint_pos,
+                                                       joint_vel=joint_vel,
+                                                       foot_cmd=foot_cmd,
+                                                       jacobian=jacobian)
 
+                print("Computed Torque:", torque)
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
-                tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-                tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
-                tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
-                robot.set_joint_effort_target(tau)
+                robot.set_joint_effort_target(torque)
                 robot.write_data_to_sim()
 
             # 물리 시뮬레이션 스텝
