@@ -211,7 +211,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 # --------- 역역학 제어 로직 ------------
                 # 1) 현재 로봇 상태 읽기
                 joint_pos = robot.data.joint_pos
-                joint_vel = robot.data.joint_veltau_left
+                joint_vel = robot.data.joint_vel
 
                 # 2) 물리 엔진으로부터 동역학 파라미터 가져오기
                 mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
