@@ -88,6 +88,9 @@ class IK_PD_Controller(DifferentialIKController):
         """
         self.diff_ik_cfg = diff_ik_cfg
 
+        # Initialize Differential IK Controller
+        super().__init__(diff_ik_cfg, num_envs=num_envs, device=device)
+
         # kp gain
         if isinstance(kp, float):
             self.kp = torch.full((num_envs, num_dof), kp, device=device)
@@ -108,9 +111,6 @@ class IK_PD_Controller(DifferentialIKController):
         else:
             raise TypeError("kd must be a float or a torch.Tensor of shape (1, num_dof)")
         
-    # Initialize Differential IK Controller
-    super().__init__(self.diff_ik_cfg, num_envs=num_envs, device=device)
-
     # Override compute method
     def compute(
         self, ee_pos: torch.Tensor, ee_quat: torch.Tensor, jacobian: torch.Tensor, joint_pos: torch.Tensor
@@ -130,15 +130,15 @@ class IK_PD_Controller(DifferentialIKController):
         if "position" in self.cfg.command_type:
             position_error = self.ee_pos_des - ee_pos
             jacobian_pos = jacobian[:, 0:3]
-            joint_vel = self._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
+            joint_vel = super()._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
         else:
-            position_error, axis_angle_error = compute_pose_error(
+            position_error, axis_angle_error = super().compute_pose_error(
                 ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
             )
             pose_error = torch.cat((position_error, axis_angle_error), dim=1)
             joint_vel = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
         # return the desired joint positions, joint velocity
-        return joint_pos + joint_vel, joint_vel
+        return (joint_pos + joint_vel), joint_vel
 
     def compute_torque(
         self,
@@ -196,14 +196,16 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # define scene
     robot = scene["robot"]
     sim_dt = sim.get_physics_dt()
-
+    diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
+    
     # Robot dof
     leg_dof = 3     # hip, thigh, knee joints
     base_dof = 6    # for floating base (linear + angular)
     num_total_joints = 8
+    n_leg_j = leg_dof * 2
 
     # Define joint indices for each leg
-    # Assuming interleaved joint order: [hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, ...]
+    # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
     left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
     right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
 
@@ -213,20 +215,18 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = InverseDynamicsController(
-        kp=10.0, kd=5.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
+    leg_controller = IK_PD_Controller(
+        diff_ik_cfg= diff_ik_cfg, kp=10.0, kd=5.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
     )
 
     # ---------- 환경 준비 ----------
-    sim_len = 2.0  # [s] 실험 길이
+    sim_len = 3.0  # [s] 실험 길이
     joint_limits = robot.data.joint_pos_limits
 
     # ---------- 초기값 및 목표값 설정 ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-    q_init = robot.data.default_joint_pos[:, :(leg_dof * 2)].clone()
-    q_target = q_init[:, :(leg_dof * 2)] + 0.3  # target joint position
-    q_dot_target = torch.zeros_like(q_target)
-    q_ddot_target = torch.zeros_like(q_target)
+    q_init = robot.data.default_joint_pos[:, :n_leg_j].clone()
+    q_target = q_init[:, :n_leg_j] + 0.3  # target joint position
 
     robot.update(sim_dt)
 
@@ -251,28 +251,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 # --------- 역역학 제어 로직 ------------
                 # 1) 현재 로봇 상태 읽기
                 joint_pos = robot.data.joint_pos
-                joint_vel = robot.data.joint_vel
-                joint_pos = robot.data.joint_pos[:, :num_active_joint]
-                joint_vel = robot.data.joint_vel[:, :num_active_joint]
-                
-                # 2) 물리 엔진으로부터 동역학 파라미터 가져오기
-                jacobian = robot.root_physx_view.get_jacobians()
-                mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
-                coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
-                gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
 
+                jacobian = robot.root_physx_view.get_jacobians()
+                
                 # --- Left Leg Control ---
                 joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
                 joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
                 q_target_left = torch.index_select(q_target, 1, left_leg_indices)
-                q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
-                q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
-
-                mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
-                    2, left_leg_dyn_indices
-                )
-                coriolis_left = coriolis_full.index_select(1, left_leg_indices)
-                gravity_left = gravity_full.index_select(1, left_leg_indices)
+                jacobain_left = jacobian[:, 5, :, :n_leg_j]
 
                 tau_left = leg_controller.compute(
                     dof_pos=joint_pos_left,
@@ -289,14 +275,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
                 joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
                 q_target_right = torch.index_select(q_target, 1, right_leg_indices)
-                q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
-                q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
-
-                mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
-                    2, right_leg_dyn_indices
-                )
-                coriolis_right = coriolis_full.index_select(1, right_leg_indices)
-                gravity_right = gravity_full.index_select(1, right_leg_indices)
+                jacobain_right = jacobian[:, 6, :, :n_leg_j]
 
                 tau_right = leg_controller.compute(
                     dof_pos=joint_pos_right,
@@ -425,13 +404,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
         axes = axes.flatten()
 
+        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
         for i in range(n_leg_j):
             ax = axes[i]
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
             ax.axhline(q_target_plot[0, i].cpu(), ls="--", label="target", color="k")
-            ax.set_title(f"Joint {i}")
+            ax.set_title(joint_name(i))
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:
                 ax.set_xlabel("time [s]")

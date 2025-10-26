@@ -165,11 +165,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # Robot dof
     leg_dof = 3     # hip, thigh, knee joints
     num_total_joints = 8
-
+    n_leg_j = leg_dof * 2       
+    
     # Define joint indices for each leg
-    # Assuming interleaved joint order: [hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, ...]
-    left_leg_indices = torch.tensor([0, 1, 2], device=sim.device, dtype=torch.long)
-    right_leg_indices = torch.tensor([3, 4, 5], device=sim.device, dtype=torch.long)
+    # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
+    left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
+    right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
 
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
@@ -183,8 +184,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # ---------- 초기값 및 목표값 설정 ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-    q_init = robot.data.default_joint_pos[:, :(leg_dof * 2)].clone()
-    q_target = q_init[:, :(leg_dof * 2)] + 0.3  # target joint position
+    q_init = robot.data.default_joint_pos[:, :n_leg_j].clone()
+    q_target = q_init[:, :n_leg_j] + 0.4  # Left target joint position
+    q_target[:, 1:6:2] = q_init[:, 1:6:2] - 0.4  # Right target joint position
     q_dot_target = torch.zeros_like(q_target)
     q_ddot_target = torch.zeros_like(q_target)
 
@@ -268,11 +270,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
                 tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-                tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), 0)
+                tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
                 tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
                 robot.set_joint_effort_target(tau)
                 robot.write_data_to_sim()
 
+            print(robot.data.body_com_pos_b)
             # 물리 시뮬레이션 스텝
             sim.step()
             robot.update(sim_dt)
@@ -283,12 +286,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_t = []
         log_q = []
         n_leg_j = leg_dof * 2
-
-        # 새로운 목표 자세 설정
-        q_target_plot = q_target.clone()
-        q_target_plot[:, 2] += 0.5  # thigh_L_Joint
-        q_target_plot[:, 4] += 1.0  # knee_L_Joint
-        q_target_plot[:, 5] += 1.5  # knee_R_Joint
 
         t = 0.0
         # 초기 상태 리셋
@@ -314,9 +311,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             # Left Leg
             joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
             joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-            q_target_left = torch.index_select(q_target_plot, 1, left_leg_indices)
+            q_target_left = torch.index_select(q_target, 1, left_leg_indices)
             q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
             q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
+
             mass_matrix_left = mass_matrix_full.index_select(1, left_leg_indices).index_select(
                 2, left_leg_indices
             )
@@ -336,7 +334,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             # Right Leg
             joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
             joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
-            q_target_right = torch.index_select(q_target_plot, 1, right_leg_indices)
+            q_target_right = torch.index_select(q_target, 1, right_leg_indices)
             q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
             q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
             mass_matrix_right = mass_matrix_full.index_select(1, right_leg_indices).index_select(
@@ -387,7 +385,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-            ax.axhline(q_target_plot[0, i].cpu(), ls="--", label="target", color="k")
+            ax.axhline(q_target[0, i].cpu(), ls="--", label="target", color="k")
             ax.set_title(f"Joint {i}")
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:

@@ -73,6 +73,10 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
         ),
     ),
 
+    # Link, Joint list in Isaac sim
+    # Link = ['base_Link', 'hip_L_Link', 'hip_R_Link', 'thigh_L_Link', 'thigh_R_Link', 'calf_L_Link', 'calf_R_Link', 'wheel_L_Link', 'wheel_R_Link']
+    # Joint = ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
+    
     # Initial Joint pos and vel
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.0),
@@ -98,8 +102,8 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             stiffness=40.0,
             damping=2.5,
             friction=0.0,
-
         ),
+        
         "wheel": DCMotorCfg(
             joint_names_expr=["wheel_.*"],
             effort_limit=2.5,
