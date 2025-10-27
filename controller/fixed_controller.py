@@ -274,6 +274,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
                 robot.set_joint_effort_target(tau)
                 robot.write_data_to_sim()
+                print("Torque:", tau)
+
             
             # 물리 시뮬레이션 스텝
             sim.step()
