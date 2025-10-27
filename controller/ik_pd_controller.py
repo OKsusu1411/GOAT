@@ -139,7 +139,6 @@ class IK_PD_Controller(DifferentialIKController):
                 ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
             )
             pose_error = torch.cat((position_error, axis_angle_error), dim=1)
-            print("Pose Error:", pose_error)
             joint_vel = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
             self.joint_vel = joint_vel
         # return the desired joint positions, joint velocity
@@ -204,15 +203,18 @@ class IK_PD_Controller(DifferentialIKController):
         super().set_command(command = foot_cmd_left, ee_pos=foot_pos_left, ee_quat=foot_quat_left)
         joint_pos_left_cmd = self.compute(ee_pos=foot_pos_left, ee_quat=foot_quat_left, jacobian=jacobian_left, joint_pos=joint_pos_left)
         joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
-        # print("Left Joint Pos Error:", joint_pos_left_error)
-        joint_vel_left_error = self.joint_vel - joint_vel_left
+        print("Left Joint Pos Error:", joint_pos_left_error)
+        # joint_vel_left_error = self.joint_vel - joint_vel_left
+        joint_vel_left_error = - joint_vel_left
+        # print("Left Joint Vel Error:", joint_vel_left_error)
         torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
 
         # Right foot IK + PD control
         super().set_command(command = foot_cmd_right, ee_pos=foot_pos_right, ee_quat=foot_quat_right)
         joint_pos_right_cmd = self.compute(ee_pos=foot_pos_right, ee_quat=foot_quat_right, jacobian=jacobian_right, joint_pos=joint_pos_right)
         joint_pos_right_error = joint_pos_right_cmd - joint_pos_right
-        joint_vel_right_error = self.joint_vel - joint_vel_right
+        # joint_vel_right_error = self.joint_vel - joint_vel_right
+        joint_vel_right_error = - joint_vel_right
         torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
         
         # Combine torque inputs
@@ -220,7 +222,7 @@ class IK_PD_Controller(DifferentialIKController):
         torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
         
-        # print("Torque:", torque)
+        print("Torque:", torque)
         # TODO : Wheel controller 만들기
         return torque
 
@@ -246,7 +248,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
     leg_controller = IK_PD_Controller(
-        diff_ik_cfg= diff_ik_cfg, kp=5.0, kd=2.5, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
+        diff_ik_cfg= diff_ik_cfg, kp=7.0, kd=4.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
     )
 
     # ---------- 환경 준비 ----------
@@ -301,7 +303,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                                        foot_cmd=foot_cmd,
                                                        jacobian=jacobian)
 
-                print("Computed Torque:", torque)
+                # print("Computed Torque:", torque)
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
                 robot.set_joint_effort_target(torque)
                 robot.write_data_to_sim()
