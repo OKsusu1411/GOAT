@@ -17,10 +17,12 @@ class PDcontroller(Node):
 
         self.rotation_axis: np.array = np.array([               # Screw axies for each joints
             [1, 0, 0],
-            [0, 1, 0],
-            [0, -1, 0]
             [1, 0, 0],
+            [0, 1, 0],
             [0, -1, 0],
+            [0, -1, 0],
+            [0, 1, 0],
+            [0, 1, 0],
             [0, 1, 0]
         ])
         self.count = 0
@@ -40,25 +42,29 @@ class PDcontroller(Node):
         self.base_frame = 'base_link'
         self.joint_frames = [
             'hip_L_Link',
-            'thigh_L_Link',
-            'calf_L_Link',
             'hip_R_Link',
+            'thigh_L_Link',
             'thigh_R_Link',
-            'calf_R_Link'
+            'calf_L_Link',
+            'calf_R_Link',
+            'wheel_L_Link',
+            'wheel_R_Link'
         ]
 
         # Joint names
         self.joint_names = [
             'hip_L_Joint',
-            'thigh_L_Joint',
-            'knee_L_Joint',
             'hip_R_Joint',
+            'thigh_L_Joint',
             'thigh_R_Joint',
-            'knee_R_Joint'
+            'knee_L_Joint',
+            'knee_R_Joint',
+            'wheel_L_Joint',
+            'wheel_R_Joint'
         ]
 
         # Controller timer
-        self.timer = self.create_timer(0.1, self.controller_callback)
+        self.timer = self.create_timer(0.01, self.controller_callback)
 
     # Transformation matrix from tf
     def transformation_matrix(self, tf: TransformStamped) -> np.array:
@@ -120,10 +126,10 @@ class PDcontroller(Node):
                 v = -np.cross(w, p)                 # J_v
                 J[:, i] = np.concatenate([w, v])
 
-                if joint_frame == 'calf_L_Link':
+                if joint_frame == 'wheel_L_Link':
                     L_T_matrix = T                  # Left foot T matrix
                 
-                elif joint_frame == 'calf_R_Link':
+                elif joint_frame == 'wheel_R_Link':
                     R_T_matrix = T                  # Right foot T matrix
 
                 i += 1
@@ -150,9 +156,9 @@ class PDcontroller(Node):
         error = np.concatenate((error_w, error_p))
 
         twist = self.Kp * error + self.Ki * self.error_integral       # PI control
-        w[:2] = J_inv @ twist
+        q = J_inv @ twist
 
-        # Publish joint states
+        # Publish joint 
         joint_command = JointState()
         joint_command.header.stamp = self.get_clock().now().to_msg()
         joint_command.name = self.joint_names
