@@ -21,6 +21,9 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, Articulation, AssetBaseCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.math import compute_pose_error
+from isaaclab.markers import VisualizationMarkersCfg, VisualizationMarkers
+from isaaclab.markers.config import FRAME_MARKER_CFG
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg, GOAT_Cfg
 
@@ -42,6 +45,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True       # Floating_base link
@@ -222,7 +226,6 @@ class IK_PD_Controller(DifferentialIKController):
         torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
         
-        print("Torque:", torque)
         # TODO : Wheel controller 만들기
         return torque
 
@@ -232,24 +235,18 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_dt = sim.get_physics_dt()
     diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
     
-    # Robot dof
-    leg_dof = 3     # hip, thigh, knee joints
+    leg_dof = 3    # hip, thigh, knee joints
     base_dof = 6    # for floating base (linear + angular)
     num_total_joints = 8
     n_leg_j = leg_dof * 2
-
-    # Define joint indices for each leg
-    # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
-    left_leg_indices = torch.tensor([0, 2, 4], device=sim.device, dtype=torch.long)
-    right_leg_indices = torch.tensor([1, 3, 5], device=sim.device, dtype=torch.long)
-
-
-
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = IK_PD_Controller(
-        diff_ik_cfg= diff_ik_cfg, kp=7.0, kd=4.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
-    )
+    leg_controller = IK_PD_Controller(diff_ik_cfg= diff_ik_cfg, 
+                                      kp=7.0,
+                                      kd=4.0,
+                                      num_envs=scene.num_envs,
+                                      num_dof=leg_dof,
+                                      device=scene.device)
 
     # ---------- 환경 준비 ----------
     sim_len = 3.0  # [s] 실험 길이
@@ -262,6 +259,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                              [-1.1063e-01, -3.0141e-01,  8.4402e-01,  9.7444e-01, -1.7835e-01, 1.3437e-01, -2.4593e-02]])  # Right foot position (x, y, z, quat)
 
     robot.update(sim_dt)
+
+    frame_marker_cfg = FRAME_MARKER_CFG.copy()
+    frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+    left_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/left_foot_marker"))
+    right_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/right_foot_marker"))
+
+    left_marker.visualize(q_target[0, :3].unsqueeze(0), q_target[0, 3:].unsqueeze(0))
+    right_marker.visualize(q_target[1, :3].unsqueeze(0), q_target[1, 3:].unsqueeze(0))
 
     # --- 제어 로직 루프 --------------------------
     if args_cli.test_mode == "withstand":
