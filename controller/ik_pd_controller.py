@@ -143,7 +143,9 @@ class IK_PD_Controller(DifferentialIKController):
                 ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
             )
             pose_error = torch.cat((position_error, axis_angle_error), dim=1)
+            print("Pose Error:", pose_error)
             joint_vel = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
+            # print("joint_vel:", joint_vel)
             self.joint_vel = joint_vel
         # return the desired joint positions, joint velocity
         return joint_pos + joint_vel
@@ -207,7 +209,7 @@ class IK_PD_Controller(DifferentialIKController):
         super().set_command(command = foot_cmd_left, ee_pos=foot_pos_left, ee_quat=foot_quat_left)
         joint_pos_left_cmd = self.compute(ee_pos=foot_pos_left, ee_quat=foot_quat_left, jacobian=jacobian_left, joint_pos=joint_pos_left)
         joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
-        print("Left Joint Pos Error:", joint_pos_left_error)
+        # print("Left Joint Pos Error:", joint_pos_left_error)
         # joint_vel_left_error = self.joint_vel - joint_vel_left
         joint_vel_left_error = - joint_vel_left
         # print("Left Joint Vel Error:", joint_vel_left_error)
@@ -222,12 +224,16 @@ class IK_PD_Controller(DifferentialIKController):
         torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
         
         # Combine torque inputs
-        torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
-        torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
-        torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+        # torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        # torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
+        # torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+
+        angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
+        angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd)  
         
         # TODO : Wheel controller 만들기
-        return torque
+        return angle
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # define scene
@@ -302,7 +308,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
-                torque = leg_controller.compute_torque(link_pose=link_pose,
+                angle = leg_controller.compute_torque(link_pose=link_pose,
                                                        joint_pos=joint_pos,
                                                        joint_vel=joint_vel,
                                                        foot_cmd=foot_cmd,
@@ -310,7 +316,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 # print("Computed Torque:", torque)
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
-                robot.set_joint_effort_target(torque)
+                robot.write_joint_state_to_sim(angle, default_joint_vel)
                 robot.write_data_to_sim()
 
             # 물리 시뮬레이션 스텝
