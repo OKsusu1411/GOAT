@@ -191,8 +191,8 @@ class IK_PD_Controller(DifferentialIKController):
 
         foot_cmd_left = foot_cmd[:, 0, :]
 
-        foot_pos_left = link_pose[:, 6, :3]
-        foot_quat_left = link_pose[:, 6, 3:]
+        foot_pos_left = link_pose[:, 7, :3]
+        foot_quat_left = link_pose[:, 7, 3:]
         jacobian_left = jacobian[:, 6, :, left_leg_indices]
 
         # --- Right Leg ---
@@ -201,8 +201,8 @@ class IK_PD_Controller(DifferentialIKController):
 
         foot_cmd_right = foot_cmd[:, 1, :]
 
-        foot_pos_right = link_pose[:, 7, :3]
-        foot_quat_right = link_pose[:, 7, 3:]
+        foot_pos_right = link_pose[:, 8, :3]
+        foot_quat_right = link_pose[:, 8, 3:]
         jacobian_right = jacobian[:, 7, :, right_leg_indices]
 
         # Left foot IK + PD control
@@ -308,7 +308,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
-                angle = leg_controller.compute_torque(link_pose=link_pose,
+                torque = leg_controller.compute_torque(link_pose=link_pose,
                                                        joint_pos=joint_pos,
                                                        joint_vel=joint_vel,
                                                        foot_cmd=foot_cmd,
@@ -316,7 +316,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 # print("Computed Torque:", torque)
                 # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
-                robot.write_joint_state_to_sim(angle, default_joint_vel)
+                # robot.set_joint_effort_target(torque)
+                robot.write_joint_state_to_sim(torque, default_joint_vel)
                 robot.write_data_to_sim()
 
             # 물리 시뮬레이션 스텝
