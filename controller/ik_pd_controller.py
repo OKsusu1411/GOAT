@@ -218,17 +218,17 @@ class IK_PD_Controller(DifferentialIKController):
         torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
         
         # Combine torque inputs
-        # torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
-        # torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
-        # torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+        torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
+        torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
 
-        angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
-        angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
-        angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd)  
-        return angle
+        # angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        # angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
+        # angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd)  
+        # return angle
         
         # TODO : Wheel controller 만들기
-        # return torque
+        return torque
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # define scene
@@ -244,7 +244,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # Create separate controllers for each leg for independent control
     leg_controller = IK_PD_Controller(diff_ik_cfg= diff_ik_cfg, 
                                       kp=10.0,                       # TODO: Gain tuning required
-                                      kd=0.0,                        # TODO: Gain tuning required
+                                      kd=3.0,                        # TODO: Gain tuning required
                                       num_envs=scene.num_envs,
                                       num_dof=leg_dof,
                                       device=scene.device)
@@ -309,8 +309,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                                        jacobian=jacobian)
 
                 # print("Applied Torque:", torque)
-                # robot.set_joint_effort_target(torque)
-                robot.write_joint_state_to_sim(torque, default_joint_vel)
+                robot.set_joint_effort_target(torque)
+                # robot.write_joint_state_to_sim(torque, default_joint_vel)
                 robot.write_data_to_sim()
 
             # Simulation step
