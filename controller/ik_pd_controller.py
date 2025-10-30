@@ -18,12 +18,11 @@ simulation_app = app_launcher.app
 import torch
 import isaaclab.sim as sim_utils
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
-from isaaclab.assets import ArticulationCfg, Articulation, AssetBaseCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.math import compute_pose_error
-from isaaclab.markers import VisualizationMarkersCfg, VisualizationMarkers
+from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg, GOAT_Cfg
 
@@ -48,7 +47,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
-                    solver_velocity_iteration_count=0, fix_root_link=True       # Floating_base link
+                    solver_velocity_iteration_count=0, fix_root_link=True       # Fixed_base link
                 )
             ),
 
@@ -81,14 +80,14 @@ class IK_PD_Controller(DifferentialIKController):
     """
     def __init__(self, diff_ik_cfg: DifferentialIKControllerCfg, kp, kd, num_envs: int, num_dof: int, device: str):
         """
-        컨트롤러를 초기화합니다.
+        Controller initialization
 
         Args:
-            kp (float or torch.Tensor): 비례 이득 (Proportional gain). float 값 또는 (1, num_dof) 크기의 텐서.
-            kd (float or torch.Tensor): 미분 이득 (Derivative gain). float 값 또는 (1, num_dof) 크기의 텐서.
-            num_envs (int): 시뮬레이션 환경의 수.
-            num_dof (int): control dof per leg.
-            device (str): 연산에 사용할 디바이스 (e.g., "cuda:0" or "cpu").
+            kp (float or torch.Tensor): Proportional gain. float value or (1, num_dof) size tensor.
+            kd (float or torch.Tensor): Derivative gain. float value or (1, num_dof) size tensor.
+            num_envs (int): Number of pararell training environments.
+            num_dof (int): controllable dof per leg.
+            device (str): "cuda:0" or "cpu".
         """
         self.diff_ik_cfg = diff_ik_cfg
         self.device = device
@@ -137,18 +136,15 @@ class IK_PD_Controller(DifferentialIKController):
         if "position" in self.cfg.command_type:
             position_error = self.ee_pos_des - ee_pos
             jacobian_pos = jacobian[:, 0:3]
-            joint_vel = super()._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
+            joint_delta_pos = super()._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
         else:
             position_error, axis_angle_error = compute_pose_error(
                 ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
             )
             pose_error = torch.cat((position_error, axis_angle_error), dim=1)
-            print("Pose Error:", pose_error)
-            joint_vel = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
-            # print("joint_vel:", joint_vel)
-            self.joint_vel = joint_vel
-        # return the desired joint positions, joint velocity
-        return joint_pos + joint_vel
+            joint_delta_pos = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
+            #self.joint_vel = joint_delta_pos
+        return joint_pos + joint_delta_pos
 
     def compute_torque(
         self,
@@ -171,9 +167,9 @@ class IK_PD_Controller(DifferentialIKController):
             torch.Tensor: Joint torque.
         """
         # Robot dof
-        leg_dof = self.num_dof    # hip, thigh, knee joints
-        base_dof = 6    # for floating base (linear + angular)
-        num_total_joints = 8
+        leg_dof = self.num_dof                  # hip, thigh, knee joints
+        base_dof = 6                            # for floating base (linear + angular)
+        num_total_joints = leg_dof * 2 + 2      # 6(revolute) + 2(wheel)
         n_leg_j = leg_dof * 2
 
         # Define joint indices for each leg
@@ -209,10 +205,8 @@ class IK_PD_Controller(DifferentialIKController):
         super().set_command(command = foot_cmd_left, ee_pos=foot_pos_left, ee_quat=foot_quat_left)
         joint_pos_left_cmd = self.compute(ee_pos=foot_pos_left, ee_quat=foot_quat_left, jacobian=jacobian_left, joint_pos=joint_pos_left)
         joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
-        # print("Left Joint Pos Error:", joint_pos_left_error)
         # joint_vel_left_error = self.joint_vel - joint_vel_left
         joint_vel_left_error = - joint_vel_left
-        # print("Left Joint Vel Error:", joint_vel_left_error)
         torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
 
         # Right foot IK + PD control
@@ -231,9 +225,10 @@ class IK_PD_Controller(DifferentialIKController):
         angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
         angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
         angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd)  
+        return angle
         
         # TODO : Wheel controller 만들기
-        return angle
+        # return torque
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # define scene
@@ -241,26 +236,25 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_dt = sim.get_physics_dt()
     diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
     
-    leg_dof = 3    # hip, thigh, knee joints
-    base_dof = 6    # for floating base (linear + angular)
-    num_total_joints = 8
+    leg_dof = 3                         # hip, thigh, knee joints
     n_leg_j = leg_dof * 2
-    # --- Initialize PD Inverse Dynamics Controller ---
+    num_total_joints = n_leg_j + 2
+
+    # --- Initialize Inverse Dynamics + PD torque Controller ---
     # Create separate controllers for each leg for independent control
     leg_controller = IK_PD_Controller(diff_ik_cfg= diff_ik_cfg, 
-                                      kp=7.0,
-                                      kd=4.0,
+                                      kp=10.0,                       # TODO: Gain tuning required
+                                      kd=0.0,                        # TODO: Gain tuning required
                                       num_envs=scene.num_envs,
                                       num_dof=leg_dof,
                                       device=scene.device)
 
-    # ---------- 환경 준비 ----------
-    sim_len = 3.0  # [s] 실험 길이
+    # ---------- Environment Initialization ----------
+    sim_len = 3.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
 
-    # ---------- 초기값 및 목표값 설정 ----------
+    # ---------- Refrence input setting ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-    q_init = robot.data.default_joint_pos[:, :n_leg_j].clone()
     q_target = torch.tensor([[-1.1063e-01,  3.0141e-01,  8.4402e-01,  9.7444e-01,  1.7835e-01, 1.3436e-01,  2.4591e-02],   # Left foot position (x, y, z, quat)
                              [-1.1063e-01, -3.0141e-01,  8.4402e-01,  9.7444e-01, -1.7835e-01, 1.3437e-01, -2.4593e-02]])  # Right foot position (x, y, z, quat)
 
@@ -283,17 +277,16 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 print("[INFO] Reset state ...")
                 default_joint_pos = robot.data.default_joint_pos.clone()
                 default_joint_vel = robot.data.default_joint_vel.clone()
-                # 강제로 조인트 워프 -> 초기 Configuration 재 설정
+                # Joint reset to initial pose
                 robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
-                # 내부 버퍼에 토크 저장 -> 텔레포트가 아닌 실제 제어 입력을 위한 명령 신호
+                # Joint torque reset to 0
                 robot.set_joint_effort_target(zero_joint_efforts)
-                # 버퍼에 쓰인 전체 제어명령 전부 실행
                 robot.write_data_to_sim()
                 robot.reset()
                 robot.update(sim_dt)
             else:
-                # --------- 역역학 제어 로직 ------------
-                # 1) 현재 로봇 상태 읽기
+                # --------- Control ------------
+                # state awareness
                 joint_pos = robot.data.joint_pos
                 joint_vel = robot.data.joint_vel
                 link_pose = robot.data.body_link_pose_w
@@ -308,19 +301,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
+                # Compute torque
                 torque = leg_controller.compute_torque(link_pose=link_pose,
                                                        joint_pos=joint_pos,
                                                        joint_vel=joint_vel,
                                                        foot_cmd=foot_cmd,
                                                        jacobian=jacobian)
 
-                # print("Computed Torque:", torque)
-                # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
+                # print("Applied Torque:", torque)
                 # robot.set_joint_effort_target(torque)
                 robot.write_joint_state_to_sim(torque, default_joint_vel)
                 robot.write_data_to_sim()
 
-            # 물리 시뮬레이션 스텝
+            # Simulation step
             sim.step()
             robot.update(sim_dt)
             scene.update(sim_dt)
