@@ -344,62 +344,34 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
 
         while t <= sim_len:
-            # --------- 역역학 제어 로직 ------------
+            # --------- Control ------------
+            # state awareness
             joint_pos = robot.data.joint_pos
             joint_vel = robot.data.joint_vel
-            mass_matrix_full = robot.root_physx_view.get_generalized_mass_matrices()
-            coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
-            gravity_full = robot.root_physx_view.get_gravity_compensation_forces()
+            link_pose = robot.data.body_link_pose_w
 
-            # Left Leg
-            joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
-            joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-            q_target_left = torch.index_select(q_target_plot, 1, left_leg_indices)
-            q_dot_target_left = torch.index_select(q_dot_target, 1, left_leg_indices)
-            q_ddot_target_left = torch.index_select(q_ddot_target, 1, left_leg_indices)
-            mass_matrix_left = mass_matrix_full.index_select(1, left_leg_dyn_indices).index_select(
-                2, left_leg_dyn_indices
-            )
-            coriolis_left = coriolis_full.index_select(1, left_leg_dyn_indices)
-            gravity_left = gravity_full.index_select(1, left_leg_dyn_indices)
-            tau_left = leg_controller.compute(
-                dof_pos=joint_pos_left,
-                dof_vel=joint_vel_left,
-                dof_pos_des=q_target_left,
-                dof_vel_des=q_dot_target_left,
-                dof_acc_des=q_ddot_target_left,
-                mass_matrix=mass_matrix_left,
-                coriolis_term=coriolis_left,
-                gravity_term=gravity_left,
-            )
+            jacobian = robot.root_physx_view.get_jacobians()
+            
+            q_target_left = q_target[0, :]
+            q_target_left = q_target_left.expand(scene.num_envs, -1)
 
-            # Right Leg
-            joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
-            joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
-            q_target_right = torch.index_select(q_target_plot, 1, right_leg_indices)
-            q_dot_target_right = torch.index_select(q_dot_target, 1, right_leg_indices)
-            q_ddot_target_right = torch.index_select(q_ddot_target, 1, right_leg_indices)
-            mass_matrix_right = mass_matrix_full.index_select(1, right_leg_dyn_indices).index_select(
-                2, right_leg_dyn_indices
-            )
-            coriolis_right = coriolis_full.index_select(1, right_leg_dyn_indices)
-            gravity_right = gravity_full.index_select(1, right_leg_dyn_indices)
-            tau_right = leg_controller.compute(
-                dof_pos=joint_pos_right,
-                dof_vel=joint_vel_right,
-                dof_pos_des=q_target_right,
-                dof_vel_des=q_dot_target_right,
-                dof_acc_des=q_ddot_target_right,
-                mass_matrix=mass_matrix_right,
-                coriolis_term=coriolis_right,
-                gravity_term=gravity_right,
-            )
+            q_target_right = q_target[1, :]
+            q_target_right = q_target_right.expand(scene.num_envs, -1)
 
-            tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-            tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
-            tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
-            robot.set_joint_effort_target(tau)
+            foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
+
+            # Compute torque
+            torque = leg_controller.compute_torque(link_pose=link_pose,
+                                                    joint_pos=joint_pos,
+                                                    joint_vel=joint_vel,
+                                                    foot_cmd=foot_cmd,
+                                                    jacobian=jacobian)
+
+            # print("Applied Torque:", torque)
+            robot.set_joint_effort_target(torque)
+            # robot.write_joint_state_to_sim(torque, default_joint_vel)
             robot.write_data_to_sim()
+
 
             # 시뮬레이션 스텝 및 로그
             sim.step()
