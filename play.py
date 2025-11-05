@@ -27,12 +27,6 @@ parser.add_argument("--num_envs", type=int, default=1, help="Number of environme
 parser.add_argument("--task", type=str, default="GOAT-Spawn-v0", help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
 
-parser.add_argument("--ml_framework",
-                    type=str,
-                    default="torch",
-                    choices=["torch", "jax", "jax-numpy"],
-                    help="The ML framework used for training the skrl agent.")
-
 parser.add_argument("--algorithm",
                     type=str,
                     default="PPO",
@@ -59,17 +53,13 @@ import torch
 import copy
 import numpy as np
 
-
-if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
-
+from skrl.utils.runner.torch import Runner
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 # import isaaclab_tasks  # noqa: F401
 import Simulation.Tasks
 from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
-
 
 from lib.wrapper.isaaclab_wrapper import IsaacLabWrapper
 
@@ -115,6 +105,7 @@ def main():
     experiment_cfg["trainer"]["close_environment_at_exit"] = False
     experiment_cfg["agent"]["experiment"]["write_interval"] = 0  # don't log to TensorBoard
     experiment_cfg["agent"]["experiment"]["checkpoint_interval"] = 0  # don't generate checkpoints
+    experiment_cfg["models"]
     runner = Runner(env, experiment_cfg)
 
     if resume_path is not None:
