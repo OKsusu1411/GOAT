@@ -242,7 +242,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # --- Initialize Inverse Dynamics + PD torque Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = IK_PD_Controller(diff_ik_cfg= diff_ik_cfg, 
+    leg_controller = IK_PD_Controller(diff_ik_cfg=diff_ik_cfg, 
                                       kp=10.0,                       # TODO: Gain tuning required
                                       kd=3.0,                        # TODO: Gain tuning required
                                       num_envs=scene.num_envs,
