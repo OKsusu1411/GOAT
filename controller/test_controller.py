@@ -41,7 +41,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                    enabled_self_collisions=True, solver_position_iteration_count=4,
+                    enabled_self_collisions=False, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True       # Fixed_base link
                 )
             ),
@@ -265,14 +265,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             gravity_term=gravity_right,
         )
 
-        print(robot.data.body_state_b)
-        # 4) 계산된 토크와 그리퍼 명령을 시뮬레이션에 적용
         tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
         tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
         print(tau_left)
         tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
-        robot.set_joint_effort_target(tau)
-        robot.write_data_to_sim()
+        # robot.write_joint_state_to_sim(0, 0)
+        # robot.write_data_to_sim()
 
         # 물리 시뮬레이션 스텝
         sim.step()
