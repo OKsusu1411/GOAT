@@ -26,18 +26,18 @@ TRON_ASSET = {
     "usd_filename": "WF_TRON.usd"
 }
 GOAT_ASSET = {
-    "urdf_path": os.path.join(current_dir, "../assets/"),   # Change to GOAT path later
-    "usd_path": os.path.join(current_dir, "../assets/"),
-    "usd_place": os.path.join(current_dir, "../assets/"),
+    "urdf_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/urdf/WF_GOAT.urdf"),   # Change to GOAT path later
+    "usd_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/usd/WF_GOAT.usd"),
+    "usd_place": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/usd/"),
     "usd_filename": "WF_GOAT.usd"
 }
 
 # URDF to USD conversion
 urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
     root_link_name = "base_Link",
-    asset_path = TRON_ASSET["urdf_path"],
-    usd_dir = TRON_ASSET["usd_place"],
-    usd_file_name = TRON_ASSET["usd_filename"],
+    asset_path = GOAT_ASSET["urdf_path"],
+    usd_dir = GOAT_ASSET["usd_place"],
+    usd_file_name = GOAT_ASSET["usd_filename"],
     fix_base=False,
     joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
         drive_type="force",
