@@ -41,9 +41,10 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
-                    solver_velocity_iteration_count=0, fix_root_link=True       # Fixed_base link
+                    solver_velocity_iteration_count=0, fix_root_link=True             # Fixed_base link
                 )
             ),
 
@@ -174,12 +175,15 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # --- Initialize PD Inverse Dynamics Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = InverseDynamicsController(
-        kp=10.0, kd=5.0, num_envs=scene.num_envs, num_dof=leg_dof, device=scene.device
+    leg_controller = InverseDynamicsController(kp=torch.tensor([[6.0, 3.0, 3.0]]),                       # TODO: Gain tuning required
+                                               kd=torch.tensor([[4.0, 5.0, 5.0]]),
+                                               num_envs=scene.num_envs,
+                                               num_dof=leg_dof,
+                                               device=scene.device
     )
 
     # ---------- 환경 준비 ----------
-    sim_len = 4.0  # [s] 실험 길이
+    sim_len = 5.0  # [s] 실험 길이
     joint_limits = robot.data.joint_pos_limits
 
     # ---------- 초기값 및 목표값 설정 ----------
@@ -286,9 +290,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     elif args_cli.mode == "plotting":
         log_t = []
         log_q = []
+        log_angle = []
+        log_torque = []
 
-        t = 0.0
-        # 초기 상태 리셋
+        # reset state
         print("[INFO] Reset state for plotting...")
         robot.write_joint_state_to_sim(robot.data.default_joint_pos, robot.data.default_joint_vel)
         robot.set_joint_effort_target(zero_joint_efforts)
@@ -296,9 +301,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         robot.reset()
         robot.update(sim_dt)
 
-        # 0초 기록
+        # Logging initial state
+        t = 0.0
         log_t.append(0.0)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
+        log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+        log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+
 
         while t <= sim_len:
             # --------- 역역학 제어 로직 ------------
@@ -353,10 +362,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 gravity_term=gravity_right,
             )
 
-            tau = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-            tau.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
-            tau.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
-            robot.set_joint_effort_target(tau)
+            torque = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
+            torque.scatter_(1, left_leg_indices.repeat(scene.num_envs, 1), tau_left)
+            torque.scatter_(1, right_leg_indices.repeat(scene.num_envs, 1), tau_right)
+            robot.set_joint_effort_target(torque)
             robot.write_data_to_sim()
 
             # 시뮬레이션 스텝 및 로그
@@ -366,6 +375,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             t += sim_dt
             log_t.append(t)
             log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
+            log_angle.append(q_target[:, :n_leg_j].clone())
+            log_torque.append(torque[:, :n_leg_j].clone())
 
         # --- 결과 플롯 ---
         import matplotlib.pyplot as plt
@@ -374,31 +385,51 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         log_t_np = np.asarray(log_t)
         log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
+        log_angle = torch.stack(log_angle, dim=0).cpu().numpy().squeeze(1)
+        log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
 
         n_cols = 3
         n_rows = math.ceil(n_leg_j / n_cols)
+        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
+
+        # Joint Angle Plot
         fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
         axies = axies.flatten()
 
-        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
         for i in range(n_leg_j):
             ax = axies[i]
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-            ax.axhline(q_target[0, i].cpu(), ls="--", label="target", color="k")
-            ax.set_title(joint_name[i])
+            ax.plot(log_t_np, log_angle[:, i], ls="--", label="target", color="k")
+            ax.set_title(f"Joint Angle: {joint_name[i]}")
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:
                 ax.set_xlabel("time [s]")
             if i == 0:
                 ax.legend(loc="best")
         fig.tight_layout()
+
+        # Joint Torque Plot
+        fig_torque, axies_torque = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
+        axies_torque = axies_torque.flatten()
+
+        for i in range(n_leg_j):
+            ax = axies_torque[i]
+            ax.plot(log_t_np, log_torque_np[:, i], label="torque")
+            ax.set_title(f"Joint Torque: {joint_name[i]}")
+            ax.set_ylabel("Torque [Nm]")
+            if i // n_cols == n_rows - 1:
+                ax.set_xlabel("time [s]")
+            if i == 0:
+                ax.legend(loc="best")
+        fig_torque.tight_layout()
+
         plt.show()
 
 def main():
     """Main function."""
-    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device="cpu")    # TODO: change to cuda after debugging
+    sim_cfg = sim_utils.SimulationCfg(dt=0.01, device="cuda")    # TODO: change to cuda after debugging
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([2.5, 2.5, 4.0], [0.0, 0.0, 0.0])
     
