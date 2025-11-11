@@ -95,6 +95,7 @@ class IK_PD_Controller(DifferentialIKController):
         self.num_envs = num_envs
         self.num_dof = num_dof
         self.dt = dt
+        self.old_torque = torch.zeros(self.num_envs, num_dof * 2 + 2, device=self.device)
 
         # Initialize Differential IK Controller
         super().__init__(diff_ik_cfg, num_envs=num_envs, device=device)
@@ -134,6 +135,7 @@ class IK_PD_Controller(DifferentialIKController):
         Returns:
             The target joint positions commands in shape (N, num_joints).
         """
+
         # compute the delta in joint-space
         if "position" in self.cfg.command_type:
             position_error = self.ee_pos_des - ee_pos
@@ -172,7 +174,6 @@ class IK_PD_Controller(DifferentialIKController):
         leg_dof = self.num_dof                  # hip, thigh, knee joints
         base_dof = 6                            # for floating base (linear + angular)
         num_total_joints = leg_dof * 2 + 2      # 6(revolute) + 2(wheel)
-        n_leg_j = leg_dof * 2
 
         # Define joint indices for each leg
         # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
@@ -223,7 +224,9 @@ class IK_PD_Controller(DifferentialIKController):
         torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
         torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
-
+        torque = 0.8 * self.old_torque + 0.2 * torque
+        self.old_torque = torque.clone()
+        
         # Combine target joint angles (for debugging)
         angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
         angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
