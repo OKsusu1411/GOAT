@@ -304,7 +304,7 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="80" lower="-0.872665" upper="1.361357" velocity="15"/>
+        <limit effort="80" lower="-1.2" upper="1.6" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
@@ -313,7 +313,7 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="80" lower="-1.361357" upper="0.872665" velocity="15"/>
+        <limit effort="80" lower="-1.6" upper="1.2" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
