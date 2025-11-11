@@ -26,9 +26,9 @@ TRON_ASSET = {
     "usd_filename": "WF_TRON.usd"
 }
 GOAT_ASSET = {
-    "urdf_path": os.path.join(current_dir, "../assets/"),   # Change to GOAT path later
-    "usd_path": os.path.join(current_dir, "../assets/"),
-    "usd_place": os.path.join(current_dir, "../assets/"),
+    "urdf_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/urdf/WF_GOAT.urdf"),   # Change to GOAT path later
+    "usd_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/usd/WF_GOAT.usd"),
+    "usd_place": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/usd/"),
     "usd_filename": "WF_GOAT.usd"
 }
 
@@ -73,6 +73,10 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
         ),
     ),
 
+    # Link, Joint list in Isaac sim
+    # Link = ['base_Link', 'hip_L_Link', 'hip_R_Link', 'thigh_L_Link', 'thigh_R_Link', 'calf_L_Link', 'calf_R_Link', 'wheel_L_Link', 'wheel_R_Link']
+    # Joint = ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
+    
     # Initial Joint pos and vel
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.0),
@@ -98,8 +102,8 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             stiffness=40.0,
             damping=2.5,
             friction=0.0,
-
         ),
+        
         "wheel": DCMotorCfg(
             joint_names_expr=["wheel_.*"],
             effort_limit=2.5,
@@ -115,11 +119,11 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
 @configclass
 class GOATBaseEnvCfg(DirectRLEnvCfg):
     # Env
-    episode_length_s: int = 10
-    decimation: int = 3
-    action_space: int = 10
-    observation_space: int = 0
-    state_space: int = 0
+    episode_length_s: int = 10       # Episode length in seconds
+    decimation: int = 3              # Policy frequency = sim_freq / decimation
+    action_space: int = 10           # Dimension of action space vector
+    observation_space: int = 0       # Dimension of observation space vector
+    state_space: int = 0             # Dimension of state space vector for privileged RL
 
     # Ground plane
     plane = AssetBaseCfg(

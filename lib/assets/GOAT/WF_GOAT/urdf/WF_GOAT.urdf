@@ -45,7 +45,7 @@
 
     <link name="base_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="45.76E-03 0.14E-03 -163.98E-03"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
             <mass value="9.585"/>
             <inertia ixx="140110.479E-06" ixy="534.939E-06" ixz="28184.116E-06"
                      iyy="110641.449E-06" iyz="-27.278E-06" izz="98944.542E-06"/>
@@ -264,7 +264,7 @@
     <!-- ****************************************** Joint ******************************************************** -->
     
     <joint name="hip_L_Joint" type="revolute">
-        <origin xyz="55.56E-03 105E-03 -260.2E-03" rpy="0 0 0"/>
+        <origin xyz="38.386E-03 94.233E-03 -152.597E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
         <axis xyz="1 0 0"/>
@@ -273,7 +273,7 @@
     </joint>
     
     <joint name="hip_R_Joint" type="revolute">
-        <origin xyz="55.56E-03 -105E-03 -260.2E-03" rpy="0 0 0"/>
+        <origin xyz="38.386E-03 -94.233E-03 -152.597E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>
         <axis xyz="1 0 0"/>
@@ -282,7 +282,7 @@
     </joint>
     
     <joint name="thigh_L_Joint" type="revolute">
-        <origin xyz="-0.077 0.02050 0" rpy="0 0 0"/>
+        <origin xyz="-54E-03 -17E-03 0" rpy="0 0 0"/>
         <parent link="hip_L_Link"/>
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
@@ -291,7 +291,7 @@
     </joint>
 
     <joint name="thigh_R_Joint" type="revolute">
-        <origin xyz="-0.077 -0.02050 0" rpy="0 0 0"/>
+        <origin xyz="-54E-03 17E-03 0" rpy="0 0 0"/>
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
@@ -300,25 +300,25 @@
     </joint>
 
     <joint name="knee_L_Joint" type="revolute">
-        <origin xyz="-0.1500 -0.02050 -0.25981" rpy="0 0 0"/>
+        <origin xyz="0 11.5E-03 -205E-03" rpy="0 0 0"/>
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="80" lower="-1.2" upper="1.6" velocity="15"/>
+        <limit effort="80" lower="-0.872665" upper="1.361357" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="knee_R_Joint" type="revolute">
-        <origin xyz="-0.1500 0.02050 -0.25981" rpy="0 0 0"/>
+        <origin xyz="0 11.5E-03 -205E-03" rpy="0 0 0"/>
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="80" lower="-1.6" upper="1.2" velocity="15"/>
+        <limit effort="80" lower="-1.361357" upper="0.872665" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="wheel_L_Joint" type="revolute">
-        <origin xyz="150E-03 43.5E-03 -259.81E-03" rpy="0 0 0"/>
+        <origin xyz="0 16.555E-03 -200E-03" rpy="0 0 0"/>
         <parent link="calf_L_Link" />
         <child link="wheel_L_Link" />
         <axis xyz="0 1 0" />
@@ -328,7 +328,7 @@
     </joint>
     
     <joint name="wheel_R_Joint" type="revolute">
-        <origin xyz="150E-03 -43.5E-03 -259.81E-03" rpy="0 0 0"/>
+        <origin xyz="0 16.555E-03 -200E-03" rpy="0 0 0"/>
         <parent link="calf_R_Link" />
         <child link="wheel_R_Link" />
         <axis xyz="0 1 0" />
