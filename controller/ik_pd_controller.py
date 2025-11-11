@@ -2,7 +2,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="Tutorial on inverse dynamics control for an articulation.")
+parser = argparse.ArgumentParser(description="IK + PD torque control for an articulation.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--mode", type=str, default="plotting", choices=["default", "plotting"])
 # append AppLauncher cli args
@@ -47,7 +47,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
-                    solver_velocity_iteration_count=0, fix_root_link=True       # Fixed_base link
+                    solver_velocity_iteration_count=0, fix_root_link=True             # Fixed_base link
                 )
             ),
 
@@ -172,7 +172,6 @@ class IK_PD_Controller(DifferentialIKController):
         leg_dof = self.num_dof                  # hip, thigh, knee joints
         base_dof = 6                            # for floating base (linear + angular)
         num_total_joints = leg_dof * 2 + 2      # 6(revolute) + 2(wheel)
-        n_leg_j = leg_dof * 2
 
         # Define joint indices for each leg
         # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
@@ -209,8 +208,8 @@ class IK_PD_Controller(DifferentialIKController):
         joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
         joint_vel_left_error = - joint_vel_left                                             # reference joint velocity = 0
         torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
-        print("Left Torque:", torque_left)
-        print("Vel error:", joint_vel_left_error)
+        # print("Left Torque:", torque_left)
+        # print("Vel error:", joint_vel_left_error)
 
         # Right foot IK + PD control
         super().set_command(command = foot_cmd_right, ee_pos=foot_pos_right, ee_quat=foot_quat_right)
@@ -242,11 +241,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     n_leg_j = leg_dof * 2
     num_total_joints = n_leg_j + 2
 
-    # --- Initialize Inverse Dynamics + PD torque Controller ---
+    # --- Initialize IK + PD torque Controller ---
     # Create separate controllers for each leg for independent control
     leg_controller = IK_PD_Controller(diff_ik_cfg=diff_ik_cfg, 
                                       kp=torch.tensor([[5.0, 5.0, 5.0]]),                       # TODO: Gain tuning required
-                                      kd=torch.tensor([[10.0, 10.0, 7.0]]),                       # TODO: Gain tuning required
+                                      kd=torch.tensor([[6.0, 6.0, 6.0]]),                      # TODO: Gain tuning required
                                       num_envs=scene.num_envs,
                                       num_dof=leg_dof,
                                       device=scene.device,
@@ -324,8 +323,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_t = []
         log_q = []
         log_angle = []
+        log_torque = []
 
-        # 초기 상태 리셋
+        # reset state
         print("[INFO] Reset state for plotting...")
         robot.write_joint_state_to_sim(robot.data.default_joint_pos, robot.data.default_joint_vel)
         robot.set_joint_effort_target(zero_joint_efforts)
@@ -333,11 +333,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         robot.reset()
         robot.update(sim_dt)
 
-        # 0초 기록
+        # Logging initial state
         t = 0.0
         log_t.append(0.0)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
         log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+        log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
 
         while t <= sim_len:
             # --------- Control ------------
@@ -375,6 +376,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             log_t.append(t)
             log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
             log_angle.append(angle[:, :n_leg_j].clone())
+            log_torque.append(torque[:, :n_leg_j].clone())
 
         # --- 결과 플롯 ---
         import matplotlib.pyplot as plt
@@ -384,26 +386,45 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_t_np = np.asarray(log_t)
         log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
         log_angle = torch.stack(log_angle, dim=0).cpu().numpy().squeeze(1)
+        log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
 
         n_cols = 3
         n_rows = math.ceil(n_leg_j / n_cols)
+        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
+
+        # Joint Angle Plot
         fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
         axies = axies.flatten()
 
-        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
         for i in range(n_leg_j):
             ax = axies[i]
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
             ax.plot(log_t_np, log_angle[:, i], ls="--", label="target", color="k")
-            ax.set_title(joint_name[i])
+            ax.set_title(f"Joint Angle: {joint_name[i]}")
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:
                 ax.set_xlabel("time [s]")
             if i == 0:
                 ax.legend(loc="best")
         fig.tight_layout()
+
+        # Joint Torque Plot
+        fig_torque, axies_torque = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
+        axies_torque = axies_torque.flatten()
+
+        for i in range(n_leg_j):
+            ax = axies_torque[i]
+            ax.plot(log_t_np, log_torque_np[:, i], label="torque")
+            ax.set_title(f"Joint Torque: {joint_name[i]}")
+            ax.set_ylabel("Torque [Nm]")
+            if i // n_cols == n_rows - 1:
+                ax.set_xlabel("time [s]")
+            if i == 0:
+                ax.legend(loc="best")
+        fig_torque.tight_layout()
+
         plt.show()
 
 def main():
