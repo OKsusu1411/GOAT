@@ -78,31 +78,43 @@ class PDcontroller(Node):
         ])
         return T
 
-    # def rpy_to_R(self, roll, pitch, yaw):
-    #     """
-    #     Roll, Pitch, Yaw (in radians) → Rotation Matrix (3x3)
-    #     Rotation order: ZYX (yaw → pitch → roll)
-    #     """
-    #     Rz = np.array([
-    #         [np.cos(yaw), -np.sin(yaw), 0],
-    #         [np.sin(yaw),  np.cos(yaw), 0],
-    #         [0,            0,           1]
-    #     ])
+    def rpy_to_R(self, roll, pitch, yaw):
+        """
+        Roll, Pitch, Yaw (in radians) → Rotation Matrix (3x3)
+        Rotation order: ZYX (yaw → pitch → roll)
+        """
+        Rz = np.array([
+            [np.cos(yaw), -np.sin(yaw), 0],
+            [np.sin(yaw),  np.cos(yaw), 0],
+            [0,            0,           1]
+        ])
 
-    #     Ry = np.array([
-    #         [np.cos(pitch), 0, np.sin(pitch)],
-    #         [0,             1, 0],
-    #         [-np.sin(pitch), 0, np.cos(pitch)]
-    #     ])
+        Ry = np.array([
+            [np.cos(pitch), 0, np.sin(pitch)],
+            [0,             1, 0],
+            [-np.sin(pitch), 0, np.cos(pitch)]
+        ])
 
-    #     Rx = np.array([
-    #         [1, 0,            0],
-    #         [0, np.cos(roll), -np.sin(roll)],
-    #         [0, np.sin(roll),  np.cos(roll)]
-    #     ])
+        Rx = np.array([
+            [1, 0,            0],
+            [0, np.cos(roll), -np.sin(roll)],
+            [0, np.sin(roll),  np.cos(roll)]
+        ])
 
-    #     R = Rz @ Ry @ Rx
-    #     return R
+        R = Rz @ Ry @ Rx
+        return R
+    
+    def quaternion_to_rot(self, q):
+        """
+        Quaternion (x, y, z, w) → Rotation Matrix (3x3)
+        """
+        x, y, z, w = q
+        R = np.array([
+            [1 - 2*(y**2 + z**2), 2*(x*y - z*w),     2*(x*z + y*w)],
+            [2*(x*y + z*w),       1 - 2*(x**2 + z**2), 2*(y*z - x*w)],
+            [2*(x*z - y*w),       2*(y*z + x*w),     1 - 2*(x**2 + y**2)]
+        ])
+        return R
     
     # Controller
     def controller_callback(self):
@@ -138,27 +150,56 @@ class PDcontroller(Node):
                 self.get_logger().error(f'Error looking up transform for {joint_frame}: {e}')
 
         # Current state
-        L_current_p = L_T_matrix[:3, 3]             # Left foot  
-        L_current_R = L_T_matrix[:3, :3]
-        R_current_p = R_T_matrix[:3, 3]             # Right foot
-        R_current_R = R_T_matrix[:3, :3]
+        L_leg_indices = np.array([0, 2, 4])                # Indices for left leg joints
+        R_leg_indices = np.array([1, 3, 5])               # Indices for right leg joints
+        L_current_pos = L_T_matrix[:3, 3]             # Left foot  
+        L_current_rot = L_T_matrix[:3, :3]
+        R_current_pos = R_T_matrix[:3, 3]             # Right foot
+        R_current_rot = R_T_matrix[:3, :3]
+        L_J = J[:, L_leg_indices]
+        R_J = J[:, R_leg_indices]
         w = np.zeros((len(self.joint_names), 1))    # TODO: Get current joint velocities
+        q = np.zeros((len(self.joint_names), 1))    # TODO: Get current joint positions
 
-        J_inv = pinv(J)                               # Pseudoinverse of the Jacobian 
-        target_position 
-        target_R 
-        error_R = logm(np.transpose(current_R) @ target_R)         # Logarithm of the rotation error
-        error_R = error_R.real
+        # Target state
+        target_pose
 
-        error_w = np.array([error_R[2, 1], error_R[0, 2], error_R[1, 0]]).reshape(3, 1)  # Extract angular error
+        # ======================= Left leg control ======================= #
+        L_target_pose = target_pose[0,:].reshape(7, 1)
+        L_target_rot = self.quaternion_to_rot(L_target_pose[0:4, 0])
+        L_target_pos = L_target_pose[4:, 0]
+        L_q = q[L_leg_indices, 0].reshape(3, 1)
+        L_J_inv = pinv(L_J)                             # Pseudoinverse of the Jacobian
 
-        error_p = target_position - current_position
-        error = np.concatenate((error_w, error_p))
+        L_error_rot = logm(np.transpose(L_current_rot) @ L_target_rot)         # Logarithm of the rotation error
+        L_error_rot = L_error_rot.real
 
-        twist = self.Kp * error + self.Ki * self.error_integral       # PI control
-        q = J_inv @ twist
+        L_error_angle = np.array([L_error_rot[2, 1], L_error_rot[0, 2], L_error_rot[1, 0]]).reshape(3, 1)  # Extract angular error
+        L_error_pos = L_target_pos - L_current_pos                                     # Extract position error                           
+        L_error_pose = np.concatenate((L_error_angle, L_error_pos))
 
-        # Publish joint 
+        L_delta_q = L_J_inv @ L_error_pose
+        L_q = L_q + L_delta_q
+
+
+        # ======================= Right leg control ======================= #
+        R_target_pose = target_pose[0,:].reshape(7, 1)
+        R_target_rot = self.quaternion_to_rot(R_target_pose[0:4, 0])
+        R_target_pos = R_target_pose[4:, 0]
+        R_q = q[R_leg_indices, 0].reshape(3, 1)
+        R_J_inv = pinv(R_J)                             # Pseudoinverse of the Jacobian
+
+        R_error_rot = logm(np.transpose(R_current_rot) @ R_target_rot)         # Logarithm of the rotation error
+        R_error_rot = R_error_rot.real
+
+        R_error_angle = np.array([R_error_rot[2, 1], R_error_rot[0, 2], R_error_rot[1, 0]]).reshape(3, 1)  # Extract angular error
+        R_error_pos = R_target_pos - R_current_pos                                     # Extract position error                           
+        R_error_pose = np.concatenate((R_error_angle, R_error_pos))
+
+        R_delta_q = R_J_inv @ R_error_pose
+        R_q = R_q + R_delta_q
+
+        # Publish joint command
         joint_command = JointState()
         joint_command.header.stamp = self.get_clock().now().to_msg()
         joint_command.name = self.joint_names

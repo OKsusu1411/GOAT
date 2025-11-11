@@ -4,7 +4,7 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Tutorial on inverse dynamics control for an articulation.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
-parser.add_argument("--test_mode", type=str, default="withstand", choices=["withstand", "plotting"])
+parser.add_argument("--mode", type=str, default="default", choices=["default", "plotting"])
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -179,7 +179,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     )
 
     # ---------- 환경 준비 ----------
-    sim_len = 2.0  # [s] 실험 길이
+    sim_len = 4.0  # [s] 실험 길이
     joint_limits = robot.data.joint_pos_limits
 
     # ---------- 초기값 및 목표값 설정 ----------
@@ -193,7 +193,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     robot.update(sim_dt)
 
     # --- 제어 로직 루프 --------------------------
-    if args_cli.test_mode == "withstand":
+    if args_cli.mode == "default":
         count = 0
         while simulation_app.is_running():
             if count % 500 == 0:
@@ -283,10 +283,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             scene.update(sim_dt)
             count += 1
 
-    elif args_cli.test_mode == "plotting":
+    elif args_cli.mode == "plotting":
         log_t = []
         log_q = []
-        n_leg_j = leg_dof * 2
 
         t = 0.0
         # 초기 상태 리셋
@@ -378,16 +377,17 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         n_cols = 3
         n_rows = math.ceil(n_leg_j / n_cols)
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
-        axes = axes.flatten()
+        fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
+        axies = axies.flatten()
 
+        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
         for i in range(n_leg_j):
-            ax = axes[i]
+            ax = axies[i]
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
             ax.axhline(q_target[0, i].cpu(), ls="--", label="target", color="k")
-            ax.set_title(f"Joint {i}")
+            ax.set_title(joint_name[i])
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:
                 ax.set_xlabel("time [s]")
@@ -395,7 +395,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 ax.legend(loc="best")
         fig.tight_layout()
         plt.show()
-
 
 def main():
     """Main function."""

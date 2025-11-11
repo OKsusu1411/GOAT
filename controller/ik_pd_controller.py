@@ -4,7 +4,7 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Tutorial on inverse dynamics control for an articulation.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
-parser.add_argument("--test_mode", type=str, default="withstand", choices=["withstand", "plotting"])
+parser.add_argument("--mode", type=str, default="plotting", choices=["default", "plotting"])
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -78,7 +78,7 @@ class IK_PD_Controller(DifferentialIKController):
     
     τ = Kp*e + Kd*ė
     """
-    def __init__(self, diff_ik_cfg: DifferentialIKControllerCfg, kp, kd, num_envs: int, num_dof: int, device: str):
+    def __init__(self, diff_ik_cfg: DifferentialIKControllerCfg, kp, kd, num_envs: int, num_dof: int, device: str, dt: float):
         """
         Controller initialization
 
@@ -88,11 +88,13 @@ class IK_PD_Controller(DifferentialIKController):
             num_envs (int): Number of pararell training environments.
             num_dof (int): controllable dof per leg.
             device (str): "cuda:0" or "cpu".
+            dt (float): Simulation time-step.
         """
         self.diff_ik_cfg = diff_ik_cfg
         self.device = device
         self.num_envs = num_envs
         self.num_dof = num_dof
+        self.dt = dt
 
         # Initialize Differential IK Controller
         super().__init__(diff_ik_cfg, num_envs=num_envs, device=device)
@@ -143,7 +145,7 @@ class IK_PD_Controller(DifferentialIKController):
             )
             pose_error = torch.cat((position_error, axis_angle_error), dim=1)
             joint_delta_pos = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
-            #self.joint_vel = joint_delta_pos
+
         return joint_pos + joint_delta_pos
 
     def compute_torque(
@@ -205,16 +207,16 @@ class IK_PD_Controller(DifferentialIKController):
         super().set_command(command = foot_cmd_left, ee_pos=foot_pos_left, ee_quat=foot_quat_left)
         joint_pos_left_cmd = self.compute(ee_pos=foot_pos_left, ee_quat=foot_quat_left, jacobian=jacobian_left, joint_pos=joint_pos_left)
         joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
-        # joint_vel_left_error = self.joint_vel - joint_vel_left
-        joint_vel_left_error = - joint_vel_left
+        joint_vel_left_error = - joint_vel_left                                             # reference joint velocity = 0
         torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
+        print("Left Torque:", torque_left)
+        print("Vel error:", joint_vel_left_error)
 
         # Right foot IK + PD control
         super().set_command(command = foot_cmd_right, ee_pos=foot_pos_right, ee_quat=foot_quat_right)
         joint_pos_right_cmd = self.compute(ee_pos=foot_pos_right, ee_quat=foot_quat_right, jacobian=jacobian_right, joint_pos=joint_pos_right)
         joint_pos_right_error = joint_pos_right_cmd - joint_pos_right
-        # joint_vel_right_error = self.joint_vel - joint_vel_right
-        joint_vel_right_error = - joint_vel_right
+        joint_vel_right_error = - joint_vel_right                                           # reference joint velocity = 0
         torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
         
         # Combine torque inputs
@@ -222,15 +224,15 @@ class IK_PD_Controller(DifferentialIKController):
         torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
 
-        # angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
-        # angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
-        # angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd)  
-        # return angle
+        # Combine target joint angles (for debugging)
+        angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
+        angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd) 
         
         # TODO : Wheel controller 만들기
-        return torque
+        return torque, angle
 
-def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
+def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene): 
     # define scene
     robot = scene["robot"]
     sim_dt = sim.get_physics_dt()
@@ -243,21 +245,21 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # --- Initialize Inverse Dynamics + PD torque Controller ---
     # Create separate controllers for each leg for independent control
     leg_controller = IK_PD_Controller(diff_ik_cfg=diff_ik_cfg, 
-                                      kp=10.0,                       # TODO: Gain tuning required
-                                      kd=3.0,                        # TODO: Gain tuning required
+                                      kp=torch.tensor([[5.0, 5.0, 5.0]]),                       # TODO: Gain tuning required
+                                      kd=torch.tensor([[10.0, 10.0, 7.0]]),                       # TODO: Gain tuning required
                                       num_envs=scene.num_envs,
                                       num_dof=leg_dof,
-                                      device=scene.device)
+                                      device=scene.device,
+                                      dt=sim_dt)
 
     # ---------- Environment Initialization ----------
-    sim_len = 3.0  # [s] simulation length
+    sim_len = 10.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
 
     # ---------- Refrence input setting ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
-    q_target = torch.tensor([[-1.1063e-01,  3.0141e-01,  8.4402e-01,  9.7444e-01,  1.7835e-01, 1.3436e-01,  2.4591e-02],   # Left foot position (x, y, z, quat)
-                             [-1.1063e-01, -3.0141e-01,  8.4402e-01,  9.7444e-01, -1.7835e-01, 1.3437e-01, -2.4593e-02]])  # Right foot position (x, y, z, quat)
-
+    q_target = torch.tensor([[-0.1656,  0.3197,  0.7986, 0.9755, 0.1796, 0.1247, 0.0230],     # Left foot position (x, y, z, quat)
+                             [-0.1656, -0.3197,  0.7986, 0.9755, -0.1796, 0.1247, -0.0229]])  # Right foot position (x, y, z, quat)
     robot.update(sim_dt)
 
     frame_marker_cfg = FRAME_MARKER_CFG.copy()
@@ -268,8 +270,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     left_marker.visualize(q_target[0, :3].unsqueeze(0), q_target[0, 3:].unsqueeze(0))
     right_marker.visualize(q_target[1, :3].unsqueeze(0), q_target[1, 3:].unsqueeze(0))
 
-    # --- 제어 로직 루프 --------------------------
-    if args_cli.test_mode == "withstand":
+    # -------------- Control loop --------------
+    if args_cli.mode == "default":
         count = 0
         while simulation_app.is_running():
             if count % 500 == 0:
@@ -302,15 +304,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
                 # Compute torque
-                torque = leg_controller.compute_torque(link_pose=link_pose,
-                                                       joint_pos=joint_pos,
-                                                       joint_vel=joint_vel,
-                                                       foot_cmd=foot_cmd,
-                                                       jacobian=jacobian)
-
-                # print("Applied Torque:", torque)
+                torque, angle = leg_controller.compute_torque(link_pose=link_pose,
+                                                              joint_pos=joint_pos,
+                                                              joint_vel=joint_vel,
+                                                              foot_cmd=foot_cmd,
+                                                              jacobian=jacobian)
+                
                 robot.set_joint_effort_target(torque)
-                # robot.write_joint_state_to_sim(torque, default_joint_vel)
+                # robot.write_joint_state_to_sim(angle, default_joint_vel)
                 robot.write_data_to_sim()
 
             # Simulation step
@@ -319,18 +320,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             scene.update(sim_dt)
             count += 1
 
-    elif args_cli.test_mode == "plotting":
+    elif args_cli.mode == "plotting":
         log_t = []
         log_q = []
-        n_leg_j = leg_dof * 2
+        log_angle = []
 
-        # 새로운 목표 자세 설정
-        q_target_plot = q_target.clone()
-        q_target_plot[:, 2] += 0.5  # thigh_L_Joint
-        q_target_plot[:, 4] += 1.0  # knee_L_Joint
-        q_target_plot[:, 5] += 1.5  # knee_R_Joint
-
-        t = 0.0
         # 초기 상태 리셋
         print("[INFO] Reset state for plotting...")
         robot.write_joint_state_to_sim(robot.data.default_joint_pos, robot.data.default_joint_vel)
@@ -340,8 +334,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         robot.update(sim_dt)
 
         # 0초 기록
+        t = 0.0
         log_t.append(0.0)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
+        log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
 
         while t <= sim_len:
             # --------- Control ------------
@@ -361,25 +357,24 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
             # Compute torque
-            torque = leg_controller.compute_torque(link_pose=link_pose,
-                                                    joint_pos=joint_pos,
-                                                    joint_vel=joint_vel,
-                                                    foot_cmd=foot_cmd,
-                                                    jacobian=jacobian)
+            torque, angle = leg_controller.compute_torque(link_pose=link_pose,
+                                                          joint_pos=joint_pos,
+                                                          joint_vel=joint_vel,
+                                                          foot_cmd=foot_cmd,
+                                                          jacobian=jacobian)
 
-            # print("Applied Torque:", torque)
             robot.set_joint_effort_target(torque)
-            # robot.write_joint_state_to_sim(torque, default_joint_vel)
+            # robot.write_joint_state_to_sim(angle, default_joint_vel)
             robot.write_data_to_sim()
 
-
-            # 시뮬레이션 스텝 및 로그
+            # Simulation step
             sim.step()
             robot.update(sim_dt)
             scene.update(sim_dt)
             t += sim_dt
             log_t.append(t)
             log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
+            log_angle.append(angle[:, :n_leg_j].clone())
 
         # --- 결과 플롯 ---
         import matplotlib.pyplot as plt
@@ -388,20 +383,21 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         log_t_np = np.asarray(log_t)
         log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
+        log_angle = torch.stack(log_angle, dim=0).cpu().numpy().squeeze(1)
 
         n_cols = 3
         n_rows = math.ceil(n_leg_j / n_cols)
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
-        axes = axes.flatten()
+        fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
+        axies = axies.flatten()
 
         joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
         for i in range(n_leg_j):
-            ax = axes[i]
+            ax = axies[i]
             ax.plot(log_t_np, log_q_np[:, i], label="actual")
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-            ax.axhline(q_target_plot[0, i].cpu(), ls="--", label="target", color="k")
-            ax.set_title(joint_name(i))
+            ax.plot(log_t_np, log_angle[:, i], ls="--", label="target", color="k")
+            ax.set_title(joint_name[i])
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:
                 ax.set_xlabel("time [s]")
@@ -409,7 +405,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 ax.legend(loc="best")
         fig.tight_layout()
         plt.show()
-
 
 def main():
     """Main function."""

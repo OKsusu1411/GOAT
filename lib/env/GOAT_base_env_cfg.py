@@ -35,9 +35,9 @@ GOAT_ASSET = {
 # URDF to USD conversion
 urdf_cfg: sim_utils.UrdfConverterCfg = sim_utils.UrdfConverterCfg(
     root_link_name = "base_Link",
-    asset_path = GOAT_ASSET["urdf_path"],
-    usd_dir = GOAT_ASSET["usd_place"],
-    usd_file_name = GOAT_ASSET["usd_filename"],
+    asset_path = TRON_ASSET["urdf_path"],
+    usd_dir = TRON_ASSET["usd_place"],
+    usd_file_name = TRON_ASSET["usd_filename"],
     fix_base=False,
     joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
         drive_type="force",
