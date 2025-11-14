@@ -2,7 +2,6 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from .utils.can_mixin import CanMixin
-import can
 import struct
 import time
 #from utils.can_mixin import CanMixin
