@@ -13,12 +13,12 @@ class PDcontroller(Node):
         super().__init__('torque_controller')
 
         self.rotation_axis: np.array = np.array([                # Screw axies for each joints
+            [-1, 0, 0],
             [1, 0, 0],
-            [1, 0, 0],
+            [0, 1, 0],
             [0, 1, 0],
             [0, -1, 0],
             [0, -1, 0],
-            [0, 1, 0],
             [0, 1, 0],
             [0, 1, 0]
         ])
