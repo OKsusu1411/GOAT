@@ -2,9 +2,11 @@
 import rclpy
 from rclpy.node import Node
 from motor_interfaces.msg import MotorStates  # 사용자 정의 메시지
+from .utils.can_mixin import CanMixin
 import can
 import struct
 import time
+#from utils.can_mixin import LkCanMixin
 
 """
 motor_state_publisher.py (MG 전용, read_angle_tx_only.py 방식 각도 안정화)
@@ -16,13 +18,14 @@ motor_state_publisher.py (MG 전용, read_angle_tx_only.py 방식 각도 안정�
 # === MG 전용 iq 해상도 (A/LSB) ===
 IQ_RES_A_PER_LSB = 66.0 / 4096.0   # MG: ≈ 0.01611 A/LSB
 
-class MotorStatePublisher(Node):
+class MotorStatePublisher(Node, CanMixin ):
     def __init__(self):
         super().__init__('motor_state_publisher')
 
         # 파라미터
         self.channel   = self.declare_parameter('channel', 'can0').value
         self.interface = self.declare_parameter('interface', 'socketcan').value
+        # 시리즈 파라미터는 제거(MG 고정)
         self.num_motors = int(self.declare_parameter('num_motors', 8).value)
         self.poll_hz    = float(self.declare_parameter('poll_hz', 100.0).value)
         # 각도 읽을 모터 인덱스(0-based) 집합
@@ -71,56 +74,39 @@ class MotorStatePublisher(Node):
         finally:
             super().destroy_node()
 
-    # ---------------- CAN 유틸 (CanMixin 대체) ----------------
-    def _txrx(self, node_id: int, cmd: int, payload7: bytes=b'\x00'*7,
-              timeout: float = 0.05, accept_rx: bool=False, verbose: bool=False):
-        """
-        read_angle_tx_only.py와 동일한 TX-echo 무시 방식.
-        - TX ID(0x140+ID)로 되돌아오는 에코 프레임은 '내용이 같으면' 무시
-        - 같은 TX ID라도 '내용이 다른' 프레임은 유효 응답으로 인정
-        - accept_rx=True이면 RX ID(0x180+ID) 응답도 허용
-        """
-        tx_id = 0x140 + int(node_id)
-        rx_id = 0x180 + int(node_id)
-        data  = bytes([cmd]) + payload7
+    # # ---- CAN 유틸 ----
+    # def _txrx(self, node_id: int, cmd: int, payload7: bytes=b'\x00'*7, timeout=0.05, accept_rx: bool=False, verbose: bool=False):
+    #     tx_id = 0x140 + int(node_id)
+    #     rx_id = 0x180 + int(node_id)
+    #     data  = bytes([cmd]) + payload7
 
-        try:
-            self.bus.send(can.Message(arbitration_id=tx_id, data=data, is_extended_id=False))
-        except can.CanError as e:
-            self.get_logger().error(f"CAN send failed (node {node_id}, cmd 0x{cmd:02X}): {e}")
-            return None
+    #     try:
+    #         self.bus.send(can.Message(arbitration_id=tx_id, data=data, is_extended_id=False))
+    #     except can.CanError as e:
+    #         self.get_logger().error(f"CAN send failed (node {node_id}, cmd 0x{cmd:02X}): {e}")
+    #         return None
 
-        t_end = time.time() + timeout
-        while time.time() < t_end:
-            m = self.bus.recv(timeout=min(0.05, timeout))
-            if not m or len(m.data) != 8 or m.data[0] != cmd:
-                continue
+    #     t_end = time.time() + timeout
+    #     while time.time() < t_end:
+    #         m = self.bus.recv(timeout=min(0.05, timeout))
+    #         if not m or len(m.data) != 8 or m.data[0] != cmd:
+    #             continue
 
-            if accept_rx and m.arbitration_id == rx_id:
-                if verbose:
-                    self.get_logger().info(f"[RX] 0x{m.arbitration_id:X} <- 0x{cmd:02X} {m.data.hex(' ').upper()}")
-                return m
+    #         # (옵션) 필요시 정상 RX-ID 응답 허용
+    #         if accept_rx and m.arbitration_id == rx_id:
+    #             if verbose:
+    #                 self.get_logger().info(f"[RX] 0x{m.arbitration_id:X} <- 0x{cmd:02X} {m.data.hex(' ').upper()}")
+    #             return m
 
-            if m.arbitration_id == tx_id and m.data != data:
-                if verbose:
-                    self.get_logger().info(f"[RX-TXID] 0x{m.arbitration_id:X} <- 0x{cmd:02X} {m.data.hex(' ').upper()}")
-                return m
-        return None
+    #         # TX-ID로 돌아온 프레임: 에코(내용 동일)는 건너뛰고, 내용 다르면 유효 응답으로 인정
+    #         if m.arbitration_id == tx_id and m.data != data:
+    #             if verbose:
+    #                 self.get_logger().info(f"[RX-TXID] 0x{m.arbitration_id:X} <- 0x{cmd:02X} {m.data.hex(' ').upper()}")
+    #             return m
+    #     return None
 
-    # ---- 개별 커맨드 래퍼 (기존 CanMixin 대체) ----
-    def cmd_read_state2(self, node_id: int, cmd: int = 0x9C, timeout: float = 0.05):
-        return self._txrx(node_id, cmd, timeout=timeout)
 
-    def cmd_read_state1(self, node_id: int, cmd: int = 0x9A, timeout: float = 0.05):
-        return self._txrx(node_id, cmd, timeout=timeout)
-
-    def cmd_read_single_turn(self, node_id: int, timeout: float = 0.25):
-        return self._txrx(node_id, 0x94, timeout=timeout)
-
-    def cmd_read_multi_turn(self, node_id: int, timeout: float = 0.25):
-        return self._txrx(node_id, 0x92, timeout=timeout)
-
-    # ---------------- 폴링 함수 (라운드 로빈) ----------------
+    # ---- 폴링 함수 (라운드 로빈) ----
     def poll_state2(self, motor_idx: int):
         """0x9C: 상태2 (온도, iq(or power), 속도, 엔코더)"""
         node_id = motor_idx + 1
@@ -168,12 +154,12 @@ class MotorStatePublisher(Node):
                 return False
             d = rep.data
             raw7 = d[1:8]
-            sign = b'\x00' if raw7[-1] < 0.80 else b'\xff'
+            sign = b'\x00' if raw7[-1] < 0x80 else b'\xff'
             s64  = int.from_bytes(raw7 + sign, byteorder='little', signed=True)  # 0.01°/LSB
             self.mt_arr[motor_idx] = s64
             return True
 
-        # 인덱스 세트가 비어 있으면 '둘 다' 읽기
+        # 인덱스 세트가 비어 있으면 '둘 다' 읽기 (read_angle_tx_only.py와 동일한 체감)
         if not self.single_turn_indices and not self.multi_turn_indices:
             _ = read_single()
             _ = read_multi()
@@ -184,14 +170,16 @@ class MotorStatePublisher(Node):
         if motor_idx in self.multi_turn_indices:
             _ = read_multi()
 
-    # ---------------- Timer & Publish ----------------
+    # ---- Timer & Publish ----
     def timer_cb(self):
+        # 현재 폴링 대상 로그 추가
+        self.get_logger().debug(f"Polling motor_idx={self.poll_motor_idx}, type_idx={self.poll_type_idx}")
+
         # 현재 모터에 대해 현재 폴링 종류 실행
         self.poll_sequence[self.poll_type_idx](self.poll_motor_idx)
 
-        # 한 바퀴 끝이면 퍼블리시
-        if self.poll_motor_idx == self.num_motors - 1 and self.poll_type_idx == len(self.poll_sequence) - 1:
-            self.publish_all()
+        # 한 바퀴 끝이면 퍼블리시 -> 매번 폴링 후 즉시 상태 발행으로 변경
+        self.publish_all()
 
         # 다음 폴링 종류로
         self.poll_type_idx += 1
@@ -204,11 +192,13 @@ class MotorStatePublisher(Node):
 
     def publish_all(self):
         msg = MotorStates()
+        # Header가 있다면 타임스탬프 채우기(패키지 정의에 따라 없을 수도 있음)
         try:
             msg.header.stamp = self.get_clock().now().to_msg()
         except Exception:
             pass
 
+        # 필드명은 기존 msg 정의를 따릅니다.
         try: msg.temperature_c   = self.temp_arr
         except Exception: pass
         try: msg.iq_amp          = self.iq_amp_arr
@@ -231,11 +221,13 @@ class MotorStatePublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = MotorStatePublisher()
+    node.get_logger().info("Node initialized, entering spin...")
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        node.get_logger().info("KeyboardInterrupt, shutting down.")
     finally:
+        node.get_logger().info("Spin exited, destroying node.")
         node.destroy_node()
         rclpy.shutdown()
 

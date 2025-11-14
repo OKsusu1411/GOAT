@@ -26,7 +26,7 @@ setup(
         'console_scripts': [
             'states_pub = goat_control.states_pub:main',
             'torque_control = goat_control.torque_control:main',
-            'torque_pub = goat_control.torque_command_pub:main',
+            'torque_pub = goat_control.torque_pub:main',
             'states_echo = goat_control.states_echo:main',
         ],
     },
