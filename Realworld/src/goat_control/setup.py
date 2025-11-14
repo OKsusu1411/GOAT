@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'motor_control_real'
+package_name = 'goat_control'
 
 setup(
     name=package_name,
@@ -14,18 +14,20 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='heachanlee',
-    maintainer_email='heachanlee@todo.todo',
+    maintainer_email='eojin333c@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
-    tests_require=['pytest'],
+    extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     entry_points={
         'console_scripts': [
-            'motor_state_publisher = motor_control_real.motor_state_publisher:main',
-            'motor_torque_control = motor_control_real.motor_torque_control:main',
-            'motor_torque_command_publisher = motor_control_real.motor_torque_command_publisher:main',
-            'motor_states_echo = motor_control_real.motor_states_echo:main',
-            'motor_temp_monitor = motor_control_real.motor_temp_logger:main',
-
+            'states_pub = goat_control.states_pub:main',
+            'torque_control = goat_control.torque_control:main',
+            'torque_pub = goat_control.torque_command_pub:main',
+            'states_echo = goat_control.states_echo:main',
         ],
     },
 )
