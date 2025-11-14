@@ -267,7 +267,7 @@
         <origin xyz="38.386E-03 94.233E-03 -152.597E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
-        <axis xyz="1 0 0"/>
+        <axis xyz="-1 0 0"/>
         <limit effort="80.0" lower="-0.38397" upper="1.39626" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
@@ -294,7 +294,7 @@
         <origin xyz="-54E-03 17E-03 0" rpy="0 0 0"/>
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
-        <axis xyz="0 -1 0"/>
+        <axis xyz="0 1 0"/>
         <limit effort="80.0" lower="-1.396263" upper="1.012291" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
@@ -312,7 +312,7 @@
         <origin xyz="0 11.5E-03 -205E-03" rpy="0 0 0"/>
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
-        <axis xyz="0 1 0"/>
+        <axis xyz="0 -1 0"/>
         <limit effort="80" lower="-1.361357" upper="0.872665" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
