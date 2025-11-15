@@ -318,7 +318,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 right_motion_planner = RRTWrapper(start=link_pose[0, 8].squeeze_(0), goal=target_link_pose[0, 8, :].squeeze_(0), env=Env.Map3D(5, 5, 5), max_dist=0.1, num_traj_points=50)
                 right_optimal_trajectory = right_motion_planner.plan()
                 
-                # Visualizef trajectory
+                # Visualize trajectory
                 point_marker_cfg = CUBOID_MARKER_CFG.copy()
                 point_marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
 
@@ -424,7 +424,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         right_motion_planner = RRTWrapper(start=link_pose[0, 8].squeeze_(0), goal=target_link_pose[0, 8, :].squeeze_(0), env=Env.Map3D(5, 5, 5), max_dist=0.1, num_traj_points=50)
         right_optimal_trajectory = right_motion_planner.plan()
         
-        # Visualizef trajectory
+        # Visualize trajectory
         point_marker_cfg = CUBOID_MARKER_CFG.copy()
         point_marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
 
