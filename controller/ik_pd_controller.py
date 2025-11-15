@@ -270,6 +270,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_len = 25.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
     torque_limits = robot.data.joint_effort_limits
+    default_joint_pos = robot.data.default_joint_pos.clone()
+    default_joint_vel = robot.data.default_joint_vel.clone()
 
     # ---------- Refrence input setting ----------
     zero_joint_efforts = torch.zeros(scene.num_envs, num_total_joints, device=sim.device)
@@ -291,9 +293,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 link_pose = robot.data.body_link_pose_w         # Link's initial pose
 
                 print("[INFO] Reset state for plotting...")
-                default_joint_pos = robot.data.default_joint_pos.clone()
-                default_joint_vel = robot.data.default_joint_vel.clone()
-
                 # Random joint angle within limits
                 lower_limits = joint_limits[:, :, 0]
                 upper_limits = joint_limits[:, :, 1]
@@ -340,7 +339,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 robot.write_data_to_sim()
                 robot.reset()
                 robot.update(sim_dt)
-
+                
+                i = 0                                   # Trajectory index
             else:
                # --------- Control ------------
                 # State awareness
@@ -398,8 +398,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         # reset state
         print("[INFO] Reset state for plotting...")
-        default_joint_pos = robot.data.default_joint_pos.clone()
-        default_joint_vel = robot.data.default_joint_vel.clone()
 
         # Random joint angle within limits
         lower_limits = joint_limits[:, :, 0]
