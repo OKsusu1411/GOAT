@@ -24,10 +24,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'states_pub = goat_control.states_pub:main',
-            'torque_control = goat_control.torque_control:main',
-            'torque_pub = goat_control.torque_pub:main',
-            'states_echo = goat_control.states_echo:main',
+            'states_pub = goat_control.states_pub:main',                    # TODO: change name later
+            'torque_converter = goat_control.torque_converter:main',
+            'torque_test_publisher = goat_control.torque_test_publisher:main',
+            'motor_states_echo = goat_control.motor_states_echo:main',
         ],
     },
 )

@@ -2,15 +2,16 @@ import rclpy
 from rclpy.node import Node
 from tf2_ros import Buffer, TransformListener
 from geometry_msgs.msg import TransformStamped
-from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32MultiArray
+from motor_interfaces.msg import MotorStates
 import numpy as np
 from __future__ import annotations
 from scipy.linalg import logm
 
 
-class PDcontroller(Node):
+class IKPDcontroller(Node):
     def __init__(self):
-        super().__init__('torque_controller')
+        super().__init__('ik_pd_controller')
 
         self.rotation_axis: np.array = np.array([                # Screw axies for each joints
             [-1, 0, 0],
@@ -24,15 +25,12 @@ class PDcontroller(Node):
         ])
 
         # gain
-        self.kp = 200.0                                          # P gain
+        self.kp = 300.0                                          # P gain
         self.kd = 20.0                                           # D gain
 
-        # TF subscriber
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # Joint torque command publisher
-        self.command_publisher = self.create_publisher(JointState, '/joint_command', 10)
+
+
         
         # Link frames
         self.base_frame = 'base_link'
@@ -59,12 +57,38 @@ class PDcontroller(Node):
             'wheel_R_Joint'
         ]
 
+        # TF subscriber
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # Joint state subscriber
+        self.multi_angles_deg = None          # latest multi-turn angles [deg] from MotorStatePublisher
+        self.multi_vel_deg_s = None           # latest multi-turn angular velocities [deg/s]
+        self.prev_multi_angles_deg = None     # previous angles for velocity estimation
+        self.prev_angle_time = None           # timestamp of previous angle update
+        self.motor_states_sub = self.create_subscription(
+            MotorStates,
+            'motor_states',                   # topic published by MotorStatePublisher
+            self.motor_states_callback,
+            10,
+        )
+
+        # Torque command publisher for motor_torque_controller (Float32MultiArray)
+        self.torque_publisher = self.create_publisher(
+            Float32MultiArray,
+            'torque_commands',                # topic subscribed by MotorTorqueController
+            10,
+        )
+
         # Controller timer
         self.timer = self.create_timer(0.01, self.controller_callback)
 
     # Transformation matrix from tf
     def transformation_matrix(self, tf: TransformStamped) -> np.array:
-
+        """
+        tf message to Transformation matrix
+        """
+        
         t = tf.transform.translation        # translation vector
         r = tf.transform.rotation           # quaternion
         T = np.array([
@@ -105,6 +129,7 @@ class PDcontroller(Node):
         """
         Quaternion (w, x, y, z) → Rotation Matrix (3x3)
         """
+
         w, x, y, z = q
         R = np.array([
             [1 - 2*(x**2 + y**2),  2*(w*x - y*z),        2*(w*y + x*z)],
@@ -117,12 +142,13 @@ class PDcontroller(Node):
         """
         Damped Least Squares Pseudoinverse
         """
+
         matrix_T = np.transpose(matrix, (1, 0))                           # Matrix transpose
         lambda_matrix = (damping_constant**2) * np.eye(matrix.shape[0])   # 
         inv_term = np.linalg.inv(matrix @ matrix_T + lambda_matrix)
-        matrix_qinv= matrix_T @ (inv_term)
+        matrix_pinv= matrix_T @ (inv_term)
 
-        return matrix_qinv
+        return matrix_pinv
     
     def inverse_kinematics(self,
                            target_pose: np.array,
@@ -171,7 +197,49 @@ class PDcontroller(Node):
             joint_command = joint_pos + delta_joint_pos
 
         return joint_command
+    
+    def motor_states_callback(self, msg: MotorStates):
+        """
+        Callback for MotorStates; stores multi-turn angles and estimates velocities.
+        """
 
+        # multi_turn_raw is in 0.01 deg/LSB (signed)
+        try:
+            raw = list(msg.multi_turn_raw)
+        except AttributeError:
+            self.get_logger().warn("MotorStates message has no 'multi_turn_raw' field.")
+            return
+
+        if not raw:
+            return
+
+        # Convert to degrees
+        angles_deg = [float(v) * 0.01 for v in raw]
+
+        # Match number of joints
+        n_joints = len(self.joint_names)
+        if len(angles_deg) > n_joints:
+            angles_deg = angles_deg[:n_joints]
+        elif len(angles_deg) < n_joints:
+            angles_deg.extend([0.0] * (n_joints - len(angles_deg)))
+
+        now = self.get_clock().now()
+
+        # Estimate angular velocity (deg/s) using finite difference
+        if self.multi_angles_deg is not None and self.prev_angle_time is not None:
+            dt = (now.nanoseconds - self.prev_angle_time.nanoseconds) / 1e9
+            if dt > 1e-6:
+                prev = self.multi_angles_deg
+                self.multi_vel_deg_s = [
+                    (a - b) / dt for a, b in zip(angles_deg, prev)
+                ]
+        else:
+            self.multi_vel_deg_s = [0.0] * n_joints
+
+        # Update stored angles and timestamp
+        self.prev_multi_angles_deg = self.multi_angles_deg
+        self.multi_angles_deg = angles_deg
+        self.prev_angle_time = now
 
     # Controller
     def controller_callback(self):
@@ -270,9 +338,9 @@ class PDcontroller(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    pd_controller = PDcontroller()
-    rclpy.spin(pd_controller)
-    pd_controller.destroy_node()
+    ik_pd_controller = IKPDcontroller()
+    rclpy.spin(ik_pd_controller)
+    ik_pd_controller.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
