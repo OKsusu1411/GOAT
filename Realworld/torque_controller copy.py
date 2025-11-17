@@ -3,6 +3,8 @@ from rclpy.node import Node
 from tf2_ros import Buffer, TransformListener
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import JointState
+from motor_interfaces.msg import MotorStates  
+from std_msgs.msg import Float32MultiArray
 import numpy as np
 from __future__ import annotations
 from scipy.linalg import logm
