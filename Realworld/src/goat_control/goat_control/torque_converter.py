@@ -13,9 +13,9 @@ import can
 SCALE_A_PER_LSB = 66.0 / 4096.0   # MG: ≈ 0.01611 A/LSB
 
 
-class MotorTorqueController(Node, CanMixin):
+class TorqueConverter(Node, CanMixin):
     def __init__(self):
-        super().__init__('motor_torque_controller')
+        super().__init__('torque_converter')
         
         # Declare and load parameters
         self.channel = self.declare_parameter('channel', 'can0').value
@@ -156,7 +156,7 @@ __main__ = '__main__'
 
 def main(args=None):
     rclpy.init(args=args)
-    node = MotorTorqueController()
+    node = TorqueConverter()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
