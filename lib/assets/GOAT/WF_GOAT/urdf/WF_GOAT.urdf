@@ -286,7 +286,7 @@
         <parent link="hip_L_Link"/>
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-0.593412" upper="0.314159" velocity="15.0"/>
+        <limit effort="4.5" lower="-0.593412" upper="1.88496" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
@@ -295,7 +295,7 @@
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-0.314159" upper="0.593412" velocity="15.0"/>
+        <limit effort="4.5" lower="-1.88496" upper="0.593412" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
