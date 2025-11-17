@@ -52,35 +52,41 @@ class IMUsetup:
                 print("IMU data read error")
             continue
 
-# def main():
-#     imu = IMUsetup(PORT, BAUD)
-#     ser = imu.serial
-#     lock = threading.Lock()
+def main():
+    imu = IMUsetup(PORT, BAUD)
+    ser = imu.serial
+    lock = threading.Lock()
 
-#     thread = threading.Thread(target=imu.imu_parser, daemon=True)
-#     thread.start()
-#     time.sleep(0.3)
+    thread = threading.Thread(target=imu.imu_parser, args=(lock,), daemon=True)
+    thread.start()
+    time.sleep(0.3)
 
-#     try:
-#         while True:
-#             with lock:
-#                 data_list = imu.imu_data.copy()
+    try:
+        while True:
+            with lock:
+                data_list = imu.imu_data.copy()
                 
-#             pkt = imu.split_packet(data_list)
-#             if pkt:
-#                 # 보기 좋게 한 줄 요약 출력
-#                 q = pkt["quat"]; g = pkt["gyro"]; a = pkt["acc"]; m = pkt["mag"]; t = pkt["time_ms"]
-#                 print(f"[{t:.0f} ms] "
-#                     f"quat=({q['w']:.4f},{q['x']:.4f},{q['y']:.4f},{q['z']:.4f}) "
-#                     f"gyro=({g['x']:.3f},{g['y']:.3f},{g['z']:.3f}) "
-#                     f"acc=({a['x']:.3f},{a['y']:.3f},{a['z']:.3f}) "
-#                     f"mag=({m['x']:.1f},{m['y']:.1f},{m['z']:.1f})")
-#             time.sleep(0.01)
+            pkt = imu.split_packet(data_list)
+            if pkt:
+                # 보기 좋게 한 줄 요약 출력
+                q = pkt["quat"]; g = pkt["gyro"]; a = pkt["acc"]; m = pkt["mag"]; t = pkt["time_ms"]
+                print(
+                    f"[{t:5.0f} ms] "
+                    f"quat=({q['w']:8.4f},{q['x']:8.4f},{q['y']:8.4f},{q['z']:8.4f}) "
+                    f"gyro=({g['x']:7.3f},{g['y']:7.3f},{g['z']:7.3f}) "
+                    f"acc=({a['x']:7.3f},{a['y']:7.3f},{a['z']:7.3f}) "
+                    f"mag=({m['x']:6.1f},{m['y']:6.1f},{m['z']:6.1f})"
+                )
 
-#     except KeyboardInterrupt:
-#         pass
-#     finally:
-#         try:
-#             ser.close()
-#         except Exception:
-#             pass
+            time.sleep(0.01)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            ser.close()
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    main()
