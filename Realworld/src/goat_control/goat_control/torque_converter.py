@@ -64,6 +64,20 @@ class TorqueConverter(Node, CanMixin):
         timer_period = 1.0 / self.control_frequency
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
+    def joint_torque2current(self, torque):
+        if torque != 0.0:
+            current = (torque-0.0081)/0.2552  # for joint
+
+        else:
+            current = 0.0
+        return current
+    def wheel_torque2current(self, torque):
+        if torque != 0.0:
+            current = (torque-0.0052)/(0.2569)  # for wheel
+        else:
+            current = 0.0
+        return current
+    
     def _send_command_expect(self, node_id: int, cmd_byte: int, payload7: bytes = b"\x00" * 7):
         """Send a specific CAN command and wait briefly for a response."""
         tx_id = 0x140 + node_id
@@ -88,8 +102,10 @@ class TorqueConverter(Node, CanMixin):
 
     def command_callback(self, msg: Float32MultiArray):
         """Callback when a new torque command message is received."""
-        commands = list(msg.data)
-        # Adjust list size to match number of motors (pad or truncate as needed)
+      #  commands = list(msg.data)
+        commands_raw = list(msg.data)
+        commands = [self.joint_torque2current(self, commands_raw[i]) if i not in [6, 7] else self.wheel_torque2current(self, commands_raw[i]) for i in range(len(commands_raw))]
+        #Adjust list size to match number of motors (pad or truncate as needed)
         if len(commands) < self.num_motors:
             commands.extend([0.0] * (self.num_motors - len(commands)))
         elif len(commands) > self.num_motors:
