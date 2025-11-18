@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from motor_interfaces.msg import MotorStates  
+from motor_interfaces.msg import MotorStates
+from sensor_msgs.msg import JointState          # === JointState 추가 ===
 import can
 import struct
 import time
+import math                                     # === JointState 추가 ===
 
 """
 motor_state_publisher.py (MG 전용, read_angle_tx_only.py 방식 각도 안정화)
@@ -42,6 +44,14 @@ class MotorStatePublisher(Node):
 
         # 퍼블리셔
         self.publisher = self.create_publisher(MotorStates, 'motor_states', 10)
+        self.publisher = self.create_publisher(MotorStates, 'motor_states', 10)
+
+        # === JointState 퍼블리셔 추가 ===
+        # ROS 관습상 토픽 이름은 'joint_states'를 사용
+        self.js_publisher = self.create_publisher(JointState, 'joint_states', 10)
+        # joint name: joint_1, joint_2, ...
+        self.joint_names = [f"joint_{i+1}" for i in range(self.num_motors)]
+        # =================================
 
         # 데이터 버퍼
         N = self.num_motors
@@ -192,6 +202,7 @@ class MotorStatePublisher(Node):
         # 한 바퀴 끝이면 퍼블리시
         if self.poll_motor_idx == self.num_motors - 1 and self.poll_type_idx == len(self.poll_sequence) - 1:
             self.publish_all()
+            self.publish_joint_state()   # === JointState도 함께 퍼블리시 ===
 
         # 다음 폴링 종류로
         self.poll_type_idx += 1
@@ -227,6 +238,61 @@ class MotorStatePublisher(Node):
         except Exception: pass
 
         self.publisher.publish(msg)
+
+    # === JointState 퍼블리시 함수 추가 ===
+    def publish_joint_state(self):
+        js = JointState()
+        try:
+            js.header.stamp = self.get_clock().now().to_msg()
+        except Exception:
+            pass
+
+        # joint name 세팅
+        js.name = self.joint_names
+
+        positions = []
+        velocities = []
+        efforts = []
+
+        for i in range(self.num_motors):
+            # 1순위: multi-turn (누적각)  2순위: single-turn  3순위: encoder_raw
+            angle_rad = 0.0
+
+            if self.mt_arr[i] != 0:
+                # mt_arr: 0.01 deg/LSB
+                deg = self.mt_arr[i] * 0.01
+                angle_rad = deg * math.pi / 180.0
+            elif self.st_arr[i] != 0:
+                # st_arr: 0.01 deg/LSB
+                deg = self.st_arr[i] * 0.01
+                angle_rad = deg * math.pi / 180.0
+            else:
+                # encoder_raw: 0~(2^N-1), N=14/15/16 중 하나
+                # 여기서는 대략 16bit로 가정해서 0~2π로 매핑 (필요하면 나중에 수정)
+                angle_rad = (self.enc_arr[i] / 65535.0) * 2.0 * math.pi
+
+            positions.append(angle_rad)
+
+            # speed_arr: dps → rad/s
+            if isinstance(self.speed_arr[i], float) and not math.isnan(self.speed_arr[i]):
+                vel = self.speed_arr[i] * math.pi / 180.0
+            else:
+                vel = 0.0
+            velocities.append(vel)
+
+            # effort에는 토크 전류(A) 그대로 넣어둠 (필요하면 토크로 변환해서 사용)
+            if isinstance(self.iq_amp_arr[i], float) and not math.isnan(self.iq_amp_arr[i]):
+                eff = self.iq_amp_arr[i]
+            else:
+                eff = 0.0
+            efforts.append(eff)
+
+        js.position = positions
+        js.velocity = velocities
+        js.effort   = efforts
+
+        self.js_publisher.publish(js)
+    # ==================================
 
 def main(args=None):
     rclpy.init(args=args)
