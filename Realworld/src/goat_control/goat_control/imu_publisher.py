@@ -1,26 +1,23 @@
 import serial
 import threading
 import time
-
-
 import rclpy
 from rclpy.node import Node
-
 from motor_interfaces.msg import BaseStates  
 
 
 PORT = "/dev/ttyUSB0"   
 BAUD = 115200
 
-class IMUsetup(Node):
+class IMUPublisher(Node):
     def __init__(self, port="/dev/ttyUSB0", baudrate=115200, timeout=1):
-        super().__init__('imu_setup')
-        self.serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout)   # Open serial port
-        self.imu_data = [0.0]*14  # Initialize with zeros
+        super().__init__('imu_publisher')
+        self.serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout)      # Open serial port
+        self.imu_data = [0.0]*14                                                        # Initialize with zeros
         self.lock = threading.Lock()
 
         # Topic publisher
-        self.pub = self.create_publisher(BaseStates, 'imusetup', 50)
+        self.pub = self.create_publisher(BaseStates, 'imu_data', 50)
         
         self.thread = threading.Thread(target=self.read_loop, daemon=True)
         self.thread.start()
@@ -52,10 +49,14 @@ class IMUsetup(Node):
                 except Exception as e:
                     self.get_logger().warn(f"IMU data read error: {e}")
                     time.sleep(0.01)
+
     def split_packet(self, data_list):
-        """Refine raw data vector into IMU data dictionary."""
+        """
+        Refine raw data vector into IMU data dictionary.
+        """
+
         if len(data_list) != 14:
-            # Wrong packet size
+            print("Wrong packet size")
             return None
         
         w, x, y, z = data_list[0:4]       # Quaternions
@@ -72,8 +73,8 @@ class IMUsetup(Node):
             "time_ms": t_ms
         }
         return imu_data
+    
     def publish_timer_callback(self):
-        # 최신 데이터 복사
         with self.lock:
             data_list = self.imu_data.copy()
 
@@ -87,10 +88,10 @@ class IMUsetup(Node):
         m = pkt["mag"]
         t = pkt["time_ms"]
 
-        # 메시지 생성
+        # message integration
         msg = BaseStates()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "imu_link"
+        msg.header.frame_id = "base_link"
 
         msg.quat.w = q["w"]
         msg.quat.x = q["x"]
@@ -111,43 +112,12 @@ class IMUsetup(Node):
 
         msg.time_ms = float(t)
 
-        # 퍼블리시
+        # publish
         self.pub.publish(msg)
-
-        # # 기존처럼 터미널에 출력 (원하면 유지, 아니면 지워도 됨)
-        # print(
-        #     f"[{t:5.0f} ms] "
-        #     f"quat=({q['w']:8.4f},{q['x']:8.4f},{q['y']:8.4f},{q['z']:8.4f}) "
-        #     f"gyro=({g['x']:7.3f},{g['y']:7.3f},{g['z']:7.3f}) "
-        #     f"acc=({a['x']:7.3f},{a['y']:7.3f},{a['z']:7.3f}) "
-        #     f"mag=({m['x']:6.1f},{m['y']:6.1f},{m['z']:6.1f})"
-        # )
-
-
-    # def imu_parser(self, lock):
-    #     while True:
-    #         try:
-    #             raw_data = self.serial.readline().decode('utf-8', errors='ignore').strip()
-    #             if not raw_data:
-    #                 continue
-    #             if not raw_data.startswith('*'):
-    #                 continue
-    #             data_string = raw_data[1:].split(',')
-                
-    #             # Turn to float list
-    #             try:
-    #                 data = list(map(float, data_string))
-    #             except ValueError:
-    #                 continue
-    #             with lock:
-    #                 self.imu_data = data
-    #         except Exception:
-    #             print("IMU data read error")
-    #         continue
 
 def main(args=None):
     rclpy.init(args=args)
-    node = IMUsetup()
+    node = IMUPublisher()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
