@@ -18,7 +18,7 @@ class Policy(Node):
 
         self.action_publisher = self.create_publisher(
             Float32MultiArray,
-            'target_position',
+            'policy_action',
             10
         )
 
@@ -83,8 +83,6 @@ class Policy(Node):
         
         return msg
     
-
-
     def imu_data_callback(self, msg):
         self.latest_base_states = msg
 
