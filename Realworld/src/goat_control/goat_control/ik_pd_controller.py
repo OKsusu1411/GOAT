@@ -69,6 +69,15 @@ class IKPDcontroller(Node):
             10,
         )
 
+        # Target position subscriber
+        self.policy_subscriber = self.create_subscription(
+            Float32MultiArray,
+            'policy_action',                # topic published by Policy node
+            self.policy_subscriber_callback,
+            10
+        )
+
+
         # Torque command publisher for motor_torque_controller (Float32MultiArray)
         self.torque_publisher = self.create_publisher(
             Float32MultiArray,
@@ -123,6 +132,41 @@ class IKPDcontroller(Node):
 
         return matrix_pinv
     
+    def multiarray_to_numpy(msg: Float32MultiArray) -> np.ndarray:
+        """
+        Converts a ROS2 Float32MultiArray message back into a NumPy array
+        with its original shape.
+
+        Args:
+            msg (Float32MultiArray): The received ROS2 message.
+
+        Returns:
+            np.ndarray: The reconstructed NumPy array (float32).
+        """
+        
+        # Check if data is empty
+        if not msg.data:
+            return np.array([], dtype=np.float32)
+
+        # Extract the shape from the layout dimensions
+        if msg.layout.dim:
+            shape = [d.size for d in msg.layout.dim]
+        else:
+            # Fallback if layout is empty: assume 1D array
+            shape = (len(msg.data), )
+
+        # Convert data to NumPy array and reshape
+        try:
+            restored_array = np.array(msg.data, dtype=np.float32).reshape(shape)
+        except ValueError as e:
+            # Handle mismatch between data length and shape
+            print(f"Error reshaping array: Data length ({len(msg.data)}) "
+                f"does not match layout shape ({shape}). Error: {e}")
+            # Return 1D array as a fallback
+            return np.array(msg.data, dtype=np.float32)
+
+        return restored_array
+
     def inverse_kinematics(self,
                            target_pose: np.array,
                            current_pos: np.array,
@@ -161,12 +205,11 @@ class IKPDcontroller(Node):
         else:
             target_pos = target_pose[4:, 0]
             
-            error_pos = target_pos - current_pos                                     # Extract position error                           
-            error_pose = np.concatenate((error_angle, error_pos))
+            error_pos = target_pos - current_pos                                     # Extract position error
 
             # Inverse kinematics
-            J_inv = self.DLS_pinv(jacobian[4:, :])                                    # Pseudoinverse of the jacobian
-            delta_joint_pos = J_inv @ error_pose
+            J_inv = self.DLS_pinv(jacobian[3:, :])                                    # Pseudoinverse of the jacobian
+            delta_joint_pos = J_inv @ error_pos
             joint_command = joint_pos + delta_joint_pos
 
         return joint_command
@@ -214,40 +257,14 @@ class IKPDcontroller(Node):
         self.multi_angles_deg = angles_deg
         self.prev_angle_time = now
 
-    def multiarray_to_numpy(msg: Float32MultiArray) -> np.ndarray:
+    def policy_subscriber_callback(self, msg: Float32MultiArray):
         """
-        Converts a ROS2 Float32MultiArray message back into a NumPy array
-        with its original shape.
-
-        Args:
-            msg (Float32MultiArray): The received ROS2 message.
-
-        Returns:
-            np.ndarray: The reconstructed NumPy array (float32).
+        Callback for receiving target positions from the Policy node.
         """
-        
-        # Check if data is empty
-        if not msg.data:
-            return np.array([], dtype=np.float32)
 
-        # Extract the shape from the layout dimensions
-        if msg.layout.dim:
-            shape = [d.size for d in msg.layout.dim]
-        else:
-            # Fallback if layout is empty: assume 1D array
-            shape = (len(msg.data), )
-
-        # Convert data to NumPy array and reshape
-        try:
-            restored_array = np.array(msg.data, dtype=np.float32).reshape(shape)
-        except ValueError as e:
-            # Handle mismatch between data length and shape
-            print(f"Error reshaping array: Data length ({len(msg.data)}) "
-                f"does not match layout shape ({shape}). Error: {e}")
-            # Return 1D array as a fallback
-            return np.array(msg.data, dtype=np.float32)
-
-        return restored_array
+        # Convert Float32MultiArray to NumPy array
+        policy_action = self.multiarray_to_numpy(msg)
+        self.policy_action = policy_action
 
     # ==================== Controller ==================== #
     def controller_callback(self):
@@ -289,10 +306,9 @@ class IKPDcontroller(Node):
         L_current_rot = L_T_matrix[:3, :3]
         R_current_pos = R_T_matrix[:3, 3]                   # Right foot state
         R_current_rot = R_T_matrix[:3, :3]
+        foot_current_pos = np.array([L_current_pos, R_current_pos])
         L_J = J[:, L_leg_indices]                           # Jacobian for left leg
-        R_J = J[:, R_leg_indices]                           # Jacobian for right leg  
-        joint_vel = np.zeros((len(self.joint_names), 1))            # TODO: Get current joint velocities
-        joint_pos = np.zeros((len(self.joint_names), 1))            # TODO: Get current joint positions
+        R_J = J[:, R_leg_indices]                           # Jacobian for right leg 
 
        # Joint state from multi-turn motor angles (if available)
         n_joints = len(self.joint_names)
@@ -306,22 +322,22 @@ class IKPDcontroller(Node):
             joint_pos = angles
 
         if self.multi_vel_deg_s is not None:
-            v = np.array(self.multi_vel_deg_s, dtype=float).reshape(n_joints, 1)
-            joint_vel = v
+            velocity = np.array(self.multi_vel_deg_s, dtype=float).reshape(n_joints, 1)
+            joint_vel = velocity
 
         # Target feet position
-        target_pose    # TODO: setting target_pose
+        target_pos = foot_current_pos + self.policy_action
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
-        L_target_pose = target_pose[0,:].reshape(7, 1)
+        L_target_pose = target_pos[0,:].reshape(7, 1)
 
         # Current joint state
         L_joint_pos = joint_pos[L_leg_indices, 0].reshape(3, 1)
         L_joint_vel = joint_vel[L_leg_indices, 0].reshape(3, 1)
 
         # Inverse kinematics
-        L_joint_command = self.inverse_kinematics(target_pose=L_target_pose,
+        L_joint_command = self.inverse_kinematics(target_pos=L_target_pose,
                                                   current_pos=L_current_pos,
                                                   current_rot=L_current_rot,
                                                   jacobian=L_J,
@@ -335,7 +351,7 @@ class IKPDcontroller(Node):
 
         # ======================= Right leg control ======================= #
         # Target foot pose
-        R_target_pose = target_pose[1,:].reshape(7, 1)
+        R_target_pose = target_pos[1,:].reshape(7, 1)
 
         # Current joint state
         R_joint_pos = joint_pos[R_leg_indices, 0].reshape(3, 1)
@@ -360,7 +376,6 @@ class IKPDcontroller(Node):
 
         # Publish torque command to MotorTorqueController (Float32MultiArray)
         torque_msg = Float32MultiArray()
-        # Flatten to 1D list: one element per joint/motor
         torque_msg.data = torque_command.flatten().astype(float).tolist()
         self.torque_publisher.publish(torque_msg)
 
