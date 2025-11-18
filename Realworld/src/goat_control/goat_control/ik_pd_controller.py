@@ -5,7 +5,7 @@ from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float32MultiArray
 from motor_interfaces.msg import MotorStates
 import numpy as np
-from __future__ import annotations
+#from __future__ import annotations
 from scipy.linalg import logm
 
 
@@ -286,8 +286,23 @@ class IKPDcontroller(Node):
         joint_vel = np.zeros((len(self.joint_names), 1))            # TODO: Get current joint velocities
         joint_pos = np.zeros((len(self.joint_names), 1))            # TODO: Get current joint positions
 
+       # Joint state from multi-turn motor angles (if available)
+        n_joints = len(self.joint_names)
+        joint_pos = np.zeros((n_joints, 1))
+        joint_vel = np.zeros((n_joints, 1))
+
+        if self.multi_angles_deg is not None:
+            # Angles from MotorStatePublisher are in degrees; convert/scale here if needed.
+            angles = np.array(self.multi_angles_deg, dtype=float).reshape(n_joints, 1)
+            # 필요하면 여기에서 np.deg2rad(angles)로 바꿔서 사용
+            joint_pos = angles
+
+        if self.multi_vel_deg_s is not None:
+            v = np.array(self.multi_vel_deg_s, dtype=float).reshape(n_joints, 1)
+            joint_vel = v
+
         # Target feet position
-        target_pose
+        target_pose    # TODO: setting target_pose
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
@@ -335,6 +350,11 @@ class IKPDcontroller(Node):
         torque_command[L_leg_indices] = L_torque_command
         torque_command[R_leg_indices] = R_torque_command
 
+        # Publish torque command to MotorTorqueController (Float32MultiArray)
+        torque_msg = Float32MultiArray()
+        # Flatten to 1D list: one element per joint/motor
+        torque_msg.data = torque_command.flatten().astype(float).tolist()
+        self.torque_publisher.publish(torque_msg)
 
 def main(args=None):
     rclpy.init(args=args)
