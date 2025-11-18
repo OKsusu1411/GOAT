@@ -6,8 +6,8 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     # URDF file path
-    pkg_path = get_package_share_directory('goat_control')
-    urdf_file = os.path.join(pkg_path, 'assets/WF_GOAT/urdf', 'WF_GOAT.urdf')
+    goat_path = os.path.dirname('GOAT')
+    urdf_file = os.path.join(goat_path, 'lib/assets/WF_GOAT/urdf', 'WF_GOAT.urdf')
     
     # Read URDF
     with open(urdf_file, 'r') as f:
