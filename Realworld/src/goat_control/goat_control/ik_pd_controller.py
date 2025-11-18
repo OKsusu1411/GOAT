@@ -27,10 +27,6 @@ class IKPDcontroller(Node):
         # gain
         self.kp = 300.0                                          # P gain
         self.kd = 20.0                                           # D gain
-
-
-
-
         
         # Link frames
         self.base_frame = 'base_link'
@@ -61,7 +57,7 @@ class IKPDcontroller(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # Joint state subscriber
+        # Joint(Motor) state subscriber
         self.multi_angles_deg = None          # latest multi-turn angles [deg] from MotorStatePublisher
         self.multi_vel_deg_s = None           # latest multi-turn angular velocities [deg/s]
         self.prev_multi_angles_deg = None     # previous angles for velocity estimation
@@ -81,7 +77,10 @@ class IKPDcontroller(Node):
         )
 
         # Controller timer
-        self.timer = self.create_timer(0.01, self.controller_callback)
+        self.timer = self.create_timer(
+            0.01,
+            self.controller_callback
+        )
 
     # Transformation matrix from tf
     def transformation_matrix(self, tf: TransformStamped) -> np.array:
@@ -99,32 +98,6 @@ class IKPDcontroller(Node):
         ])
         return T
 
-    # def rpy_to_rot(self, roll, pitch, yaw):
-    #     """
-    #     Roll, Pitch, Yaw (in radians) → Rotation Matrix (3x3)
-    #     Rotation order: ZYX (yaw → pitch → roll)
-    #     """
-    #     Rz = np.array([
-    #         [np.cos(yaw), -np.sin(yaw), 0],
-    #         [np.sin(yaw),  np.cos(yaw), 0],
-    #         [0,            0,           1]
-    #     ])
-
-    #     Ry = np.array([
-    #         [np.cos(pitch), 0, np.sin(pitch)],
-    #         [0,             1, 0],
-    #         [-np.sin(pitch), 0, np.cos(pitch)]
-    #     ])
-
-    #     Rx = np.array([
-    #         [1, 0,            0],
-    #         [0, np.cos(roll), -np.sin(roll)],
-    #         [0, np.sin(roll),  np.cos(roll)]
-    #     ])
-
-    #     R = Rz @ Ry @ Rx
-    #     return R
-    
     def quaternion_to_rot(self, q):
         """
         Quaternion (w, x, y, z) → Rotation Matrix (3x3)
@@ -241,7 +214,42 @@ class IKPDcontroller(Node):
         self.multi_angles_deg = angles_deg
         self.prev_angle_time = now
 
-    # Controller
+    def multiarray_to_numpy(msg: Float32MultiArray) -> np.ndarray:
+        """
+        Converts a ROS2 Float32MultiArray message back into a NumPy array
+        with its original shape.
+
+        Args:
+            msg (Float32MultiArray): The received ROS2 message.
+
+        Returns:
+            np.ndarray: The reconstructed NumPy array (float32).
+        """
+        
+        # Check if data is empty
+        if not msg.data:
+            return np.array([], dtype=np.float32)
+
+        # Extract the shape from the layout dimensions
+        if msg.layout.dim:
+            shape = [d.size for d in msg.layout.dim]
+        else:
+            # Fallback if layout is empty: assume 1D array
+            shape = (len(msg.data), )
+
+        # Convert data to NumPy array and reshape
+        try:
+            restored_array = np.array(msg.data, dtype=np.float32).reshape(shape)
+        except ValueError as e:
+            # Handle mismatch between data length and shape
+            print(f"Error reshaping array: Data length ({len(msg.data)}) "
+                f"does not match layout shape ({shape}). Error: {e}")
+            # Return 1D array as a fallback
+            return np.array(msg.data, dtype=np.float32)
+
+        return restored_array
+
+    # ==================== Controller ==================== #
     def controller_callback(self):
         # Transform matrices for each joint
         J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix

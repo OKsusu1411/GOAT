@@ -14,19 +14,30 @@ def generate_launch_description():
         robot_description_content = f.read()
     robot_description_param = {'robot_description': robot_description_content}
 
-    node_robot_state_publisher = Node(
+    robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         parameters=[robot_description_param]
     )
 
-    node_hardware_driver = Node(
+    motor_states_publisher = Node(
         package='goat_control',
-        executable='states_pub',
-        name='goat_hardware_driver'
+        executable='motor_states_publisher'
+    )
+
+    torque_converter = Node(
+        package='goat_control',
+        executable='torque_converter'
+    )
+
+    imu_publisher = Node(
+        package='goat_control',
+        executable='imu_publisher'
     )
 
     return LaunchDescription([
-        node_robot_state_publisher,
-        node_hardware_driver
+        robot_state_publisher,
+        motor_states_publisher,
+        torque_converter,
+        imu_publisher
     ])
