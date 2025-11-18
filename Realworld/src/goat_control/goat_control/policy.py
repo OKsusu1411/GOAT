@@ -29,7 +29,7 @@ class Policy(Node):
 
         self.latest_base_states = None
 
-    def tensor_to_multiarray(tensor_action: torch.Tensor) -> Float32MultiArray:
+    def tensor_to_multiarray(self, tensor_action: torch.Tensor) -> Float32MultiArray:
         """
         Converts a PyTorch Tensor into a ROS2 Float3TMultiArray message.
         
