@@ -35,7 +35,7 @@ setup(
             'torque_converter = goat_control.torque_converter:main',
             'torque_test_publisher = goat_control.torque_test_publisher:main',
             'motor_states_echo = goat_control.motor_states_echo:main',
-            'imu_setup = goat_control.IMU_setup:main',
+            'imu_publisher = goat_control.imu_publisher:main',
         ],
     },
 )
