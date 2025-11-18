@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from motor_interfaces.msg import MotorStates  # 사용자 정의 메시지
+from motor_interfaces.msg import MotorStates  
 import can
 import struct
 import time
