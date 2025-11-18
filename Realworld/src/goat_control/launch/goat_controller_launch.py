@@ -7,8 +7,8 @@ def generate_launch_description():
 
     # URDF file path
     launch_file_dir = os.path.dirname(os.path.abspath(__file__))
-    goat_path = os.path.normpath(os.path.join(launch_file_dir, '..', '..', '..', '..'))
-    urdf_file = os.path.join(goat_path, 'lib/assets/WF_GOAT/urdf', 'WF_GOAT.urdf')
+    goat_path = os.path.normpath(os.path.join(launch_file_dir, '..', '..', '..', '..', '..', '..'))
+    urdf_file = os.path.join(goat_path, 'lib/assets/GOAT/WF_GOAT/urdf', 'WF_GOAT.urdf')
     
     # Read URDF
     with open(urdf_file, 'r') as f:
@@ -21,9 +21,9 @@ def generate_launch_description():
         parameters=[robot_description_param]
     )
 
-    motor_states_publisher = Node(
+    states_pub = Node(                            # 이름 바꿔야됨
         package='goat_control',
-        executable='motor_states_publisher'
+        executable='states_pub'
     )
 
     torque_converter = Node(
@@ -38,7 +38,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         robot_state_publisher,
-        motor_states_publisher,
+        states_pub,
         torque_converter,
         imu_publisher
     ])
