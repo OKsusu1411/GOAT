@@ -263,9 +263,9 @@ class IKPDcontroller(Node):
         """
         Callback for receiving target positions from the Policy node.
         """
-
+        new_msg = msg.data.reshape(2, 3)
         # Convert Float32MultiArray to NumPy array
-        policy_action = self.multiarray_to_numpy(msg)
+        policy_action = self.multiarray_to_numpy(new_msg)
         self.policy_action = policy_action
 
     # ==================== Controller ==================== #
