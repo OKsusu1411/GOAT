@@ -70,6 +70,7 @@ class IKPDcontroller(Node):
         )
 
         # Target position subscriber
+        self.policy_action = np.zeros((2, 7))   # Target position from Policy node
         self.policy_subscriber = self.create_subscription(
             Float32MultiArray,
             'policy_action',                # topic published by Policy node
@@ -271,6 +272,9 @@ class IKPDcontroller(Node):
         # Transform matrices for each joint
         J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix
         i = 0                                         # Joint index
+        L_T_matrix = np.eye(4)                        # Left foot transformation matrix
+        R_T_matrix = np.eye(4)                        # Right foot transformation matrix
+        J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix
 
         for joint_frame in self.joint_frames:
             try:
@@ -326,18 +330,19 @@ class IKPDcontroller(Node):
             joint_vel = velocity
 
         # Target feet position
-        target_pos = foot_current_pos + self.policy_action
+        target_pos = foot_current_pos + self.policy_action[:, 4:]
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
-        L_target_pose = target_pos[0,:].reshape(7, 1)
+        L_target_pose = np.zeros((7, 1))
+        L_target_pose[4:, 0] = target_pos[0, :]
 
         # Current joint state
         L_joint_pos = joint_pos[L_leg_indices, 0].reshape(3, 1)
         L_joint_vel = joint_vel[L_leg_indices, 0].reshape(3, 1)
 
         # Inverse kinematics
-        L_joint_command = self.inverse_kinematics(target_pos=L_target_pose,
+        L_joint_command = self.inverse_kinematics(target_pose=L_target_pose,
                                                   current_pos=L_current_pos,
                                                   current_rot=L_current_rot,
                                                   jacobian=L_J,
@@ -351,7 +356,8 @@ class IKPDcontroller(Node):
 
         # ======================= Right leg control ======================= #
         # Target foot pose
-        R_target_pose = target_pos[1,:].reshape(7, 1)
+        R_target_pose = np.zeros((7, 1))
+        R_target_pose[4:, 0] = target_pos[1, :]
 
         # Current joint state
         R_joint_pos = joint_pos[R_leg_indices, 0].reshape(3, 1)
