@@ -48,8 +48,8 @@ class TorqueTestPublisher(Node):
         self.update_command()
 
     def update_command(self):
-        self.command[4] = self.joint_torque2current(self.torque)
-        #self.command[1] = self.torque
+        #self.command[4] = self.joint_torque2current(self.torque)
+        self.command[4] = self.torque
         self.current2mass(abs(self.command[1]), self.joint_length)
     def command_update(self, comm):
         comm = [self.joint_torque2current(comm[0]), self.joint_torque2current(comm[1]), self.joint_torque2current(comm[2]), self.wheel_torque2current(comm[3]), \
