@@ -44,8 +44,6 @@ class MotorStatePublisher(Node):
 
         # 퍼블리셔
         self.publisher = self.create_publisher(MotorStates, 'motor_states', 10)
-        self.publisher = self.create_publisher(MotorStates, 'motor_states', 10)
-
         # === JointState 퍼블리셔 추가 ===
         # ROS 관습상 토픽 이름은 'joint_states'를 사용
         self.js_publisher = self.create_publisher(JointState, 'joint_states', 10)

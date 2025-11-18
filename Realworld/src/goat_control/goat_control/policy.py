@@ -3,7 +3,9 @@ import rclpy
 import torch
 import numpy as np
 from rclpy.node import Node
-from motor_interfaces.msg import BaseStates, MotorStates
+from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import MotorStates
+
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 
 class Policy(Node):
