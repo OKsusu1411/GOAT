@@ -70,7 +70,7 @@ class IKPDcontroller(Node):
         )
 
         # Target position subscriber
-        self.policy_action = np.zeros((2, 7))   # Target position from Policy node
+        self.policy_action = np.zeros((2, 3))   # Target position from Policy node
         self.policy_subscriber = self.create_subscription(
             Float32MultiArray,
             'policy_action',                # topic published by Policy node
@@ -204,7 +204,8 @@ class IKPDcontroller(Node):
             joint_command = joint_pos + delta_joint_pos
 
         else:
-            target_pos = target_pose[4:, 0]
+            target_pos = target_pose[4:, 0].reshape(3, 1)
+            current_pos = current_pos.reshape(3, 1)
             
             error_pos = target_pos - current_pos                                     # Extract position error
 
@@ -330,7 +331,7 @@ class IKPDcontroller(Node):
             joint_vel = velocity
 
         # Target feet position
-        target_pos = foot_current_pos + self.policy_action[:, 4:]
+        target_pos = foot_current_pos + self.policy_action
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
