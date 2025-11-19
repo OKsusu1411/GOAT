@@ -103,8 +103,15 @@ class TorqueConverter(Node, CanMixin):
     def command_callback(self, msg: Float32MultiArray):
         """Callback when a new torque command message is received."""
       #  commands = list(msg.data)
+        """Callback when a new torque command message is received."""
         commands_raw = list(msg.data)
-        commands = [self.joint_torque2current(self, commands_raw[i]) if i not in [6, 7] else self.wheel_torque2current(self, commands_raw[i]) for i in range(len(commands_raw))]
+
+        # hip/knee(0~5)는 joint_torque2current, wheel(6,7)은 wheel_torque2current
+        commands = [
+            self.joint_torque2current(commands_raw[i]) if i not in (6, 7)
+            else self.wheel_torque2current(commands_raw[i])
+            for i in range(len(commands_raw))
+        ]
         #Adjust list size to match number of motors (pad or truncate as needed)
         if len(commands) < self.num_motors:
             commands.extend([0.0] * (self.num_motors - len(commands)))

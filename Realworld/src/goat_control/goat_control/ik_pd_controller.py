@@ -55,7 +55,7 @@ class IKPDcontroller(Node):
 
         # TF subscriber
         self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
 
         # Joint(Motor) state subscriber
         self.multi_angles_deg = None          # latest multi-turn angles [deg] from MotorStatePublisher
