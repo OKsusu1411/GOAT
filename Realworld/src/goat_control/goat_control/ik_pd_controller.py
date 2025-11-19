@@ -263,10 +263,12 @@ class IKPDcontroller(Node):
         """
         Callback for receiving target positions from the Policy node.
         """
-        new_msg = msg.data.reshape(2, 3)
-        # Convert Float32MultiArray to NumPy array
-        policy_action = self.multiarray_to_numpy(new_msg)
-        self.policy_action = policy_action
+        if len(msg.data) != 6:
+            self.get_logger().warn(f"policy_action length {len(msg.data)} != 6, data={msg.data}")
+            return
+
+        arr = np.array(msg.data, dtype=np.float32).reshape(2, 3)
+        self.policy_action = arr
 
     # ==================== Controller ==================== #
     def controller_callback(self):
