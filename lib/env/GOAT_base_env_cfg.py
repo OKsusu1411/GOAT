@@ -7,15 +7,11 @@ import os
 import isaaclab.sim as sim_utils
 
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg
+from isaaclab.actuators import DCMotorCfg
 from isaaclab.envs import DirectRLEnvCfg
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.markers import VisualizationMarkersCfg
 from isaaclab.utils import configclass
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
-from isaaclab.controllers import DifferentialIKControllerCfg
-from isaaclab.controllers.joint_impedance import JointImpedanceControllerCfg
 
 # Robot asset paths
 current_dir = os.path.dirname(__file__)

@@ -1,10 +1,10 @@
-from typing import Any, Optional, Sequence, Union
-
-import gymnasium
-from gymnasium import spaces
-
 import numpy as np
 import torch
+import gymnasium
+
+from gymnasium import spaces
+from typing import Any, Optional, Sequence, Union
+
 
 def flatten_tensorized_space(x: Any) -> Optional[torch.Tensor]:
     """Flatten a tensorized space.

@@ -1,19 +1,17 @@
-from typing import Any, Mapping, Optional, Tuple, Union
-
 import copy
 import itertools
 import gymnasium
-from packaging import version
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Any, Mapping, Optional, Tuple, Union
+from packaging import version
 from skrl import config, logger
-from skrl.agents.torch import Agent
-from skrl.memories.torch import Memory
-from skrl.models.torch import Model
 from skrl.resources.schedulers.torch import KLAdaptiveLR
+from lib.agent import Agent
+from lib.memory import Memory
+from lib.model import Model
 
 
 PPO_DEFAULT_CONFIG = {

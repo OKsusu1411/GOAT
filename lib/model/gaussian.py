@@ -1,8 +1,8 @@
-from typing import Any, Mapping, Tuple, Union
-from torch.distributions import Normal
 import gymnasium
 import torch
 
+from typing import Any, Mapping, Tuple, Union
+from torch.distributions import Normal
 
 # speed up distribution construction by disabling checking
 Normal.set_default_validate_args(False)
