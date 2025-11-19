@@ -25,8 +25,8 @@ class IKPDcontroller(Node):
         ])
 
         # gain
-        self.kp = 300.0                                          # P gain
-        self.kd = 20.0                                           # D gain
+        self.kp = 1.0                                          # P gain
+        self.kd = 0.2                                           # D gain
         
         # Link frames
         self.base_frame = 'base_Link'
