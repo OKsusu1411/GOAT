@@ -10,11 +10,9 @@ import torch
 from abc import abstractmethod
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
-from isaaclab.controllers.joint_impedance import JointImpedanceController
-from isaaclab.controllers import DifferentialIKController
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform
-from .GOAT_base_env_cfg import GOATBaseEnvCfg
+from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
+
 
 class GOATBaseEnv(DirectRLEnv):
     # Load config file

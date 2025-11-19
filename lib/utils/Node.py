@@ -1,6 +1,3 @@
-
-
-
 class Node(object):
     """
     Class for searching nodes.

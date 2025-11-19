@@ -1,13 +1,9 @@
-# Reference: skrl
-
-from typing import Any, Mapping, Optional, Sequence, Tuple, Union
-
+import torch
 import collections
 import gymnasium
+
 from packaging import version
-
-import torch
-
+from typing import Any, Mapping, Optional, Sequence, Tuple, Union
 from skrl import config, logger
 from skrl.utils.spaces.torch import (
     compute_space_size,
