@@ -48,7 +48,16 @@ class MotorStatePublisher(Node):
         # ROS 관습상 토픽 이름은 'joint_states'를 사용
         self.js_publisher = self.create_publisher(JointState, 'joint_states', 10)
         # joint name: joint_1, joint_2, ...
-        self.joint_names = [f"joint_{i+1}" for i in range(self.num_motors)]
+        self.joint_names = [
+            'hip_L_Joint',
+            'hip_R_Joint',
+            'thigh_L_Joint',
+            'thigh_R_Joint',
+            'knee_L_Joint',
+            'knee_R_Joint',
+            'wheel_L_Joint',
+            'wheel_R_Joint',
+        ]
         # =================================
 
         # 데이터 버퍼
