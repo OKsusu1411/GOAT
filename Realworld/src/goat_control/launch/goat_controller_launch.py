@@ -19,23 +19,23 @@ def prepare_launch(context, *args, **kwargs):
             parameters=[{"robot_description": robot_description}]
         ),
 
-        # Node(                            # 이름 바꿔야됨
-        #     package='goat_control',
-        #     executable='states_pub',
-        #     name='states_pub'        
-        # ),
+        Node(                            # 이름 바꿔야됨
+            package='goat_control',
+            executable='states_pub',
+            name='states_pub'        
+        ),
 
-        # Node(
-        #     package='goat_control',
-        #     executable='torque_converter',
-        #     name='torque_converter'
-        # ),
+        Node(
+            package='goat_control',
+            executable='torque_converter',
+            name='torque_converter'
+        ),
 
-        # Node(
-        #     package='goat_control',
-        #     executable='imu_publisher',
-        #     name='imu_publisher'
-        # )
+        Node(
+            package='goat_control',
+            executable='imu_publisher',
+            name='imu_publisher'
+        )
     ]
 
 def generate_launch_description():
