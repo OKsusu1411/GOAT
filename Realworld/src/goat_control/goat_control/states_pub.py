@@ -268,7 +268,10 @@ class MotorStatePublisher(Node):
             if self.mt_arr[i] != 0:
                 # mt_arr: 0.001 deg/LSB
                 deg = self.mt_arr[i] * 0.001
-                angle_rad = deg * math.pi / 180.0
+                if i in [4,5]: # 기어비 1:2
+                    angle_rad = deg * math.pi / 90.0
+                else:
+                    angle_rad = deg * math.pi / 180.0
             # elif self.st_arr[i] != 0:
             #     # st_arr: 0.001 deg/LSB
             #     deg = self.st_arr[i] * 0.001
