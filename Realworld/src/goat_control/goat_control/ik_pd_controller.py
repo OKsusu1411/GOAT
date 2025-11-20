@@ -8,6 +8,8 @@ import numpy as np
 #from __future__ import annotations
 from scipy.linalg import logm
 
+KP_GAiN = 0.0001
+KD_GAIN = 0.02
 
 class IKPDcontroller(Node):
     def __init__(self):
@@ -25,8 +27,8 @@ class IKPDcontroller(Node):
         ])
 
         # gain
-        self.kp = 1.0                                          # P gain
-        self.kd = 0.2                                           # D gain
+        self.kp = KP_GAiN                                          # P gain
+        self.kd = KD_GAIN                                           # D gain
         
         # Link frames
         self.base_frame = 'base_Link'
