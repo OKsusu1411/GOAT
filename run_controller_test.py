@@ -9,7 +9,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # 실행해야 할 스크립트의 경로를 지정합니다.
-script_path = os.path.join(project_root, 'controller', 'ik_pd_controller.py')
+script_path = os.path.join(project_root, 'lib', 'low_level_controller', 'ik_pd_controller.py')
 
 # 스크립트를 직접 실행한 것처럼 실행합니다.
 # 'run_name="__main__"' 인자는 대상 스크립트의
