@@ -309,7 +309,7 @@
     </joint>
 
     <joint name="knee_R_Joint" type="revolute">
-        <origin xyz="0 11.5E-03 -205E-03" rpy="0 0 0"/>
+        <origin xyz="0 -11.5E-03 -205E-03" rpy="0 0 0"/>
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
@@ -328,7 +328,7 @@
     </joint>
     
     <joint name="wheel_R_Joint" type="revolute">
-        <origin xyz="0 16.555E-03 -200E-03" rpy="0 0 0"/>
+        <origin xyz="0 -16.555E-03 -200E-03" rpy="0 0 0"/>
         <parent link="calf_R_Link" />
         <child link="wheel_R_Link" />
         <axis xyz="0 1 0" />

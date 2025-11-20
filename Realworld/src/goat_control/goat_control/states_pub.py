@@ -269,14 +269,14 @@ class MotorStatePublisher(Node):
                 # mt_arr: 0.01 deg/LSB
                 deg = self.mt_arr[i] * 0.01
                 angle_rad = deg * math.pi / 180.0
-            elif self.st_arr[i] != 0:
-                # st_arr: 0.01 deg/LSB
-                deg = self.st_arr[i] * 0.01
-                angle_rad = deg * math.pi / 180.0
-            else:
-                # encoder_raw: 0~(2^N-1), N=14/15/16 중 하나
-                # 여기서는 대략 16bit로 가정해서 0~2π로 매핑 (필요하면 나중에 수정)
-                angle_rad = (self.enc_arr[i] / 65535.0) * 2.0 * math.pi
+            # elif self.st_arr[i] != 0:
+            #     # st_arr: 0.01 deg/LSB
+            #     deg = self.st_arr[i] * 0.01
+            #     angle_rad = deg * math.pi / 180.0
+            # else:
+            #     # encoder_raw: 0~(2^N-1), N=14/15/16 중 하나
+            #     # 여기서는 대략 16bit로 가정해서 0~2π로 매핑 (필요하면 나중에 수정)
+            #     angle_rad = (self.enc_arr[i] / 65535.0) * 2.0 * math.pi
 
             positions.append(angle_rad)
 
