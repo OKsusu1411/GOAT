@@ -8,8 +8,8 @@ import numpy as np
 #from __future__ import annotations
 from scipy.linalg import logm
 
-KP_GAiN = 0.0001
-KD_GAIN = 0.02
+KP_GAiN = 0.0000005
+KD_GAIN = 0.00002
 
 class IKPDcontroller(Node):
     def __init__(self):
@@ -336,6 +336,7 @@ class IKPDcontroller(Node):
 
         # Target feet position
         target_pos = foot_current_pos + self.policy_action
+        self.get_logger().info(f"Target position:\n{target_pos}")
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
