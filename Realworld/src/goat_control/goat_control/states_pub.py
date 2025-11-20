@@ -66,8 +66,8 @@ class MotorStatePublisher(Node):
         self.iq_amp_arr = [float('nan')] * N     # A
         self.speed_arr  = [float('nan')] * N     # dps (문서 기준)
         self.enc_arr    = [0] * N                # raw encoder (0x9C[6..7])
-        self.st_arr     = [0] * N                # single-turn raw (0.01°/LSB)
-        self.mt_arr     = [0] * N                # multi-turn  raw (0.01°/LSB, signed)
+        self.st_arr     = [0] * N                # single-turn raw (0.001°/LSB)
+        self.mt_arr     = [0] * N                # multi-turn  raw (0.001°/LSB, signed)
         self.err_arr    = [0] * N                # error flags (0x9A[7])
         self.mstat_arr  = [0] * N                # motor state  (0x9A[6])
 
@@ -166,7 +166,7 @@ class MotorStatePublisher(Node):
         self.err_arr[motor_idx]   = int(d[7])
 
     def poll_single_or_multi_turn(self, motor_idx: int):
-        """0x94/0x92: 각도 (raw 0.01°/LSB)만 안정적으로 읽기"""
+        """0x94/0x92: 각도 (raw 0.001°/LSB)만 안정적으로 읽기"""
         node_id = motor_idx + 1
         READ_TO = 0.25  # read_angle_tx_only.py 기본값과 동일
 
@@ -175,7 +175,7 @@ class MotorStatePublisher(Node):
             if not rep:
                 return False
             d = rep.data
-            val = int.from_bytes(d[4:8], byteorder='little', signed=False)  # 0.01°/LSB
+            val = int.from_bytes(d[4:8], byteorder='little', signed=False)  # 0.001°/LSB
             self.st_arr[motor_idx] = val
             return True
 
@@ -186,7 +186,7 @@ class MotorStatePublisher(Node):
             d = rep.data
             raw7 = d[1:8]
             sign = b'\x00' if raw7[-1] < 0.80 else b'\xff'
-            s64  = int.from_bytes(raw7 + sign, byteorder='little', signed=True)  # 0.01°/LSB
+            s64  = int.from_bytes(raw7 + sign, byteorder='little', signed=True)  # 0.001°/LSB
             self.mt_arr[motor_idx] = s64
             return True
 
@@ -235,9 +235,9 @@ class MotorStatePublisher(Node):
         except Exception: pass
         try: msg.encoder_raw     = self.enc_arr
         except Exception: pass
-        try: msg.single_turn_raw = self.st_arr       # 0.01°/LSB
+        try: msg.single_turn_raw = self.st_arr       # 0.001°/LSB
         except Exception: pass
-        try: msg.multi_turn_raw  = self.mt_arr       # 0.01°/LSB (signed)
+        try: msg.multi_turn_raw  = self.mt_arr       # 0.001°/LSB (signed)
         except Exception: pass
         try: msg.error_flags     = self.err_arr
         except Exception: pass
@@ -266,12 +266,12 @@ class MotorStatePublisher(Node):
             angle_rad = 0.0
 
             if self.mt_arr[i] != 0:
-                # mt_arr: 0.01 deg/LSB
-                deg = self.mt_arr[i] * 0.01
+                # mt_arr: 0.001 deg/LSB
+                deg = self.mt_arr[i] * 0.001
                 angle_rad = deg * math.pi / 180.0
             # elif self.st_arr[i] != 0:
-            #     # st_arr: 0.01 deg/LSB
-            #     deg = self.st_arr[i] * 0.01
+            #     # st_arr: 0.001 deg/LSB
+            #     deg = self.st_arr[i] * 0.001
             #     angle_rad = deg * math.pi / 180.0
             # else:
             #     # encoder_raw: 0~(2^N-1), N=14/15/16 중 하나
