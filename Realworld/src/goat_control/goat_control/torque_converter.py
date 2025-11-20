@@ -26,6 +26,10 @@ class TorqueConverter(Node, CanMixin):
         self.control_frequency = self.declare_parameter('control_frequency', 50.0).value
         self.timeout_sec = self.declare_parameter('timeout_sec', 0.5).value
         self.scale = SCALE_A_PER_LSB  # Current scaling factor depending on motor series
+              # ===== 토크 리미트 (단위: msg에 들어오는 토크 단위, 예: [Nm]) =====
+        self.max_joint_torque = 1  # 힙/니(0~5) 한계
+        self.max_wheel_torque = 1  # 휠(6,7) 한계
+  
 
         # Open CAN bus
         # NOTE: The user must activate the CAN interface before running this node.
@@ -99,26 +103,44 @@ class TorqueConverter(Node, CanMixin):
             if rx_msg.arbitration_id == tx_id and len(rx_msg.data) == 8 and rx_msg.data[0] == cmd_byte:
                 return rx_msg
         return None
-
     def command_callback(self, msg: Float32MultiArray):
-        """Callback when a new torque command message is received."""
-      #  commands = list(msg.data)
         """Callback when a new torque command message is received."""
         commands_raw = list(msg.data)
 
+        # ==== 1) 토크 리미트 적용 (메시지 단위에서 잘라주기) ====
+        limited_raw = []
+        for i, tau in enumerate(commands_raw):
+            # 힙/니(0~5)는 joint 토크 리미트, 휠(6,7)은 wheel 토크 리미트
+            if i in (6, 7):
+                limit = self.max_wheel_torque
+            else:
+                limit = self.max_joint_torque
+
+            # saturate
+            if tau > limit:
+                tau = limit
+            elif tau < -limit:
+                tau = -limit
+
+            limited_raw.append(tau)
+
+        commands_raw = limited_raw
+
+        # ==== 2) 토크 -> 전류 변환 ====
         # hip/knee(0~5)는 joint_torque2current, wheel(6,7)은 wheel_torque2current
         commands = [
             self.joint_torque2current(commands_raw[i]) if i not in (6, 7)
             else self.wheel_torque2current(commands_raw[i])
             for i in range(len(commands_raw))
         ]
-        #Adjust list size to match number of motors (pad or truncate as needed)
+
+        # ==== 3) 모터 개수에 맞게 padding / truncate ====
         if len(commands) < self.num_motors:
             commands.extend([0.0] * (self.num_motors - len(commands)))
         elif len(commands) > self.num_motors:
             commands = commands[:self.num_motors]
 
-        # Update current commands and timestamp
+        # ==== 4) 상태 업데이트 ====
         self.current_commands = commands
         self.last_command_time = time.time()
         self.got_command = True
@@ -127,6 +149,7 @@ class TorqueConverter(Node, CanMixin):
         if self.safe_mode:
             self.get_logger().info("Received new commands. Exiting safe mode.")
             self.safe_mode = False
+
 
     def timer_callback(self):
         """Periodic timer callback — sends torque (current) commands over CAN."""
