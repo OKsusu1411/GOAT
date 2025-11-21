@@ -45,13 +45,13 @@
 
     <link name="base_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <origin rpy="0 0 0" xyz="0E-03 0E-03 0E-03"/>
             <mass value="9.585"/>
             <inertia ixx="140110.479E-06" ixy="534.939E-06" ixz="28184.116E-06"
                      iyy="110641.449E-06" iyz="-27.278E-06" izz="98944.542E-06"/>
         </inertial>
         <visual>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/>
             <geometry>
                 <mesh filename="../meshes/base_Link.STL"/>
             </geometry>
@@ -167,7 +167,7 @@
     
     <link name="calf_L_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="119.13E-03 11.06E-03 -203.63E-03"/>
+            <origin rpy="0 0 0" xyz="119.13E-03 18.0E-03 -203.63E-03"/>
             <mass value="1.49"/>
             <inertia ixx="13232.8E-06" ixy="-435.46E-06" ixz="6935.69E-06"
                      iyy="17661.37E-06" iyz="790.87E-06" izz="5016.98E-06"/>
@@ -192,7 +192,7 @@
 
     <link name="calf_R_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="119.13E-03 -11.06E-03 -203.63E-03"/>
+            <origin rpy="0 0 0" xyz="119.13E-03 -18.0E-03 -203.63E-03"/>
             <mass value="1.49"/>
             <inertia ixx="13232.8E-06" ixy="435.46E-06" ixz="6935.69E-06"
                      iyy="17661.37E-06" iyz="-790.87E-06" izz="5016.98E-06"/>
@@ -208,7 +208,7 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0.078 0 -0.12" rpy="0 -0.55 0"/>
+            <origin xyz="0 0 0" rpy="0 -0.0 0"/>
             <geometry>
                 <cylinder length="0.26" radius="0.015"/>
             </geometry>
@@ -219,13 +219,13 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="../meshes/wheel_L_Link.STL" />
+                <mesh filename="../meshes/wheel_L_Link.STL"/>
             </geometry>
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
         </visual>
         <collision>
-            <origin rpy="1.5707963267948966 0 0" xyz="0 0.00707 0" />
+            <origin rpy="1.5707963267948966 0 0" xyz="0 0.0 0" />
             <geometry>
                 <cylinder length="0.05" radius="0.127" />
             </geometry>
@@ -242,7 +242,7 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="../meshes/wheel_R_Link.STL" />
+                <mesh filename="../meshes/wheel_R_Link.STL"/>
             </geometry>
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
@@ -300,20 +300,20 @@
     </joint>
 
     <joint name="knee_L_Joint" type="revolute">
-        <origin xyz="0 11.5E-03 -205E-03" rpy="0 0 0"/>
+        <origin xyz="0 18E-03 -205E-03" rpy="0 0 0"/>
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="0.0" upper="1.15192" velocity="15"/>
+        <limit effort="4.5" lower="0.0" upper="1.75192" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="knee_R_Joint" type="revolute">
-        <origin xyz="0 -11.5E-03 -205E-03" rpy="0 0 0"/>
+        <origin xyz="0 -18E-03 -205E-03" rpy="0 0 0"/>
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-1.15192" upper="0.0" velocity="15"/>
+        <limit effort="4.5" lower="-1.75192" upper="0.0" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
@@ -338,7 +338,8 @@
     </joint>
     
     <!-- ****************************************** D435 Camera ******************************************************** -->
-    <!-- <joint name="d435_joint" type="fixed">
+    <!--
+    <joint name="d435_joint" type="fixed">
         <origin rpy="0 1.063778179 0" xyz="0.13223 0.0222 -0.26826"/>
         <parent link="base_Link"/>
         <child link="d435_Link"/>
@@ -347,7 +348,7 @@
         <visual>
             <origin rpy="1.5707963267948966 0 1.5707963267948966" xyz="0.0149 -0.0175 0"/>
             <geometry>
-                <mesh filename="../meshes_camera/d435.dae"/>
+                <mesh filename="package://goat_description/meshes_camera/d435.dae" scale="1 1 1"/>
             </geometry>
         </visual>
         <collision>
@@ -356,6 +357,7 @@
                 <box size="0.02505 0.09 0.025"/>
             </geometry>
         </collision>
-    </link> -->
+    </link>
+    -->
     <!-- ****************************************** D435 Camera END ******************************************************** -->
 </robot>
