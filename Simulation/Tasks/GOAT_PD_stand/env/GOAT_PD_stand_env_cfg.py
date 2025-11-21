@@ -14,12 +14,12 @@ from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
 from gymnasium.spaces import Dict
 
 @configclass
-class GOATStandEnvCfg(GOATBaseEnvCfg):
+class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     # Environment parameters
     episode_length_s = 10.0
     sim_dt = 0.005                  # 200Hz torque controller
     decimation = 2                  # 100Hz policy
-    action_space = [2, 4]           # [L + R, foot delta position + wheel velocity]
+    action_space = [2, 4]           # [L + R, joint pos + wheel velocity]
     observation_space = 1           # TODO
     state_space = 0                 # Privilege state information
     observation_noise_std = 1.0     # Observation's Gaussian noise deviation
