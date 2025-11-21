@@ -22,8 +22,6 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     action_space = [2, 4]           # [L + R, joint pos + wheel velocity]
     observation_space = 1           # TODO
     state_space = 0                 # Privilege state information
-    observation_noise_std = 1.0     # Observation's Gaussian noise deviation
-    action_noise_std = 1.0          # Action's Gaussian noise deviation
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
@@ -51,27 +49,18 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
         debug_vis=False
     )
 
-    # Noise for Domain Randomization
-    observation_noise_model = NoiseModelCfg(
-        noise_cfg=GaussianNoiseCfg(
-            mean=0.0,
-            std=observation_noise_std,
-            operation='add'
-            )
-        )
-
-    action_noise_model = NoiseModelCfg(
-        noise_cfg=GaussianNoiseCfg(
-            mean=0.0,
-            std=action_noise_std,
-            operation='add'
-            )
-        )
-
-    # Hyperparameters
+    # Controller gain
     kp=torch.tensor([[400.0, 400.0, 300.0]])
     kd=torch.tensor([[20.0, 20.0, 15.0]])
     
+    # Robot configuration
     leg_dof = 3
     n_leg_j = leg_dof * 2
     num_total_joints = n_leg_j + 2
+
+    # Curriculum learning
+    max_curriculum_level = 5
+    max_base_angular_vel_noise_per = 20      # percentage (%)
+    max_gravity_vector_noise_per = 5
+    max_joint_pos_noise_per = 3
+    max_joint_vel_noise_per = 150
