@@ -12,7 +12,16 @@ class GOATIKStandEnv(GOATBaseEnv):
 
     def __init__(self, cfg: GOATPDStandEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
+        
+        # Curriculum level initialization
+        self.curriculum_level = 0
+        self.max_curriculum_level = cfg.max_curriculum_level - 1
+        self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=self.max_curriculum_level)
+        self.gravity_vector_noise_per = torch.linspace(start=0, end=cfg.max_gravity_vector_noise_per, steps=self.max_curriculum_level)
+        self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=self.max_curriculum_level)
+        self.joint_vel_noise_per = torch.linspace(start=0, end=cfg.max_joint_vel_noise_per, steps=self.max_curriculum_level)
 
+        # Space initialization
         self.observation = torch.zeros((self.num_envs, self.cfg.observation_space), dtype=torch.float32, device=self.device)
         self.state = torch.zeros((self.num_envs, self.cfg.state_space), dtype=torch.float32, device=self.device)
 
@@ -42,7 +51,7 @@ class GOATIKStandEnv(GOATBaseEnv):
         Preprocessor that helps applying policy's action to simulation
 
         Args:
-            actions (torch.Tensor): Foot delta position, wheel's velocity for each legs in shape (N, 2, 4)
+            actions (torch.Tensor): Joint pos command (angle), wheel's velocity for each legs in shape (num_envs, 2, 4)
         """
         # Refine command
         self.actions = actions.clone()
@@ -52,6 +61,9 @@ class GOATIKStandEnv(GOATBaseEnv):
         # Current state
         self.joint_pos = self._robot.data.joint_pos
         self.joint_vel = self._robot.data.joint_vel
+
+        # Domain Randomization
+        self.joint_pos = self._add_gaussian_noise(self.joint_pos, )
 
         # HW limits
         self.joint_limits = self._robot.data.joint_pos_limits
@@ -77,4 +89,16 @@ class GOATIKStandEnv(GOATBaseEnv):
     
     def _get_dones(self):
         return torch.zeros((self.num_envs, 1), dtype=torch.float32, device=self.device)
+    
+    def _add_gaussian_noise(data: torch.Tensor, noise_percentage: int):
+        """
+        Add (noise_percentage)% noise to all components of data
+        """
+        noise_ratio = noise_percentage / 100.0
         
+        # Standard normal distribution 
+        noise = torch.randn_like(data)
+        
+        noisy_data = data * (1 + noise_ratio * noise)
+        
+        return noisy_data
