@@ -7,15 +7,12 @@ import os
 import isaaclab.sim as sim_utils
 
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg
+from isaaclab.actuators import DCMotorCfg
 from isaaclab.envs import DirectRLEnvCfg
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.markers import VisualizationMarkersCfg
 from isaaclab.utils import configclass
-from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
-from isaaclab.controllers import DifferentialIKControllerCfg
-from isaaclab.controllers.joint_impedance import JointImpedanceControllerCfg
+from isaaclab.terrains import TerrainImporterCfg
+
 
 # Robot asset paths
 current_dir = os.path.dirname(__file__)
@@ -26,7 +23,7 @@ TRON_ASSET = {
     "usd_filename": "WF_TRON.usd"
 }
 GOAT_ASSET = {
-    "urdf_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/urdf/WF_GOAT.urdf"),   # Change to GOAT path later
+    "urdf_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/urdf/WF_GOAT.urdf"),
     "usd_path": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/usd/WF_GOAT.usd"),
     "usd_place": os.path.join(current_dir, "../assets/GOAT/WF_GOAT/usd/"),
     "usd_filename": "WF_GOAT.usd"
@@ -69,7 +66,10 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             max_depenetration_velocity=1.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0
+            enabled_self_collisions=True,
+            solver_position_iteration_count=4,
+            solver_velocity_iteration_count=0,
+            fix_root_link= False
         ),
     ),
 
@@ -79,7 +79,7 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
     
     # Initial Joint pos and vel
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.0),
+        pos=(0.0, 0.0, 1.0),
         joint_pos={
             "hip_L_Joint": 0.0,
             "hip_R_Joint": 0.0,
@@ -120,16 +120,23 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
 class GOATBaseEnvCfg(DirectRLEnvCfg):
     # Env
     episode_length_s: int = 10       # Episode length in seconds
+    sim_dt: float = 0.01             # Simulation(low-level controller) frequency
     decimation: int = 3              # Policy frequency = sim_freq / decimation
-    action_space: int = 10           # Dimension of action space vector
+    action_space: int = 0            # Dimension of action space vector
     observation_space: int = 0       # Dimension of observation space vector
     state_space: int = 0             # Dimension of state space vector for privileged RL
 
-    # Ground plane
-    plane = AssetBaseCfg(
-        prim_path="/World/GroundPlane",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]),
-        spawn=GroundPlaneCfg(),
+    # Terrain
+    terrain = TerrainImporterCfg(
+        prim_path="/World/ground",
+        terrain_type="plane",        # Should apply terrain generator later
+        env_spacing=3.0,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            static_friction=1.0,
+            dynamic_friction=0.8,
+            restitution=0.0
+        ),
+        debug_vis=False
     )
 
     # Light
@@ -142,14 +149,3 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
 
     # GOAT cfg
     GOAT_cfg: ArticulationCfg = GOAT_Cfg
-
-    # # Impedance Controller
-    # imp_controller: JointImpedanceControllerCfg = JointImpedanceControllerCfg(
-    #     command_type="p_abs",
-    #     impedance_mode="variable",
-    #     stiffness=300.0,
-    #     damping_ratio=0.5,
-    #     stiffness_limits=(30, 300),
-    #     damping_ratio_limits=(0, 1),
-    #     inertial_compensation=True,
-    #     gravity_compensation=True,)

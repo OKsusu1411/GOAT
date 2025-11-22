@@ -1,11 +1,9 @@
-from typing import Any, Mapping, Tuple, Union
-
 import gymnasium
-
 import torch
 
-from .wrapper import Wrapper
-from ..utils.wrapper_utils import tensorize_space, flatten_tensorized_space, unflatten_tensorized_space
+from typing import Any, Mapping, Tuple, Union
+from lib.wrapper import Wrapper
+from lib.utils.wrapper_utils import tensorize_space, flatten_tensorized_space, unflatten_tensorized_space
 
 class IsaacLabWrapper(Wrapper):
     def __init__(self, env: Any) -> None:
