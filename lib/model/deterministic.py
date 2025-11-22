@@ -1,6 +1,7 @@
-from typing import Any, Mapping, Tuple, Union
-import gymnasium
 import torch
+import gymnasium
+
+from typing import Any, Mapping, Tuple, Union
 
 
 class DeterministicMixin:

@@ -10,11 +10,10 @@ import torch
 from abc import abstractmethod
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
-from isaaclab.controllers.joint_impedance import JointImpedanceController
-from isaaclab.controllers import DifferentialIKController
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform
-from .GOAT_base_env_cfg import GOATBaseEnvCfg
+from isaaclab.terrains import TerrainImporter
+from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
+
 
 class GOATBaseEnv(DirectRLEnv):
     # Load config file
@@ -40,20 +39,21 @@ class GOATBaseEnv(DirectRLEnv):
 
     # Create scene
     def _setup_scene(self):
-        # GOAT Robot
-        self._robot = Articulation(self.cfg.GOAT_cfg)
-        self.scene.articulations["robot"] = self._robot
+        """Setup the scene for the environment.
 
-        # Ground Plane
-        spawn_ground_plane(prim_path=self.cfg.plane.prim_path, cfg=GroundPlaneCfg(), translation=self.cfg.plane.init_state.pos)
+        This function is responsible for creating the scene objects and setting up the scene for the environment.
+        The scene creation can happen through :class:`isaaclab.scene.InteractiveSceneCfg` or through
+        directly creating the scene objects and registering them with the scene manager.
 
-        # Light
-        light_cfg = self.cfg.dome_light.spawn
-        light_cfg.func(self.cfg.dome_light.prim_path, light_cfg)
+        We leave the implementation of this function to the derived classes. If the environment does not require
+        any explicit scene setup, the function can be left empty.
+        """
+        pass
 
 
     # Reset Env
     def _reset_idx(self, env_ids: torch.Tensor):
+        super()._reset_idx(env_ids)
         joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
         joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
         joint_vel = torch.zeros_like(joint_pos)
@@ -63,27 +63,60 @@ class GOATBaseEnv(DirectRLEnv):
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
 
-    ## =============== RL main methods ================ ##
+    ## =============== RL main abstract methods ================ ##
 
     @abstractmethod
-    # Before physics step
     def _pre_physics_step(self, actions: torch.Tensor):
-        pass
+        """Pre-process actions before stepping through the physics.
+
+        This function is responsible for pre-processing the actions before stepping through the physics.
+        It is called before the physics stepping (which is decimated).
+
+        Args:
+            actions: The actions to apply on the environment. Shape is (num_envs, action_dim).
+        """
+        raise NotImplementedError(f"Please implement the '_pre_physics_step' method for {self.__class__.__name__}.")
 
     @abstractmethod
-    # Apply action
     def _apply_action(self):
-        pass
+        """Apply actions to the simulator.
+
+        This function is responsible for applying the actions to the simulator. It is called at each
+        physics time-step.
+        """
+        raise NotImplementedError(f"Please implement the '_apply_action' method for {self.__class__.__name__}.")
 
     @abstractmethod
-    # Get observation
     def _get_observations(self) -> dict[str, torch.Tensor]:
-        pass
+        """Compute and return the states for the environment.
+
+        The state-space is used for asymmetric actor-critic architectures. It is configured
+        using the :attr:`DirectRLEnvCfg.state_space` parameter.
+
+        Returns:
+            The states for the environment. If the environment does not have a state-space, the function
+            returns a None.
+        """
+        raise NotImplementedError(f"Please implement the '_get_observations' method for {self.__class__.__name__}.")
 
     @abstractmethod
-    # Get reward
     def _get_rewards(self) -> torch.Tensor:
-        pass
+        """Compute and return the rewards for the environment.
+
+        Returns:
+            The rewards for the environment. Shape is (num_envs,).
+        """
+        raise NotImplementedError(f"Please implement the '_get_rewards' method for {self.__class__.__name__}.")
+
+    @abstractmethod
+    def _get_dones(self):
+        """Compute and return the done flags for the environment.
+
+        Returns:
+            A tuple containing the done flags for termination and time-out.
+            Shape of individual tensors is (num_envs,).
+        """
+        raise NotImplementedError(f"Please implement the '_get_dones' method for {self.__class__.__name__}.")
 
 
 

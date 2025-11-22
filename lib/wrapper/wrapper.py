@@ -1,10 +1,8 @@
-from typing import Any, Mapping, Sequence, Tuple, Union
-
 import gymnasium
-
 import torch
 
 from skrl import config
+from typing import Any, Mapping, Sequence, Tuple, Union
 
 class Wrapper(object):
     def __init__(self, env: Any) -> None:

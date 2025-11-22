@@ -1,7 +1,7 @@
-from typing import Any, Mapping, Sequence, Tuple, Union
-from torch.distributions import Categorical
 import torch
 
+from typing import Any, Mapping, Sequence, Tuple, Union
+from torch.distributions import Categorical
 
 # speed up distribution construction by disabling checking
 Categorical.set_default_validate_args(False)
