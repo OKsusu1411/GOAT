@@ -16,6 +16,8 @@ class GOATIKStandEnv(GOATBaseEnv):
         # Curriculum level initialization
         self.curriculum_level = 0
         self.max_curriculum_level = cfg.max_curriculum_level - 1
+
+        # Noise curriculum
         self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=self.max_curriculum_level)
         self.gravity_vector_noise_per = torch.linspace(start=0, end=cfg.max_gravity_vector_noise_per, steps=self.max_curriculum_level)
         self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=self.max_curriculum_level)
@@ -63,15 +65,18 @@ class GOATIKStandEnv(GOATBaseEnv):
         self.joint_vel = self._robot.data.joint_vel
 
         # Domain Randomization
-        self.joint_pos = self._add_gaussian_noise(self.joint_pos, )
+        joint_pos_noise = self.joint_pos_noise_per(self.curriculum_level)
+        joint_vel_noise = self.joint_vel_noise_per(self.curriculum_level)
+        self.joint_pos_noissy = self._add_gaussian_noise(self.joint_pos, joint_pos_noise)
+        self.joint_vel_noissy = self._add_gaussian_noise(self.joint_vel, joint_vel_noise)
 
         # HW limits
         self.joint_limits = self._robot.data.joint_pos_limits
         self.torque_limits = self._robot.data.joint_effort_limits
 
     def _apply_action(self):
-        self.torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos,
-                                                             joint_vel=self.joint_vel,
+        self.torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
+                                                             joint_vel=self.joint_vel_noissy,
                                                              joint_pos_cmd=self.joint_pos_cmd,
                                                              joint_limits=self.joint_limits,
                                                              torque_limits=self.torque_limits)
