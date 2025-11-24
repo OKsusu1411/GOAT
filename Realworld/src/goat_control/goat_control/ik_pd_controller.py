@@ -5,11 +5,14 @@ from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float32MultiArray
 from motor_interfaces.msg import MotorStates
 import numpy as np
+
 #from __future__ import annotations
 from scipy.linalg import logm
 
-KP_GAiN = 0.0000005
-KD_GAIN = 0.00002
+L_J_C = 0.0872665, 0.0872665, 0.0872665
+R_J_C = 0.0872665, 0.0872665, 0.0872665
+KP_GAiN = 0.005
+KD_GAIN = 0.002
 
 class IKPDcontroller(Node):
     def __init__(self):
@@ -129,10 +132,9 @@ class IKPDcontroller(Node):
         """
 
         matrix_T = np.transpose(matrix, (1, 0))                           # Matrix transpose
-        lambda_matrix = (damping_constant**2) * np.eye(matrix.shape[0])   # 
+        lambda_matrix = (damping_constant**2) * np.eye(matrix.shape[0])   
         inv_term = np.linalg.inv(matrix @ matrix_T + lambda_matrix)
-        matrix_pinv= matrix_T @ (inv_term)
-
+        matrix_pinv = matrix_T @ (inv_term)
         return matrix_pinv
     
     def multiarray_to_numpy(msg: Float32MultiArray) -> np.ndarray:
@@ -319,7 +321,7 @@ class IKPDcontroller(Node):
         L_J = J[:, L_leg_indices]                           # Jacobian for left leg
         R_J = J[:, R_leg_indices]                           # Jacobian for right leg 
 
-       # Joint state from multi-turn motor angles (if available)
+        # Joint state from multi-turn motor angles (if available)
         n_joints = len(self.joint_names)
         joint_pos = np.zeros((n_joints, 1))
         joint_vel = np.zeros((n_joints, 1))
@@ -340,21 +342,21 @@ class IKPDcontroller(Node):
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
-        L_target_pose = np.zeros((7, 1))
-        L_target_pose[4:, 0] = target_pos[0, :]
+        #L_target_pose = np.zeros((7, 1))
+        #L_target_pose[4:, 0] = target_pos[0, :]
 
         # Current joint state
         L_joint_pos = joint_pos[L_leg_indices, 0].reshape(3, 1)
         L_joint_vel = joint_vel[L_leg_indices, 0].reshape(3, 1)
 
         # Inverse kinematics
-        L_joint_command = self.inverse_kinematics(target_pose=L_target_pose,
-                                                  current_pos=L_current_pos,
-                                                  current_rot=L_current_rot,
-                                                  jacobian=L_J,
-                                                  joint_pos=L_joint_pos,
-                                                  mode="translation")
-
+        # L_joint_command = self.inverse_kinematics(target_pose=L_target_pose,
+        #                                           current_pos=L_current_pos,
+        #                                           current_rot=L_current_rot,
+        #                                           jacobian=L_J,
+        #                                           joint_pos=L_joint_pos,
+        #                                           mode="translation")
+        L_joint_command = L_J_C
         L_joint_pos_error = L_joint_command - L_joint_pos
         L_joint_vel_error = - L_joint_vel
         L_torque_command = self.kp * L_joint_pos_error + self.kd * L_joint_vel_error
@@ -362,21 +364,21 @@ class IKPDcontroller(Node):
 
         # ======================= Right leg control ======================= #
         # Target foot pose
-        R_target_pose = np.zeros((7, 1))
-        R_target_pose[4:, 0] = target_pos[1, :]
+        #R_target_pose = np.zeros((7, 1))
+        #R_target_pose[4:, 0] = target_pos[1, :]
 
         # Current joint state
         R_joint_pos = joint_pos[R_leg_indices, 0].reshape(3, 1)
         R_joint_vel = joint_vel[R_leg_indices, 0].reshape(3, 1)
 
         # Inverse kinematics
-        R_joint_command = self.inverse_kinematics(target_pose=R_target_pose,
-                                                  current_pos=R_current_pos,
-                                                  current_rot=R_current_rot,
-                                                  jacobian=R_J,
-                                                  joint_pos=R_joint_pos,
-                                                  mode="translation")
-        
+        # R_joint_command = self.inverse_kinematics(target_pose=R_target_pose,
+        #                                           current_pos=R_current_pos,
+        #                                           current_rot=R_current_rot,
+        #                                           jacobian=R_J,
+        #                                           joint_pos=R_joint_pos,
+        #                                           mode="translation")
+        R_joint_command = R_J_C
         R_joint_pos_error = R_joint_command - R_joint_pos
         R_joint_vel_error = - R_joint_vel
         R_torque_command = self.kp * R_joint_pos_error + self.kd * R_joint_vel_error

@@ -30,7 +30,6 @@ class TorqueConverter(Node, CanMixin):
         self.max_joint_torque = 1  # 힙/니(0~5) 한계
         self.max_wheel_torque = 1  # 휠(6,7) 한계
   
-
         # Open CAN bus
         # NOTE: The user must activate the CAN interface before running this node.
         # Example: sudo ip link set can0 up type can bitrate 1000000
@@ -75,17 +74,17 @@ class TorqueConverter(Node, CanMixin):
         else:
             current = 0.0
         return current
+
     def wheel_torque2current(self, torque):
         if torque != 0.0:
             current = (torque-0.0052)/(0.2569)  # for wheel
         else:
             current = 0.0
         return current
-    
+
     def _send_command_expect(self, node_id: int, cmd_byte: int, payload7: bytes = b"\x00" * 7):
         """Send a specific CAN command and wait briefly for a response."""
         tx_id = 0x140 + node_id
-        rx_id = 0x180 + node_id
         data = bytes([cmd_byte]) + payload7
         msg = can.Message(arbitration_id=tx_id, data=data, is_extended_id=False)
         try:
@@ -103,6 +102,7 @@ class TorqueConverter(Node, CanMixin):
             if rx_msg.arbitration_id == tx_id and len(rx_msg.data) == 8 and rx_msg.data[0] == cmd_byte:
                 return rx_msg
         return None
+        
     def command_callback(self, msg: Float32MultiArray):
         """Callback when a new torque command message is received."""
         commands_raw = list(msg.data)
@@ -149,7 +149,6 @@ class TorqueConverter(Node, CanMixin):
         if self.safe_mode:
             self.get_logger().info("Received new commands. Exiting safe mode.")
             self.safe_mode = False
-
 
     def timer_callback(self):
         """Periodic timer callback — sends torque (current) commands over CAN."""
