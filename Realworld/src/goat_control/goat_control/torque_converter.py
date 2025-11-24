@@ -69,7 +69,7 @@ class TorqueConverter(Node, CanMixin):
 
     def joint_torque2current(self, torque):
         if torque != 0.0:
-            current = (torque-0.0081)/0.2552  # for joint
+            current = torque/0.2616  # for joint
 
         else:
             current = 0.0
@@ -77,7 +77,7 @@ class TorqueConverter(Node, CanMixin):
 
     def wheel_torque2current(self, torque):
         if torque != 0.0:
-            current = (torque-0.0052)/(0.2569)  # for wheel
+            current = torque/0.2478  # for wheel
         else:
             current = 0.0
         return current
