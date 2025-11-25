@@ -23,12 +23,12 @@ class TorqueConverter(Node, CanMixin):
         self.interface = self.declare_parameter('interface', 'socketcan').value   # CAN interface type
         # self.series = self.declare_parameter('series', 'MG').value
         self.num_motors = self.declare_parameter('num_motors', 8).value
-        self.control_frequency = self.declare_parameter('control_frequency', 50.0).value
+        self.control_frequency = self.declare_parameter('control_frequency', 100.0).value
         self.timeout_sec = self.declare_parameter('timeout_sec', 0.5).value
         self.scale = SCALE_A_PER_LSB  # Current scaling factor depending on motor series
               # ===== 토크 리미트 (단위: msg에 들어오는 토크 단위, 예: [Nm]) =====
-        self.max_joint_torque = 1  # 힙/니(0~5) 한계
-        self.max_wheel_torque = 1  # 휠(6,7) 한계
+        self.max_joint_torque = 4.5  # 힙/니(0~5) 한계
+        self.max_wheel_torque = 4.5  # 휠(6,7) 한계
   
         # Open CAN bus
         # NOTE: The user must activate the CAN interface before running this node.
