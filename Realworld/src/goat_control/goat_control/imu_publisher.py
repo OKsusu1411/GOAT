@@ -12,6 +12,15 @@ BAUD = 115200
 class IMUPublisher(Node):
     def __init__(self, port="/dev/ttyUSB0", baudrate=115200, timeout=1):
         super().__init__('imu_publisher')
+        # Publish frequency parameter (Hz)
+
+        self.publish_frequency = float(
+            self.declare_parameter('publish_frequency', 100.0).value
+        )
+        self.get_logger().info(f"IMU publish frequency: {self.publish_frequency} Hz "
+                               f"({1.0 / self.publish_frequency:.3f} s)")
+        self.publish_period = 1.0/self.publish_frequency
+
         self.serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout)      # Open serial port
         self.imu_data = [0.0]*14                                                        # Initialize with zeros
         self.lock = threading.Lock()
@@ -22,33 +31,33 @@ class IMUPublisher(Node):
         self.thread = threading.Thread(target=self.read_loop, daemon=True)
         self.thread.start()
 
-        self.timer = self.create_timer(0.01, self.publish_timer_callback)
+        self.timer = self.create_timer(self.publish_period, self.publish_timer_callback)
 
     def read_loop(self):
-            while rclpy.ok():
+        while rclpy.ok():
+            try:
+                raw_data = self.serial.readline().decode('utf-8', errors='ignore').strip()
+                if not raw_data:
+                    continue
+                if not raw_data.startswith('*'):
+                    continue
+
+                data_string = raw_data[1:].split(',')
+
                 try:
-                    raw_data = self.serial.readline().decode('utf-8', errors='ignore').strip()
-                    if not raw_data:
-                        continue
-                    if not raw_data.startswith('*'):
-                        continue
+                    data = list(map(float, data_string))
+                except ValueError:
+                    continue
 
-                    data_string = raw_data[1:].split(',')
+                if len(data) != 14:
+                    continue
 
-                    try:
-                        data = list(map(float, data_string))
-                    except ValueError:
-                        continue
+                with self.lock:
+                    self.imu_data = data
 
-                    if len(data) != 14:
-                        continue
-
-                    with self.lock:
-                        self.imu_data = data
-
-                except Exception as e:
-                    self.get_logger().warn(f"IMU data read error: {e}")
-                    time.sleep(0.01)
+            except Exception as e:
+                self.get_logger().warn(f"IMU data read error: {e}")
+                time.sleep(0.01)
 
     def split_packet(self, data_list):
         """

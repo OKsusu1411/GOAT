@@ -37,6 +37,7 @@ setup(
             'imu_publisher = goat_control.imu_publisher:main',
             'policy = goat_control.policy:main',
             'ik_pd_controller = goat_control.ik_pd_controller:main',
+            'plot_generator = goat_control.plot_generator:main',
         ],
     },
 )
