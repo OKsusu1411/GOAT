@@ -20,8 +20,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     sim_dt = 0.005                  # 200Hz torque controller
     decimation = 2                  # 100Hz policy
     action_space = [2, 4]           # [L + R, joint pos + wheel velocity]
-    observation_space = 1           # TODO
-    state_space = 0                 # Privilege state information
+    observation_space = 35          # Observation space
+    state_space = 47                # Privilege state information
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
@@ -50,8 +50,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     )
 
     # Controller gain
-    kp=torch.tensor([[400.0, 400.0, 300.0]])
-    kd=torch.tensor([[20.0, 20.0, 15.0]])
+    kp=torch.tensor([[1.0, 1.0, 1.0]])
+    kd=torch.tensor([[0.1, 0.1, 0.1]])
     
     # Robot configuration
     leg_dof = 3
@@ -60,7 +60,16 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     # Curriculum learning
     max_curriculum_level = 5
-    max_base_angular_vel_noise_per = 20      # percentage (%)
+    max_base_acceleration_noise_per = 10        # percentage (%)
+    max_base_angular_vel_noise_per = 20
     max_gravity_vector_noise_per = 5
+    max_base_quaternion_noise_per = 5
     max_joint_pos_noise_per = 3
     max_joint_vel_noise_per = 150
+
+    max_episode_length = 5*60/sim_dt            # 5 minutes for truncated
+    settling_phase_time = 3/sim_dt              # 3 seconds for settling phase       
+
+    # Reward weight
+
+    # Deep learning
