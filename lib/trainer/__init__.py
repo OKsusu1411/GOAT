@@ -1,2 +1,2 @@
-from lib.trainer import *
+from lib.trainer.base import *
 from lib.trainer.sequential import *
