@@ -13,6 +13,7 @@ class GOATPDStandEnv(GOATBaseEnv):
     def __init__(self, cfg: GOATPDStandEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         self.cfg = cfg
+        self._robot = self.scene["robot"]
         
         # Curriculum level initialization
         self.curriculum_level = 0
@@ -25,6 +26,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.base_quaternion_noise_per = torch.linspace(start=0, end=cfg.max_base_quaternion_noise_per, steps=self.max_curriculum_level)
         self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=self.max_curriculum_level)
         self.joint_vel_noise_per = torch.linspace(start=0, end=cfg.max_joint_vel_noise_per, steps=self.max_curriculum_level)
+        self.terrain_friction_random_per = torch.linspace(start=0, end=cfg.max_terrain_friction_random_per, steps=self.max_curriculum_level)
 
         # Space initialization
         self.observation = torch.zeros((self.num_envs, self.cfg.observation_space), dtype=torch.float32, device=self.device)
@@ -39,17 +41,19 @@ class GOATPDStandEnv(GOATBaseEnv):
                                             num_dof=self.cfg.leg_dof,
                                             device=self.device,
                                             dt=self.cfg.sim_dt)
-
+ 
         # HW limits
         self.joint_limits = self._robot.data.joint_pos_limits
         self.torque_limits = self._robot.data.joint_effort_limits
 
     def _reset_idx(self, env_ids: torch.Tensor):
+        # TODO: robot 0.4 z축 띄워놓고 랜덤 스폰
+        # TODO: curriculum scheduler만들기
+        # TODO: friction 추가
         # Random initializing
-        pos_noise = sample_uniform(
-            -0.125, 0.125,
-            (len(env_ids), self.num_active_joints),
-            self.device,)
+        pos_noise = sample_uniform(-0.125, 0.125,
+                                   (len(env_ids), self.cfg.num_total_joints),
+                                   self.device,)
         joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
         joint_pos = joint_pos[:, :-2] + pos_noise
         joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
@@ -58,6 +62,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         # Publish to simulator
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        self._robot.write_root_state_to_sim()
         
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
         """
@@ -72,32 +77,23 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.joint_pos_cmd = self.actions[:, :, :3]
         self.wheel_cmd_vel = self.actions[:, :, 3:]
                 
-    def _apply_action(self):                # Since it's inside the decimation loop, the low-level controller has to be located here
-        # Settling phase determination
-        self.is_settling_phase = self.episode_length_buf <= self.cfg.settling_phase_time
-        
-        # PD controller
-        if not self.is_settling_phase:
-            # Current state
-            joint_pos = self._robot.data.joint_pos
-            joint_vel = self._robot.data.joint_vel
+    def _apply_action(self):                    # Since it's inside the decimation loop, the low-level controller has to be located here
+        # Current state
+        joint_pos = self._robot.data.joint_pos
+        joint_vel = self._robot.data.joint_vel
 
-            # Domain randomization
-            joint_pos_noise = self.joint_pos_noise_per(self.curriculum_level)
-            joint_vel_noise = self.joint_vel_noise_per(self.curriculum_level)
-            self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
-            self.joint_vel_noissy = self._add_gaussian_noise(joint_vel, joint_vel_noise)
+        # Domain randomization
+        joint_pos_noise = self.joint_pos_noise_per(self.curriculum_level)
+        joint_vel_noise = self.joint_vel_noise_per(self.curriculum_level)
+        self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
+        self.joint_vel_noissy = self._add_gaussian_noise(joint_vel, joint_vel_noise)
 
-            self.torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
-                                                                joint_vel=self.joint_vel_noissy,
-                                                                joint_pos_cmd=self.joint_pos_cmd,
-                                                                joint_limits=self.joint_limits,
-                                                                torque_limits=self.torque_limits)
-            self._robot.set_joint_effort_target(self.torque_cmd)
-
-        # No control inputs during settling phase
-        elif self.is_settling_phase:
-            self._robot.set_joint_effort_target(self.zero_joint_efforts)
+        self.torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
+                                                            joint_vel=self.joint_vel_noissy,
+                                                            joint_pos_cmd=self.joint_pos_cmd,
+                                                            joint_limits=self.joint_limits,
+                                                            torque_limits=self.torque_limits)
+        self._robot.set_joint_effort_target(self.torque_cmd)
         
         # TODO: wheel controller
 
@@ -148,10 +144,10 @@ class GOATPDStandEnv(GOATBaseEnv):
         return {"policy": self.observation, "value": self.state}
     
     def _get_rewards(self) -> torch.Tensor:
-        # TODO: settling phase에서 reward 0
+        
         return torch.zeros((self.num_envs, 1), dtype=torch.float32, device=self.device)
     
-    def _get_dones(self):
+    def _get_dones(self): 
 
         terminated
         truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1

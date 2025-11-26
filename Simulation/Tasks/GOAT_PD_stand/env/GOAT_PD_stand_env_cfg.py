@@ -42,8 +42,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
         terrain_type="plane",
         env_spacing=3.0,
         physics_material=sim_utils.RigidBodyMaterialCfg(
-            static_friction=1.0,
-            dynamic_friction=0.8,
+            static_friction=0.7,
+            dynamic_friction=0.5,
             restitution=0.0
         ),
         debug_vis=False
@@ -66,9 +66,9 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     max_base_quaternion_noise_per = 5
     max_joint_pos_noise_per = 3
     max_joint_vel_noise_per = 150
+    max_terrain_friction_random_per = 50
 
-    max_episode_length = 5*60/sim_dt            # 5 minutes for truncated
-    settling_phase_time = 3/sim_dt              # 3 seconds for settling phase       
+    max_episode_length = 5*60/sim_dt            # 5 minutes for truncated    
 
     # Reward weight
 

@@ -10,11 +10,11 @@ class Asymmetric_Actor(GaussianMixin, Model):
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
 
         self.net = nn.Sequential(nn.Linear(self.num_observations, 128),
-                                 nn.ELU(),
+                                 nn.ReLU(),
                                  nn.Linear(128, 128),
-                                 nn.ELU(),
+                                 nn.ReLU(),
                                  nn.Linear(128, 128),
-                                 nn.ELU())
+                                 nn.ReLU())
         
         self.mean_layer = nn.Linear(128, self.num_actions)
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
@@ -34,11 +34,11 @@ class Asymmetric_Critic(DeterministicMixin, Model):
         self.num_states = self.num_observations
         
         self.net = nn.Sequential(nn.Linear(self.num_states, 128),
-                                 nn.ELU(),
+                                 nn.ReLU(),
                                  nn.Linear(128, 128),
-                                 nn.ELU(),
+                                 nn.ReLU(),
                                  nn.Linear(128, 128),
-                                 nn.ELU(),
+                                 nn.ReLU(),
                                  nn.Linear(128, 1))
 
     def act(self, inputs, role):
