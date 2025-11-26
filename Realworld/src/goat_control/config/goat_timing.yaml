@@ -19,9 +19,9 @@ policy:
 motor_state_publisher:
   ros__parameters:
     # CAN에서 모터 상태 읽는 주기 (Hz)
-    poll_hz: 100.0
+    poll_hz: 200.0
 
 torque_converter:
   ros__parameters:
     # 토크 명령 보내는 루프 주기 (Hz)
-    control_frequency: 100.0
+    control_frequency: 200.0
