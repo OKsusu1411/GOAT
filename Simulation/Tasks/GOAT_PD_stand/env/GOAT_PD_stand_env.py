@@ -49,7 +49,6 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.torque_limits = self._robot.data.joint_effort_limits
 
     def _reset_idx(self, env_ids: torch.Tensor):
-        # TODO: robot 0.4 z축 띄워놓고 랜덤 스폰
         # TODO: curriculum scheduler만들기
         
         root_state = self._robot.data.default_root_state[env_ids].clone()
