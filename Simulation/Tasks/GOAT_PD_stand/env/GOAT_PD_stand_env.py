@@ -1,7 +1,9 @@
 import torch
+import isaaclab.sim as sim_utils
 
 from __future__ import annotations
-from isaaclab.utils.math import sample_uniform
+from isaaclab.utils.math import sample_uniform, random_orientation
+from isaaclab.terrains import TerrainImporterCfg
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
 from lib.low_level_controller.pd_controller import PD_Controller
@@ -41,7 +43,7 @@ class GOATPDStandEnv(GOATBaseEnv):
                                             num_dof=self.cfg.leg_dof,
                                             device=self.device,
                                             dt=self.cfg.sim_dt)
- 
+
         # HW limits
         self.joint_limits = self._robot.data.joint_pos_limits
         self.torque_limits = self._robot.data.joint_effort_limits
@@ -49,8 +51,31 @@ class GOATPDStandEnv(GOATBaseEnv):
     def _reset_idx(self, env_ids: torch.Tensor):
         # TODO: robot 0.4 z축 띄워놓고 랜덤 스폰
         # TODO: curriculum scheduler만들기
-        # TODO: friction 추가
-        # Random initializing
+        
+        root_state = self._robot.data.default_root_state[env_ids].clone()
+        root_state[:, 2] = 0.35 + torch.rand(len(env_ids), device=self.device) * 0.1
+        
+        # 완전 랜덤한 방향 (누워있거나, 뒤집히거나, 엎드린 상태 등 포함)
+        root_state[:, 3:7] = random_orientation(len(env_ids), self.device)
+
+        # 2. Joint Position 랜덤화
+        limits = self._robot.data.joint_pos_limits[env_ids]
+        # 관절 한계 내에서 균등 분포 샘플링
+        joint_pos = limits[..., 0] + torch.rand_like(limits[..., 0]) * (limits[..., 1] - limits[..., 0])
+        joint_vel = torch.randn_like(joint_pos) * 0.1
+
+        # Domain randomization (terrain friction)
+        self.cfg.terrain = self.cfg.terrain.replace(
+            physics_material=self.cfg.terrain.physics_material.replace(
+                sim_utils.RigidBodyMaterialCfg(
+                    static_friction=0.7,
+                    dynamic_friction=0.5,
+                    restitution=0.0
+            ),
+            debug_vis=False)
+        )
+
+        # Domain randomization (initial pose)
         pos_noise = sample_uniform(-0.125, 0.125,
                                    (len(env_ids), self.cfg.num_total_joints),
                                    self.device,)
@@ -82,7 +107,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         joint_pos = self._robot.data.joint_pos
         joint_vel = self._robot.data.joint_vel
 
-        # Domain randomization
+        # Domain randomization (sensor noise)
         joint_pos_noise = self.joint_pos_noise_per(self.curriculum_level)
         joint_vel_noise = self.joint_vel_noise_per(self.curriculum_level)
         self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
@@ -119,7 +144,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.contact_force      # TODO: add F/T sensor
         self.friction_coefficient = torch.Tensor([self.cfg.terrain.physics_material.static_friction, self.cfg.terrain.physics_material.dynamic_friction], device=self.device).repeat(self.num_envs, 1)
 
-        # Domain randomization
+        # Domain randomization (sensor noise)
         self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per(self.curriculum_level))
         self.base_angular_vel_noissy = self._add_gaussian_noise(self.base_angular_vel, self.base_angular_vel_noise_per(self.curriculum_level))
         self.gravity_vector_noissy = self._add_gaussian_noise(self.gravity_vector, self.gravity_vector_noise_per(self.curriculum_level))
@@ -153,17 +178,15 @@ class GOATPDStandEnv(GOATBaseEnv):
         truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1
         return terminated, truncated
     
-    ## ======================== Auxilliary functions ========================##
+
+    ## ==================== Auxilliary functions ==================== ##
     def _add_gaussian_noise(data: torch.Tensor, noise_percentage: int) -> torch.Tensor:
         """
         Add (noise_percentage)% noise to all components of data
         """
-
         noise_ratio = noise_percentage / 100.0
-        
         # Standard normal distribution 
         noise = torch.randn_like(data)
-        
         noisy_data = data * (1 + noise_ratio * noise)
         
         return noisy_data
