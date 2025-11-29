@@ -15,12 +15,12 @@ from lib.model import Model
 
 
 PPO_DEFAULT_CONFIG = {
-    "rollouts": 16,                 # number of rollouts before updating
-    "learning_epochs": 8,           # number of learning epochs during each update
-    "mini_batches": 2,              # number of mini batches during each learning epoch
+    "rollouts": 16,                         # number of rollouts before updating
+    "learning_epochs": 8,                   # number of learning epochs during each update
+    "mini_batches": 2,                      # number of mini batches during each learning epoch
 
-    "discount_factor": 0.99,        # discount factor (gamma)
-    "lambda": 0.95,                 # TD(lambda) coefficient (lam) for computing returns and advantages
+    "discount_factor": 0.99,                # discount factor (gamma)
+    "lambda": 0.95,                         # TD(lambda) coefficient (lam) for computing returns and advantages
 
     "learning_rate": 1e-3,                  # learning rate
     "learning_rate_scheduler": None,        # learning rate scheduler class (see torch.optim.lr_scheduler)
@@ -31,34 +31,34 @@ PPO_DEFAULT_CONFIG = {
     "value_preprocessor": None,             # value preprocessor class (see skrl.resources.preprocessors)
     "value_preprocessor_kwargs": {},        # value preprocessor's kwargs (e.g. {"size": 1})
 
-    "random_timesteps": 0,          # random exploration steps
-    "learning_starts": 0,           # learning starts after this many steps
+    "random_timesteps": 0,                  # random exploration steps
+    "learning_starts": 0,                   # learning starts after this many steps
 
-    "grad_norm_clip": 0.5,              # clipping coefficient for the norm of the gradients
-    "ratio_clip": 0.2,                  # clipping coefficient for computing the clipped surrogate objective
-    "value_clip": 0.2,                  # clipping coefficient for computing the value loss (if clip_predicted_values is True)
-    "clip_predicted_values": False,     # clip predicted values during value loss computation
+    "grad_norm_clip": 0.5,                  # clipping coefficient for the norm of the gradients
+    "ratio_clip": 0.2,                      # clipping coefficient for computing the clipped surrogate objective
+    "value_clip": 0.2,                      # clipping coefficient for computing the value loss (if clip_predicted_values is True)
+    "clip_predicted_values": False,         # clip predicted values during value loss computation
 
-    "entropy_loss_scale": 0.0,      # entropy loss scaling factor
-    "value_loss_scale": 1.0,        # value loss scaling factor
+    "entropy_loss_scale": 0.0,              # entropy loss scaling factor
+    "value_loss_scale": 1.0,                # value loss scaling factor
 
-    "kl_threshold": 0,              # KL divergence threshold for early stopping
+    "kl_threshold": 0,                      # KL divergence threshold for early stopping
 
-    "rewards_shaper": None,         # rewards shaping function: Callable(reward, timestep, timesteps) -> reward
-    "time_limit_bootstrap": False,  # bootstrap at timeout termination (episode truncation)
+    "rewards_shaper": None,                 # rewards shaping function: Callable(reward, timestep, timesteps) -> reward
+    "time_limit_bootstrap": False,          # bootstrap at timeout termination (PEB)
 
-    "mixed_precision": False,       # enable automatic mixed precision for higher performance
+    "mixed_precision": False,               # enable automatic mixed precision for higher performance
 
     "experiment": {
-        "directory": "",            # experiment's parent directory
-        "experiment_name": "",      # experiment name
-        "write_interval": "auto",   # TensorBoard writing interval (timesteps)
+        "directory": "",                    # experiment's parent directory
+        "experiment_name": "",              # experiment name
+        "write_interval": "auto",           # TensorBoard writing interval (timesteps)
 
         "checkpoint_interval": "auto",      # interval for checkpoints (timesteps)
         "store_separately": False,          # whether to store checkpoints separately
 
-        "wandb": False,             # whether to use Weights & Biases
-        "wandb_kwargs": {}          # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
+        "wandb": False,                     # whether to use Weights & Biases
+        "wandb_kwargs": {}                  # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
     }
 }
 

@@ -28,7 +28,7 @@ agent:
   value_loss_scale: 2.0
   kl_threshold: 0.0
   rewards_shaper_scale: 0.1
-  time_limit_bootstrap: False
+  time_limit_bootstrap: True
 
   # logging and checkpoint
   experiment:
