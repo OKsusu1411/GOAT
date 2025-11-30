@@ -2,7 +2,7 @@ import torch
 import isaaclab.sim as sim_utils
 
 from __future__ import annotations
-from isaaclab.utils.math import sample_uniform, random_orientation
+from isaaclab.utils.math import random_orientation
 from isaaclab.terrains import TerrainImporterCfg
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
@@ -51,16 +51,13 @@ class GOATPDStandEnv(GOATBaseEnv):
     def _reset_idx(self, env_ids: torch.Tensor):
         # TODO: curriculum scheduler만들기
         
+        # Domain randomization (initial pose)
         root_state = self._robot.data.default_root_state[env_ids].clone()
         root_state[:, 2] = 0.35 + torch.rand(len(env_ids), device=self.device) * 0.1
-        
-        # 완전 랜덤한 방향 (누워있거나, 뒤집히거나, 엎드린 상태 등 포함)
         root_state[:, 3:7] = random_orientation(len(env_ids), self.device)
 
-        # 2. Joint Position 랜덤화
-        limits = self._robot.data.joint_pos_limits[env_ids]
-        # 관절 한계 내에서 균등 분포 샘플링
-        joint_pos = limits[..., 0] + torch.rand_like(limits[..., 0]) * (limits[..., 1] - limits[..., 0])
+        limits = self.joint_limits[env_ids]
+        joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
         joint_vel = torch.randn_like(joint_pos) * 0.1
 
         # Domain randomization (terrain friction)
@@ -73,15 +70,6 @@ class GOATPDStandEnv(GOATBaseEnv):
             ),
             debug_vis=False)
         )
-
-        # Domain randomization (initial pose)
-        pos_noise = sample_uniform(-0.125, 0.125,
-                                   (len(env_ids), self.cfg.num_total_joints),
-                                   self.device,)
-        joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
-        joint_pos = joint_pos[:, :-2] + pos_noise
-        joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
-        joint_vel = torch.zeros_like(joint_pos)
 
         # Publish to simulator
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
@@ -172,20 +160,20 @@ class GOATPDStandEnv(GOATBaseEnv):
         return torch.zeros((self.num_envs, 1), dtype=torch.float32, device=self.device)
     
     def _get_dones(self): 
-
-        terminated
+        terminated = False          # Continous task
         truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1
         return terminated, truncated
     
 
     ## ==================== Auxilliary functions ==================== ##
-    def _add_gaussian_noise(data: torch.Tensor, noise_percentage: int) -> torch.Tensor:
+    def _add_gaussian_noise(self, data: torch.Tensor, noise_percentage: int) -> torch.Tensor:
         """
         Add (noise_percentage)% noise to all components of data
         """
         noise_ratio = noise_percentage / 100.0
         # Standard normal distribution 
-        noise = torch.randn_like(data)
+        noise = torch.randn_like(data, device=self.device)
         noisy_data = data * (1 + noise_ratio * noise)
         
         return noisy_data
+
