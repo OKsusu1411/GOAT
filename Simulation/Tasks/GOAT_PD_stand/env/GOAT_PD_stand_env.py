@@ -21,6 +21,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.curriculum_level = 0
         self.max_curriculum_level = cfg.max_curriculum_level - 1
 
+        self.friction_coefficient = 
+
         # Noise curriculum (linear schedular)
         self.base_acceleration_noise_per = torch.linspace(start=0, end=cfg.max_base_acceleration_noise_per, steps=self.max_curriculum_level)
         self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=self.max_curriculum_level)
