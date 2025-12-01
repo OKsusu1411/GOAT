@@ -33,7 +33,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     num_total_joints = n_leg_j + 2              # Two wheels
 
     ## ==================== Curriculum parameters ==================== ##
-    max_curriculum_level = 5                    # Total curriculum level
+    total_DR_curriculum_level = 5               # Domain Randomization curriculum level
+    total_task_curriculum_level = ["balancing", "recovery"]
 
     max_base_acceleration_noise_per = 10        # Noise percentage (%)
     max_base_angular_vel_noise_per = 20
