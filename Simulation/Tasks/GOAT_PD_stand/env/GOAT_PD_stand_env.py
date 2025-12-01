@@ -141,7 +141,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.base_vel = self._robot.root_physx_view.get_link_velocities()[:, 0, :3]
         self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2]
         self.contact_force      # TODO: add F/T sensor
-        self.friction_coefficient = torch.Tensor([self.cfg.terrain.physics_material.static_friction, self.cfg.terrain.physics_material.dynamic_friction], device=self.device).repeat(self.num_envs, 1)
+        material_property = self._robot.root_physx_view.get_material_properties()
+        self.friction_coefficient = torch.Tensor([material_property[:,0, 0], material_property[:, 0, 1]], device=self.device)
 
         # Domain randomization (sensor noise)
         self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per(self.DR_curriculum_level))
@@ -228,3 +229,62 @@ class GOATPDStandEnv(GOATBaseEnv):
         quaternions = quat_from_angle_axis(random_angles, random_axes)
 
         return quaternions
+
+    def randomize_and_log_friction(
+        self,
+        env: GOATBaseEnv,
+        env_ids: torch.Tensor | None,
+        asset_cfg: SceneEntityCfg,
+        static_friction_range: tuple[float, float],
+        dynamic_friction_range: tuple[float, float],
+        restitution_range: tuple[float, float],
+        make_consistent: bool = False,
+    ):
+        # 1. 기존 Isaac Lab의 랜덤화 함수 호출 (실제 물리 적용)
+        # 이 함수는 내부적으로 재질을 생성하고 할당합니다.
+        # 이 클래스 인스턴스를 함수 내부에서 접근하기 어렵다면, 
+        # mdp.randomize_rigid_body_material 로직을 직접 구현하여 값을 가로채야 합니다.
+        
+        # (간소화를 위해 직접 구현 로직의 핵심만 가져와 값을 저장하는 방식 예시)
+        if env_ids is None:
+            env_ids = torch.arange(env.num_envs, device=env.device)
+            
+        # 2. 랜덤 값 직접 샘플링 (저장을 위해)
+        num_samples = len(env_ids)
+        
+        # Static Friction 샘플링
+        s_range = torch.tensor(static_friction_range, device=env.device)
+        static_fric = torch.rand(num_samples, device=env.device) * (s_range[1] - s_range[0]) + s_range[0]
+        
+        # Dynamic Friction 샘플링
+        d_range = torch.tensor(dynamic_friction_range, device=env.device)
+        dynamic_fric = torch.rand(num_samples, device=env.device) * (d_range[1] - d_range[0]) + d_range[0]
+        
+        if make_consistent:
+            dynamic_fric = torch.min(static_fric, dynamic_fric)
+            
+        # 3. Env 변수에 저장 (이것이 핵심)
+        # 환경 클래스에 미리 self.friction_coeffs = torch.zeros(...) 를 선언해두세요.
+        if not hasattr(env, "friction_coeffs"):
+            env.friction_coeffs = torch.zeros(env.num_envs, 2, device=env.device)
+            
+        env.friction_coeffs[env_ids, 0] = static_fric
+        env.friction_coeffs[env_ids, 1] = dynamic_fric
+        
+        # 4. 실제 시뮬레이션에 적용
+        # asset 가져오기
+        asset = env.scene[asset_cfg.name]
+        
+        # PhysX View를 통해 재질 속성 설정
+        # (주의: 기존 material 구조를 유지하려면 get_material_properties로 읽은 뒤 수정해서 set 해야 함)
+        current_materials = asset.root_physx_view.get_material_properties()
+        
+        # 특정 환경들의 모든 Shape에 대해 마찰력 덮어쓰기
+        # shape: (num_envs, num_shapes, 3)
+        # env_ids에 해당하는 행의 0번(static), 1번(dynamic) 컬럼 업데이트
+        # 여기서는 단순화를 위해 모든 shape에 동일 마찰력 적용 가정
+        for i, env_id in enumerate(env_ids):
+            current_materials[env_id, :, 0] = static_fric[i]
+            current_materials[env_id, :, 1] = dynamic_fric[i]
+            
+        asset.root_physx_view.set_material_properties(current_materials, env_ids)
