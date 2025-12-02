@@ -53,7 +53,7 @@
         <visual>
             <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/base_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/base_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="black">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -79,7 +79,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/hip_L_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/hip_L_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -105,7 +105,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/hip_R_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/hip_R_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -131,7 +131,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/thigh_L_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/thigh_L_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="">
                 <color rgba="1 1 1 1"/>
@@ -157,7 +157,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/thigh_R_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/thigh_R_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="">
                 <color rgba="1 1 1 1"/>
@@ -183,7 +183,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/calf_L_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/calf_L_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -209,7 +209,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/calf_R_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/calf_R_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -227,7 +227,7 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="../meshes/wheel_L_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/wheel_L_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
@@ -252,7 +252,7 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="../meshes/wheel_R_Link.STL"/>
+                <mesh filename="package://goat_description/meshes/wheel_R_Link.stl" scale="1 1 1"/>
             </geometry>
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
