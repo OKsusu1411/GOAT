@@ -55,35 +55,32 @@ class GOATPDStandEnv(GOATBaseEnv):
         if self.task_curriculum_level == "balancing":
             # Domain randomization (initial pose)
             root_state = self._robot.data.default_root_state[env_ids].clone()
-            root_state[:, 2] = 0.35 + torch.rand(len(env_ids), device=self.device) * 0.1
-            root_state[:, 3:7] = random_orientation(len(env_ids), self.device)
+            root_state[:, 2] = 0.7 + torch.rand(len(env_ids), device=self.device) * 0.1
+            # root_state[:, 3:7] = self.get_curriculum_quaternions(len(env_ids), self.device)
 
-            limits = self.joint_limits[env_ids]
-            joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
-            joint_vel = torch.randn_like(joint_pos) * 0.1
+            # limits = self.joint_limits[env_ids]
+            # joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
+            # joint_vel = torch.randn_like(joint_pos) * 0.1
         
         elif self.task_curriculum_level == "recovery":
             # Domain randomization (initial pose)
             root_state = self._robot.data.default_root_state[env_ids].clone()
-            root_state[:, 2] = 0.7 + torch.rand(len(env_ids), device=self.device) * 0.1
-            root_state[:, 3:7] = random_orientation(len(env_ids), self.device)
+            root_state[:, 2] = 0.35 + torch.rand(len(env_ids), device=self.device) * 0.1
+            root_state[:, 3:7] = self.get_curriculum_quaternions(len(env_ids), self.device)
 
             limits = self.joint_limits[env_ids]
             joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
             joint_vel = torch.randn_like(joint_pos) * 0.1
 
         # Domain randomization (terrain friction)
-        self.cfg.terrain = self.cfg.terrain.replace(
-            physics_material=self.cfg.terrain.physics_material.replace(
-                sim_utils.RigidBodyMaterialCfg(
-                    static_friction=0.7,
-                    dynamic_friction=0.5,
-                    restitution=0.0
-            ),
-            debug_vis=False)
-        )
+        material_property = self._robot.root_physx_view.get_material_properties()
+        material_property[env_ids, :, 0] = static_fric.unsqueeze(1)
+        material_property[env_ids, :, 1] = dynamic_fric.unsqueeze(1)
+        material_property[env_ids, :, 2] = restitution.unsqueeze(1)
+        
 
         # Publish to simulator
+        self._robot.root_physx_view.set_material_properties(material_property, env_ids)
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         self._robot.write_root_state_to_sim()
@@ -106,7 +103,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         joint_pos = self._robot.data.joint_pos
         joint_vel = self._robot.data.joint_vel
 
-        # Domain randomization (sensor noise)
+        # Domain randomization (sensor noise)set_material_properties
         joint_pos_noise = self.joint_pos_noise_per(self.DR_curriculum_level)
         joint_vel_noise = self.joint_vel_noise_per(self.DR_curriculum_level)
         self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
@@ -169,7 +166,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         return {"policy": self.observation, "value": self.state}
     
     def _get_rewards(self) -> torch.Tensor:
-        
+        # make scheduler
         return torch.zeros((self.num_envs, 1), dtype=torch.float32, device=self.device)
     
     def _get_dones(self): 
@@ -192,99 +189,80 @@ class GOATPDStandEnv(GOATBaseEnv):
 
     def get_curriculum_quaternions(
         self,
-        num_envs: int,
-        current_level: int,
-        total_levels: int,
-        max_angle_rad: float = torch.pi,
-        device: str = "cuda"
+        num_envs: int
     ) -> torch.Tensor:
         """
-        커리큘럼 레벨에 따라 선형적으로 증가하는 회전 각도를 가진 랜덤 쿼터니언을 반환합니다.
+        Random quaternion for base link pose
 
         Args:
             num_envs (int): 생성할 환경(쿼터니언)의 개수
-            current_level (int): 현재 커리큘럼 레벨 (0부터 total_levels-1 까지)
-            total_levels (int): 전체 레벨 수 (기본값: 5)
-            max_angle_rad (float): 마지막 레벨에서의 최대 회전 각도 (라디안, 기본값: pi)
-            device (str): 텐서가 생성될 디바이스
 
         Returns:
             torch.Tensor: 생성된 쿼터니언 (N, 4) - (w, x, y, z) 형식
         """
-        # Level clipping
-        if current_level >= total_levels:
-            current_level = total_levels - 1
         
-        level_scale = current_level / (total_levels - 1)
-        current_angle_limit = max_angle_rad * level_scale
+        level_scale = self.DR_curriculum_level / (self.total_DR_curriculum_level - 1)
+        current_angle_limit = torch.pi * level_scale
         random_angles = torch.rand(num_envs, device=self.device) * current_angle_limit
 
-        # 4. 회전 축(Axis) 랜덤 샘플링
-        # 3차원 공간의 랜덤 벡터 생성 후 정규화
-        random_axes = torch.randn(num_envs, 3, device=device)
+        random_axes = torch.randn(num_envs, 3, device=self.device)
         random_axes = normalize(random_axes)
 
-        # 5. Axis-Angle을 쿼터니언으로 변환
-        # 제공된 math.py의 quat_from_angle_axis 함수 사용
         quaternions = quat_from_angle_axis(random_angles, random_axes)
 
         return quaternions
 
-    def randomize_and_log_friction(
-        self,
-        env: GOATBaseEnv,
-        env_ids: torch.Tensor | None,
-        asset_cfg: SceneEntityCfg,
-        static_friction_range: tuple[float, float],
-        dynamic_friction_range: tuple[float, float],
-        restitution_range: tuple[float, float],
-        make_consistent: bool = False,
-    ):
-        # 1. 기존 Isaac Lab의 랜덤화 함수 호출 (실제 물리 적용)
-        # 이 함수는 내부적으로 재질을 생성하고 할당합니다.
-        # 이 클래스 인스턴스를 함수 내부에서 접근하기 어렵다면, 
-        # mdp.randomize_rigid_body_material 로직을 직접 구현하여 값을 가로채야 합니다.
-        
-        # (간소화를 위해 직접 구현 로직의 핵심만 가져와 값을 저장하는 방식 예시)
-        if env_ids is None:
-            env_ids = torch.arange(env.num_envs, device=env.device)
+    # def get_curriculum_friction(
+    #     env: GOATBaseEnv,
+    #     env_ids: torch.Tensor | None,
+    #     asset_cfg: SceneEntityCfg,
+    #     static_friction_range: tuple[float, float],
+    #     dynamic_friction_range: tuple[float, float],
+    #     restitution_range: tuple[float, float],
+    #     make_consistent: bool = False,
+    #     ):
+    #     # 1. 기존 Isaac Lab의 랜덤화 함수 호출 (실제 물리 적용)
+    #     # 이 함수는 내부적으로 재질을 생성하고 할당합니다.
+    #     # 이 클래스 인스턴스를 함수 내부에서 접근하기 어렵다면, 
+    #     # mdp.randomize_rigid_body_material 로직을 직접 구현하여 값을 가로채야 합니다.
+
+    #     # (간소화를 위해 직접 구현 로직의 핵심만 가져와 값을 저장하는 방식 예시)
+    #     if env_ids is None:
+    #         env_ids = torch.arange(env.num_envs, device=env.device)
+
+    #     # Static Friction
+    #     s_range = torch.tensor(static_friction_range, device=env.device)
+    #     static_fric = torch.rand(len(env_ids), device=env.device) * (s_range[1] - s_range[0]) + s_range[0]
+
+    #     # Dynamic Friction
+    #     d_range = torch.tensor(dynamic_friction_range, device=env.device)
+    #     dynamic_fric = torch.rand(len(env_ids), device=env.device) * (d_range[1] - d_range[0]) + d_range[0]
+
+    #     if make_consistent:
+    #         dynamic_fric = torch.min(static_fric, dynamic_fric)
             
-        # 2. 랜덤 값 직접 샘플링 (저장을 위해)
-        num_samples = len(env_ids)
-        
-        # Static Friction 샘플링
-        s_range = torch.tensor(static_friction_range, device=env.device)
-        static_fric = torch.rand(num_samples, device=env.device) * (s_range[1] - s_range[0]) + s_range[0]
-        
-        # Dynamic Friction 샘플링
-        d_range = torch.tensor(dynamic_friction_range, device=env.device)
-        dynamic_fric = torch.rand(num_samples, device=env.device) * (d_range[1] - d_range[0]) + d_range[0]
-        
-        if make_consistent:
-            dynamic_fric = torch.min(static_fric, dynamic_fric)
+    #     # 3. Env 변수에 저장 (이것이 핵심)
+    #     # 환경 클래스에 미리 self.friction_coeffs = torch.zeros(...) 를 선언해두세요.
+    #     if not hasattr(env, "friction_coeffs"):
+    #         env.friction_coeffs = torch.zeros(env.num_envs, 2, device=env.device)
             
-        # 3. Env 변수에 저장 (이것이 핵심)
-        # 환경 클래스에 미리 self.friction_coeffs = torch.zeros(...) 를 선언해두세요.
-        if not hasattr(env, "friction_coeffs"):
-            env.friction_coeffs = torch.zeros(env.num_envs, 2, device=env.device)
+    #     env.friction_coeffs[env_ids, 0] = static_fric
+    #     env.friction_coeffs[env_ids, 1] = dynamic_fric
+
+    #     # 4. 실제 시뮬레이션에 적용
+    #     # asset 가져오기
+    #     asset = env.scene[asset_cfg.name]
+
+    #     # PhysX View를 통해 재질 속성 설정
+    #     # (주의: 기존 material 구조를 유지하려면 get_material_properties로 읽은 뒤 수정해서 set 해야 함)
+    #     current_materials = asset.root_physx_view.get_material_properties()
+
+    #     # 특정 환경들의 모든 Shape에 대해 마찰력 덮어쓰기
+    #     # shape: (num_envs, num_shapes, 3)
+    #     # env_ids에 해당하는 행의 0번(static), 1번(dynamic) 컬럼 업데이트
+    #     # 여기서는 단순화를 위해 모든 shape에 동일 마찰력 적용 가정
+    #     for i, env_id in enumerate(env_ids):
+    #         current_materials[env_id, :, 0] = static_fric[i]
+    #         current_materials[env_id, :, 1] = dynamic_fric[i]
             
-        env.friction_coeffs[env_ids, 0] = static_fric
-        env.friction_coeffs[env_ids, 1] = dynamic_fric
-        
-        # 4. 실제 시뮬레이션에 적용
-        # asset 가져오기
-        asset = env.scene[asset_cfg.name]
-        
-        # PhysX View를 통해 재질 속성 설정
-        # (주의: 기존 material 구조를 유지하려면 get_material_properties로 읽은 뒤 수정해서 set 해야 함)
-        current_materials = asset.root_physx_view.get_material_properties()
-        
-        # 특정 환경들의 모든 Shape에 대해 마찰력 덮어쓰기
-        # shape: (num_envs, num_shapes, 3)
-        # env_ids에 해당하는 행의 0번(static), 1번(dynamic) 컬럼 업데이트
-        # 여기서는 단순화를 위해 모든 shape에 동일 마찰력 적용 가정
-        for i, env_id in enumerate(env_ids):
-            current_materials[env_id, :, 0] = static_fric[i]
-            current_materials[env_id, :, 1] = dynamic_fric[i]
-            
-        asset.root_physx_view.set_material_properties(current_materials, env_ids)
+    #     asset.root_physx_view.set_material_properties(current_materials, env_ids)
