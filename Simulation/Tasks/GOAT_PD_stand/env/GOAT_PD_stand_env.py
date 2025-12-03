@@ -19,17 +19,19 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # Curriculum level initialization
         self.DR_curriculum_level = 0
-        self.task_curriculum_level = cfg.total_task_curriculum_level[0]
+        self.task_curriculum_level = 0
+        self.total_task_curriculum_level = cfg.total_task_curriculum_level
         self.total_DR_curriculum_level = cfg.total_DR_curriculum_level - 1
 
         # Noise curriculum (linear schedular)
-        self.base_acceleration_noise_per = torch.linspace(start=0, end=cfg.max_base_acceleration_noise_per, steps=self.total_DR_curriculum_level)
-        self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=self.total_DR_curriculum_level)
-        self.gravity_vector_noise_per = torch.linspace(start=0, end=cfg.max_gravity_vector_noise_per, steps=self.total_DR_curriculum_level)
-        self.base_quaternion_noise_per = torch.linspace(start=0, end=cfg.max_base_quaternion_noise_per, steps=self.total_DR_curriculum_level)
-        self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=self.total_DR_curriculum_level)
-        self.joint_vel_noise_per = torch.linspace(start=0, end=cfg.max_joint_vel_noise_per, steps=self.total_DR_curriculum_level)
-        self.terrain_friction_random_per = torch.linspace(start=0, end=cfg.max_terrain_friction_random_per, steps=self.total_DR_curriculum_level)
+        self.base_acceleration_noise_per = torch.linspace(start=0, end=cfg.max_base_acceleration_noise_per, steps=cfg.total_DR_curriculum_level)
+        self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=cfg.total_DR_curriculum_level)
+        self.gravity_vector_noise_per = torch.linspace(start=0, end=cfg.max_gravity_vector_noise_per, steps=cfg.total_DR_curriculum_level)
+        self.base_quaternion_noise_per = torch.linspace(start=0, end=cfg.max_base_quaternion_noise_per, steps=cfg.total_DR_curriculum_level)
+        self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=cfg.total_DR_curriculum_level)
+        self.joint_vel_noise_per = torch.linspace(start=0, end=cfg.max_joint_vel_noise_per, steps=cfg.total_DR_curriculum_level)
+        self.terrain_friction_random_per = torch.linspace(start=0, end=cfg.max_terrain_friction_random_per, steps=cfg.total_DR_curriculum_level)
+        self.terrain_restitution_random_per = torch.linspace(start=0, end=cfg.max_terrain_restitution_random_per, steps=cfg.total_DR_curriculum_level)
 
         # Space initialization
         self.observation = torch.zeros((self.num_envs, self.cfg.observation_space), dtype=torch.float32, device=self.device)
@@ -50,23 +52,22 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.torque_limits = self._robot.data.joint_effort_limits
 
     def _reset_idx(self, env_ids: torch.Tensor):
-        # TODO: curriculum scheduler만들기
         
-        if self.task_curriculum_level == "balancing":
+        if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
             # Domain randomization (initial pose)
             root_state = self._robot.data.default_root_state[env_ids].clone()
             root_state[:, 2] = 0.7 + torch.rand(len(env_ids), device=self.device) * 0.1
-            # root_state[:, 3:7] = self.get_curriculum_quaternions(len(env_ids), self.device)
+            # root_state[:, 3:7] = self._get_curriculum_quaternions(len(env_ids), self.device)
 
             # limits = self.joint_limits[env_ids]
             # joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
             # joint_vel = torch.randn_like(joint_pos) * 0.1
         
-        elif self.task_curriculum_level == "recovery":
+        elif self.total_task_curriculum_level[self.task_curriculum_level] == "recovery":
             # Domain randomization (initial pose)
             root_state = self._robot.data.default_root_state[env_ids].clone()
             root_state[:, 2] = 0.35 + torch.rand(len(env_ids), device=self.device) * 0.1
-            root_state[:, 3:7] = self.get_curriculum_quaternions(len(env_ids), self.device)
+            root_state[:, 3:7] = self._get_curriculum_quaternions(len(env_ids), self.device)
 
             limits = self.joint_limits[env_ids]
             joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
@@ -74,10 +75,12 @@ class GOATPDStandEnv(GOATBaseEnv):
 
         # Domain randomization (terrain friction)
         material_property = self._robot.root_physx_view.get_material_properties()
-        material_property[env_ids, :, 0] = static_fric.unsqueeze(1)
-        material_property[env_ids, :, 1] = dynamic_fric.unsqueeze(1)
-        material_property[env_ids, :, 2] = restitution.unsqueeze(1)
-        
+        friction_noise = self.terrain_friction_random_per(self.DR_curriculum_level)
+        restitution_noise = self.terrain_restitution_random_per(self.DR_curriculum_level)
+
+        material_property[env_ids, :, 0] = self._add_gaussian_noise(self.cfg.default_terrain_static_friction, friction_noise).unsqueeze(1)
+        material_property[env_ids, :, 1] = self._add_gaussian_noise(self.cfg.default_terrain_dynamic_friction, friction_noise).unsqueeze(1)
+        material_property[env_ids, :, 2] = self._add_gaussian_noise(self.cfg.default_terrain_restitution, restitution_noise).unsqueeze(1)
 
         # Publish to simulator
         self._robot.root_physx_view.set_material_properties(material_property, env_ids)
@@ -161,16 +164,37 @@ class GOATPDStandEnv(GOATBaseEnv):
                                           self.contact_force,
                                           self.friction_coefficient),
                                           dim=1)
-
+        
         self.state = torch.cat((self.observation, self.privileged_info), dim=1)
         return {"policy": self.observation, "value": self.state}
     
     def _get_rewards(self) -> torch.Tensor:
-        # make scheduler
+        # Scheduler
+        self.success_rate       # TODO: success rate랑 threshold 정의해야됨
+
+        # Domain randomization curriculum
+        if self.success_rate > self.threshold:
+            self.DR_curriculum_level += 1
+            if self.DR_curriculum_level > self.total_DR_curriculum_level:
+                self.task_curriculum_level += 1         # I'm on the next level
+                self.DR_curriculum_level = 0
+
+        elif self.success_rate < self.threshold:
+            self.DR_curriculum_level -= 1
+            if self.DR_curriculum_level < 0:
+                self.task_curriculum_level -= 1         # Downgrade
+                self.DR_curriculum_level = 0
+
+        # Task curriculum
+        if self.task_curriculum_level > len(self.total_task_curriculum_level) - 1:
+            self.task_curriculum_level
+        elif self.task_curriculum_level < 0:
+            None
+
         return torch.zeros((self.num_envs, 1), dtype=torch.float32, device=self.device)
     
     def _get_dones(self): 
-        terminated = False          # Continous task
+        terminated = False          # Continuous task
         truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1
         return terminated, truncated
     
@@ -187,7 +211,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         return noisy_data
 
-    def get_curriculum_quaternions(
+    def _get_curriculum_quaternions(
         self,
         num_envs: int
     ) -> torch.Tensor:

@@ -44,8 +44,10 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     max_joint_vel_noise_per = 150
 
     max_terrain_friction_random_per = 50        # Friction randomization (%)
+    max_terrain_restitution_random_per = 50     # Restitution randomization (%)
     default_terrain_static_friction = 0.7       # Default frictions
-    default_terrain_dynamic_friction = 0.5 
+    default_terrain_dynamic_friction = 0.5
+    default_terrain_restitution = 0.4
 
     max_episode_length = 5*60/sim_dt            # 5 minutes for truncated    
 
@@ -73,7 +75,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=default_terrain_static_friction,
             dynamic_friction=default_terrain_dynamic_friction,
-            restitution=0.0                                 # Collision
+            restitution=default_terrain_restitution         # Collision
         ),
         debug_vis=False
     )
