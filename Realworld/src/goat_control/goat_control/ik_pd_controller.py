@@ -12,26 +12,47 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 
+
+# URDF 순서 기준 조인트 이름 (index 0~7)
+# 0:hip_L, 1:hip_R, 2:thigh_L, 3:thigh_R, 4:knee_L, 5:knee_R, 6:wheel_L, 7:wheel_R
+JOINT_NAME_LIST = [
+    "hip_L", "hip_R",
+    "thigh_L", "thigh_R",
+    "knee_L", "knee_R",
+    "wheel_L", "wheel_R",
+]
+
 # --- MG Motor scale ---
 ANGLE_LSB_TO_DEG = 0.001      # multi_turn_raw, single_turn_raw : 0.001 deg/LSB
 SPEED_LSB_TO_DPS = 0.001      # speed_dps : 0.001 deg/s per LSB (모터 매뉴얼 기준)
 
 # Controller frequency (Hz)
-DEFAULT_CONTROL_FREQUENCY = 200.0  # 100 Hz
+DEFAULT_CONTROL_FREQUENCY = 200.0  # 200 Hz (기본 제어 주파수)
 
 # --- Robot size ---
 NUM_JOINTS = 8         # 전체 모터 개수
-MOTOR_INDEX = 1      # 테스트용으로 제어할 관절 index (0~7)
+MOTOR_INDEX = 1        # 테스트용으로 제어할 관절 index (0~7)
 
 # 테스트용 기본 목표각 (deg) – 지금은 여기만 수정해서 인가
-JOINT_DEGREE = 0    # degrees
+JOINT_DEGREE = 0       # degrees
+# KI_KP_ratio = 0.75
+KI_KP_ratio = 0.8
+# 휠 목표 속도 (deg/s)
+DEFAULT_WHEEL_KP = 0.03
+# DEFAULT_WHEEL_KI = KI_KP_ratio * DEFAULT_WHEEL_KP
+DEFAULT_WHEEL_KI = 0.0
+L_WHEEL_TARGET = 10.0  # 왼쪽 휠 목표 속도 (deg/s)
+R_WHEEL_TARGET = 10.0  # 오른쪽 휠 목표 속도 (deg/s)
+INT_TORQUE_LIMIT = 3.0  # 토크 중 적분항으로 허용할 최대 기여
+# INT_LIMIT = INT_TORQUE_LIMIT / DEFAULT_WHEEL_KI
 
 # --- Default gains (scalar) ---
 DEFAULT_KP = 0.0061         # Proportional gain
+\
 DEFAULT_KD = 0.055          # Derivative gain
 
 # LPF / Torque 기본값 (scalar)
-DEFAULT_LPF_ALPHA = 0.8     # Low-pass filter alpha
+DEFAULT_LPF_ALPHA = 1       # Low-pass filter alpha
 DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 
 # # --- Per-joint default lists ---> degree ---
@@ -41,29 +62,30 @@ DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 # DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
 
 # --- Per-joint default lists ---> rad ---
-DEFAULT_KP_LIST           = [0.01, 0.0156,   0.016,   0.016,   0.028,   0.028, 0.000061, 0.000061]
-DEFAULT_KD_LIST           = [0.005,  0.001,  0.0001,  0.0001,  0.001,  0.0001,    0.055,    0.055]
-DEFAULT_LPF_ALPHA_LIST    = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
-DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
+DEFAULT_KP_LIST           = [0.0, 0.70,  0.0,   0.516,  0.0,   2.4, 0.0,    0.0]
+DEFAULT_KD_LIST           = [0.05,  0.0004,  0.01,  0.0002,  0.1,  0.0001,    0.0,    0.0]
+DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
+DEFAULT_MAX_TORQUE_LIST   = [  0.0,    4.5,     0.0,     4.5,    0.0,    4.5,     0.0,    0.0]
 
-# 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINT_DEGREE, 나머지 0
-DEFAULT_TARGET_ANGLES_DEG = [-30.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
+# 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
+# DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
+DEFAULT_TARGET_ANGLES_DEG = [0.0, 30.0, 0.0, -20.0, 0.0, -20.0, 0.0, 0.0]
+# DEFAULT_TARGET_ANGLES_DEG = [0.0 for _ in range(NUM_JOINTS)]
 #DEFAULT_TARGET_ANGLES_DEG[MOTOR_INDEX] = JOINT_DEGREE
-
+     
 # Topic names
 MOTOR_STATES_TOPIC = 'motor_states'
 TARGET_ANGLES_TOPIC = 'target_joint_angles'
 TORQUE_COMMANDS_TOPIC = 'torque_commands'
 
-# Controller frequency
-CONTROLLER_TIMER_PERIOD = 0.01  # seconds (100Hz)
 
 
 class PDController(Node):
     """
-    Multiple-joint PD controller (deg 단위 사용).
-    MotorStates에서 0.001 deg/LSB 값을 받아서 degree로 계산하고,
-    기본적으로 여러 관절을 동시에 제어하는 PD 컨트롤러.
+    Multiple-joint PD controller.
+    MotorStates에서 0.001 deg/LSB 값을 받아서 rad로 변환하여 내부 계산을 수행하고,
+    플롯/로그 출력 시에는 degree/deg/s 단위로 변환해서 확인 가능하게 하는
+    여러 관절 동시 제어용 PD 컨트롤러.
 
     - 모터별로 서로 다른 Kp, Kd, LPF alpha, Max torque를 사용할 수 있게
       kp_gains, kd_gains, lpf_alpha_list, max_torque_list 파라미터 지원.
@@ -80,7 +102,7 @@ class PDController(Node):
 
         # --- Gains / Limits ---
 
-        # 1) Kp, Kd (per-joint)
+        # 1) Kp, Kd (per-joint)  - 내부 계산은 rad 기준 gain
         kp_param = self.declare_parameter('kp_gains', DEFAULT_KP_LIST).value
         kd_param = self.declare_parameter('kd_gains', DEFAULT_KD_LIST).value
 
@@ -101,21 +123,52 @@ class PDController(Node):
         self.target_angles_deg = self._build_array_param(
             target_param, 0.0, 'target angles (deg)'
         )
+        self.target_angles_rad = np.deg2rad(self.target_angles_deg)
+    
 
         self.get_logger().info(f"Kp gains per joint        : {self.kp.tolist()}")
         self.get_logger().info(f"Kd gains per joint        : {self.kd.tolist()}")
         self.get_logger().info(f"LPF alpha per joint       : {self.lpf_alpha.tolist()}")
         self.get_logger().info(f"Max torque per joint      : {self.max_torque.tolist()}")
-        self.get_logger().info(f"Initial target angles (deg): {self.target_angles_deg.tolist()}")
+        # 로그는 사람이 보기 좋게 deg로 변환해서 출력
+        self.get_logger().info(
+            f"Initial target angles (deg): {np.rad2deg(self.target_angles_rad).tolist()}"
+        )
 
-        # --- State Variables (deg 기준) ---
-        self.current_angles_deg = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [deg]
-        self.current_velocities_deg_s = np.zeros(NUM_JOINTS)  # 현재 관절 각속도 [deg/s]
-
+        # --- State Variables (rad 기준, 내부 계산용) ---
+        self.current_angles_rad = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [rad]
+        self.current_velocities_rad_s = np.zeros(NUM_JOINTS)  # 현재 관절 각속도 [rad/s]
+        self.current_angles_deg = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [rad] (변수명 유지)
+        self.current_velocities_deg_s = np.zeros(NUM_JOINTS)  # 현재 관절 각속도 [rad/s] (변수명 유지)
+    
         self.previous_torque_command = np.zeros(NUM_JOINTS)
 
         self.last_angle_update_time = None
-        self.last_angles_deg = None
+        self.last_angles_deg = None  # [rad]
+
+        # wheel control variables
+        self.wheel_indices = [6, 7]
+
+        # 기본값을 "0 리스트"가 아니라 "None"으로 두고, 없을 때만 default_scalar 적용
+        wheel_kp_param = self.declare_parameter('wheel_kp_gains', None).value
+        wheel_ki_param = self.declare_parameter('wheel_ki_gains', None).value
+
+        if wheel_kp_param is None:
+            self.wheel_kp = np.full(NUM_JOINTS, DEFAULT_WHEEL_KP, dtype=float)
+        else:
+            self.wheel_kp = self._build_array_param(wheel_kp_param, DEFAULT_WHEEL_KP, 'wheel Kp')
+
+        if wheel_ki_param is None:
+            self.wheel_ki = np.full(NUM_JOINTS, DEFAULT_WHEEL_KI, dtype=float)
+        else:
+            self.wheel_ki = self._build_array_param(wheel_ki_param, DEFAULT_WHEEL_KI, 'wheel Ki')
+
+        self.wheel_int = np.zeros(NUM_JOINTS, dtype=float)
+        self.wheel_speed_ref = np.zeros(NUM_JOINTS, dtype=float)  # rad/s
+        # 실험용: 코드 내부에서 휠 목표 속도 설정 (deg/s → rad/s)
+        self.wheel_speed_ref[6] = np.deg2rad(L_WHEEL_TARGET)
+        self.wheel_speed_ref[7] = np.deg2rad(R_WHEEL_TARGET)
+
 
         # --- ROS2 Communications ---
         self.create_subscription(MotorStates, MOTOR_STATES_TOPIC, self.motor_states_callback, 100)
@@ -131,16 +184,22 @@ class PDController(Node):
 
         # --- Logging buffers for plotting (single joint) ---
         self.time_log = []
-        self.current_angle_log = []
-        self.target_angle_log = []
+        self.current_angle_log = []   # [deg]로 변환해서 저장
+        self.target_angle_log = []    # [deg]로 변환해서 저장
         self.torque_log = []
-        self.velocity_log = []
+        self.velocity_log = []        # [deg/s]로 변환해서 저장
         self.start_time = None  # 첫 샘플 시간 (0초 기준 맞추기용)
 
         # --- Logging buffers for all joints ---
-        self.current_angles_all_log = []   # shape: [N, NUM_JOINTS]
-        self.velocities_all_log = []       # shape: [N, NUM_JOINTS]
+        self.current_angles_all_log = []   # shape: [N, NUM_JOINTS], [deg]로 변환해서 저장
+        self.velocities_all_log = []       # shape: [N, NUM_JOINTS], [deg/s]로 변환해서 저장
         self.torques_all_log = []          # shape: [N, NUM_JOINTS]
+
+        # --- Wheel logging (speed tracking) ---
+        # 휠 속도 추종 그래프용 로그 (rad/s → 저장 시 deg/s로 변환)
+        self.wheel_time_log = []
+        self.wheel_speed_meas_log = []   # shape: [N, 2]
+        self.wheel_speed_ref_log  = []   # shape: [N, 2]
 
     # === 내부 유틸: 리스트 파라미터 → 길이 NUM_JOINTS인 np.array ===
     def _build_array_param(self, value, default_scalar, name: str) -> np.ndarray:
@@ -184,89 +243,116 @@ class PDController(Node):
     def motor_states_callback(self, msg: MotorStates):
         """
         MotorStates로부터 multi_turn_raw / speed_dps 를 받아 현재 각도/각속도를 업데이트.
-        - multi_turn_raw : 0.001 deg / LSB  → ANGLE_LSB_TO_DEG 배율로 [deg]
-        - speed_dps      : 0.001 deg/s /LSB → SPEED_LSB_TO_DPS 배율로 [deg/s]
+        - multi_turn_raw : 0.001 deg / LSB  → ANGLE_LSB_TO_DEG 배율로 [deg] 계산 후 rad로 변환
+        - speed_dps      : 0.001 deg/s /LSB → SPEED_LSB_TO_DPS 배율로 [deg/s] 계산 후 rad/s로 변환
         """
         now = self.get_clock().now()
 
-        # === 1) 각도 [deg] ===
-        try:
-            raw_angles_deg = np.array(msg.multi_turn_raw, dtype=float) * ANGLE_LSB_TO_DEG
-        except Exception:
-            raw_angles_deg = np.zeros(NUM_JOINTS)
+        # === 1) 각도 [deg] 및 [rad] ===
+        raw_angles_deg = np.array(msg.multi_turn_raw, dtype=float) * ANGLE_LSB_TO_DEG
 
-        if len(raw_angles_deg) != NUM_JOINTS:
-            self.get_logger().warn(
-                f"Received {len(raw_angles_deg)} joint states, expected {NUM_JOINTS}. Padding/truncating."
+        if raw_angles_deg.size != NUM_JOINTS:
+            self.get_logger().error(
+                f"motor_states_callback: received {raw_angles_deg.size} angles, "
+                f"expected {NUM_JOINTS}."
             )
-            padded_angles = np.zeros(NUM_JOINTS)
-            num_to_copy = min(len(raw_angles_deg), NUM_JOINTS)
-            padded_angles[:num_to_copy] = raw_angles_deg[:num_to_copy]
-            self.current_angles_deg = np.deg2rad(padded_angles)
-        else:
-            self.current_angles_deg = np.deg2rad(raw_angles_deg)
+            return
 
-        # === 2) 각속도 [deg/s] ===
-        try:
-            raw_speed_deg_s = np.array(msg.speed_dps, dtype=float) * SPEED_LSB_TO_DPS
-        except Exception:
-            raw_speed_deg_s = None
+        # degree / rad 둘 다 유지
+        self.current_angles_deg = raw_angles_deg
+        self.current_angles_rad = np.deg2rad(raw_angles_deg)
 
-        if raw_speed_deg_s is not None and raw_speed_deg_s.size > 0:
-            if len(raw_speed_deg_s) != NUM_JOINTS:
-                self.get_logger().warn(
-                    f"Received {len(raw_speed_deg_s)} speed_dps, expected {NUM_JOINTS}. Padding/truncating."
-                )
-                padded_speed = np.zeros(NUM_JOINTS)
-                num_to_copy = min(len(raw_speed_deg_s), NUM_JOINTS)
-                padded_speed[:num_to_copy] = raw_speed_deg_s[:num_to_copy]
-                self.current_velocities_deg_s = np.deg2rad(padded_speed)
-            else:
-                self.current_velocities_deg_s = np.deg2rad(raw_speed_deg_s)
-        else:
-            self.get_logger().warn("No valid speed_dps in MotorStates, keep previous velocities.")
+        # === 2) 각속도 [deg/s] 및 [rad/s] ===
+        raw_speed_deg_s = np.array(msg.speed_dps, dtype=float) * SPEED_LSB_TO_DPS
 
-        self.last_angles_deg = self.current_angles_deg.copy()
+        if raw_speed_deg_s.size != NUM_JOINTS:
+            self.get_logger().error(
+                f"motor_states_callback: received {raw_speed_deg_s.size} speeds, "
+                f"expected {NUM_JOINTS}."
+            )
+            return
+
+        self.current_velocities_deg_s = raw_speed_deg_s
+        self.current_velocities_rad_s = np.deg2rad(raw_speed_deg_s)
+
+        # 마지막 업데이트 기록
+        self.last_angles_rad = self.current_angles_rad.copy()
         self.last_angle_update_time = now
 
     def target_angles_callback(self, msg: Float32MultiArray):
         """
-        목표 각도 업데이트 (deg 단위).
-        - msg.data 길이가 NUM_JOINTS와 다르면 padding/truncating.
+        목표 각도 업데이트 (토픽 입력은 deg 단위).
+        - msg.data 길이가 NUM_JOINTS와 다르면 에러만 찍고 무시.
         - 파라미터로 설정한 초기 target_angles_deg 위에 override.
         """
-        arr = np.array(msg.data, dtype=float).flatten()
-        if arr.size != NUM_JOINTS:
-            self.get_logger().warn(
-                f"Received {arr.size} target angles, expected {NUM_JOINTS}. Padding/truncating."
-            )
-            padded = np.zeros(NUM_JOINTS, dtype=float)
-            num_to_copy = min(arr.size, NUM_JOINTS)
-            padded[:num_to_copy] = arr[:num_to_copy]
-            self.target_angles_deg = np.deg2rad(padded)
-        else:
-            self.target_angles_deg = np.deg2rad(arr)
+        arr_deg = np.array(msg.data, dtype=float).flatten()
 
+        if arr_deg.size != NUM_JOINTS:
+            self.get_logger().error(
+                f"Received {arr_deg.size} target angles, expected {NUM_JOINTS}. "
+                "Target angles update ignored."
+            )
+            return
+
+        # deg / rad 둘 다 유지
+        self.target_angles_deg = arr_deg
+        self.target_angles_rad = np.deg2rad(arr_deg)
+
+        # 로그는 degree 기준으로 출력
         self.get_logger().info(f"Updated target angles (deg): {self.target_angles_deg.tolist()}")
 
     def controller_callback(self):
         """
-        PD 제어 루프 (deg 단위).
-        - position_error: [deg]
-        - velocity_error: [deg/s]
+        PD 제어 루프 (내부 계산은 rad / rad/s 단위).
+        - position_error: [rad]
+        - velocity_error: [rad/s]
         - torque: [arb. unit] (실제 튜닝에 따라 해석)
         모터별 Kp, Kd, LPF, Max torque가 벡터로 적용됨.
         """
-        position_error = self.target_angles_deg - self.current_angles_deg
-        velocity_error = -self.current_velocities_deg_s * 0.001
+        # dt 계산
+        now = self.get_clock().now().nanoseconds / 1e9
+        if not hasattr(self, "last_ctrl_time"):
+            dt = 1.0 / self.control_frequency
+        else:
+            dt = now - self.last_ctrl_time
+        self.last_ctrl_time = now
 
-        # --- PD Control Law (모터별 개별 gain) ---
-        raw_torque_command = self.kp * position_error + self.kd * velocity_error
+        # --- 인덱스 분리: 0~5 = 관절, 6~7 = 휠 ---
+        joint_indices = [i for i in range(NUM_JOINTS) if i not in self.wheel_indices]
+
+        # --- PD Control Law (모터별 개별 gain, 내부 rad 기준) ---
+        position_error = self.target_angles_rad - self.current_angles_rad   # [rad]
+        velocity_error = -self.current_velocities_rad_s * 0.001             # [rad/s] 스케일 조정용
+
+        # 전체 토크 벡터 초기화
+        raw_torque_command = np.zeros(NUM_JOINTS, dtype=float)
+
+        # 1) 조인트(0~5)에는 PD 제어만 적용
+        raw_torque_command[joint_indices] = (
+            self.kp[joint_indices] * position_error[joint_indices]
+            + self.kd[joint_indices] * velocity_error[joint_indices]
+        )
+
+        # 2) 휠(6,7)은 속도 PI 제어 (rad/s 기준)로 덮어쓰기
+        for idx in self.wheel_indices:
+            omega_ref = self.wheel_speed_ref[idx]               # [rad/s]
+            omega_meas = self.current_velocities_rad_s[idx]     # [rad/s]
+
+            e_w = omega_ref - omega_meas
+
+            self.wheel_int[idx] += e_w * dt
+            # self.wheel_int[idx] = np.clip(self.wheel_int[idx], -INT_LIMIT, INT_LIMIT)
+            tau_pi = self.wheel_kp[idx] * e_w + self.wheel_ki[idx] * self.wheel_int[idx]
+            raw_torque_command[idx] = tau_pi
 
         # 디버깅용 로그 (필요 없으면 주석)
-        self.get_logger().info(f"position_error(deg): {position_error}")
-        self.get_logger().info(f"velocity_error(deg/s): {velocity_error}")
-        self.get_logger().info(f"raw_torque_command: {raw_torque_command}")
+        # 로그는 사람이 보기 편하게 deg / deg/s로 변환해서 출력
+        pos_err_deg = np.rad2deg(position_error)
+        vel_err_deg_s = np.rad2deg(velocity_error)
+        self.get_logger().info(f"position_error(deg): {np.round(pos_err_deg, 4)}")
+        self.get_logger().info(f"velocity_error(deg/s): {np.round(vel_err_deg_s, 4)}")
+        self.get_logger().info(f"raw_torque_command: {np.round(raw_torque_command, 4)}")
+
 
         # --- Low-Pass Filter (LPF) ---
         filtered_torque = (
@@ -282,7 +368,6 @@ class PDController(Node):
 
         # 다음 LPF를 위해 저장
         self.previous_torque_command = torque_output
-        
 
         # --- Logging for plotting ---
         now = self.get_clock().now().nanoseconds / 1e9  # [s]
@@ -290,17 +375,25 @@ class PDController(Node):
             self.start_time = now
         t = now - self.start_time
 
-        # 단일 조인트(MOTOR_INDEX) 로그
+        # 단일 조인트(MOTOR_INDEX) 로그 (deg, deg/s로 변환해서 저장)
         self.time_log.append(t)
-        self.current_angle_log.append(float(self.current_angles_deg[MOTOR_INDEX]))
-        self.target_angle_log.append(float(self.target_angles_deg[MOTOR_INDEX]))
+        self.current_angle_log.append(float(self.current_angles_deg[MOTOR_INDEX]))          # [deg]
+        self.target_angle_log.append(float(self.target_angles_deg[MOTOR_INDEX]))            # [deg]
         self.torque_log.append(float(torque_output[MOTOR_INDEX]))
-        self.velocity_log.append(float(self.current_velocities_deg_s[MOTOR_INDEX]))
+        self.velocity_log.append(float(self.current_velocities_deg_s[MOTOR_INDEX]))         # [deg/s]
 
-        # 전체 조인트 로그
-        self.current_angles_all_log.append(self.current_angles_deg.copy())
-        self.velocities_all_log.append(self.current_velocities_deg_s.copy())
+        # 전체 조인트 로그 (deg, deg/s로 변환해서 저장)
+        self.current_angles_all_log.append(self.current_angles_deg.copy())                  # [deg]
+        self.velocities_all_log.append(self.current_velocities_deg_s.copy())                # [deg/s]
         self.torques_all_log.append(torque_output.copy())
+
+        # 휠 속도 추종 로그
+        wheel_meas = self.current_velocities_deg_s[self.wheel_indices].copy()               # [deg/s]
+        wheel_ref  = np.rad2deg(self.wheel_speed_ref[self.wheel_indices].copy())            # [deg/s]
+
+        self.wheel_time_log.append(t)
+        self.wheel_speed_meas_log.append(wheel_meas)    # [deg/s]
+        self.wheel_speed_ref_log.append(wheel_ref)      # [deg/s]
 
         # --- Publish Command ---
         torque_msg = Float32MultiArray()
@@ -316,22 +409,26 @@ class PDController(Node):
         # self.torque_publisher.publish(torque_msg)
 
         self.get_logger().info(f"Published Torque Command: {torque_msg.data}")
-       
+
     def save_plots(self):
-        """노드 종료 시 누적된 로그를 바탕으로 그래프 PNG로 저장 (0~7초 구간만)"""
+        """노드 종료 시 누적된 로그를 바탕으로 그래프 PNG로 저장 (0~100초 구간만, 단위는 deg / deg/s)
+        - 단일 조인트 플롯은 제거
+        - 왼쪽/오른쪽 관절(0~5번) 각각에 대해 Angle / Velocity / Torque 플롯 생성
+        - 휠 속도 추종 그래프는 기존처럼 유지
+        """
         if not self.time_log:
             self.get_logger().warn("No logged data, skip plotting.")
             return
 
         t   = np.array(self.time_log)
-        cur = np.array(self.current_angle_log)
-        tgt = np.array(self.target_angle_log)
+        cur = np.array(self.current_angle_log)   # [deg]
+        tgt = np.array(self.target_angle_log)    # [deg]
         tq  = np.array(self.torque_log)
-        vel = np.array(self.velocity_log)
+        vel = np.array(self.velocity_log)        # [deg/s]
 
-        # all-joint 로그 (없으면 None)
-        angles_all = np.array(self.current_angles_all_log) if self.current_angles_all_log else None
-        vel_all    = np.array(self.velocities_all_log)     if self.velocities_all_log     else None
+        # all-joint 로그 (없으면 None) - 이미 deg/deg/s 단위로 저장됨
+        angles_all = np.array(self.current_angles_all_log) if self.current_angles_all_log else None  # [deg]
+        vel_all    = np.array(self.velocities_all_log)     if self.velocities_all_log     else None  # [deg/s]
         tq_all     = np.array(self.torques_all_log)        if self.torques_all_log        else None
 
         # ===== 1) n초까지만 사용 =====
@@ -346,11 +443,11 @@ class PDController(Node):
             vel = vel[mask]
 
             if angles_all is not None and angles_all.shape[0] == mask.size:
-                angles_all = np.rad2deg(angles_all[mask])
-                vel_all    = np.rad2deg(vel_all[mask])
+                angles_all = angles_all[mask]
+                vel_all    = vel_all[mask]
                 tq_all     = tq_all[mask]
         else:
-            self.get_logger().warn("No samples within 7s window, plotting all data.")
+            self.get_logger().warn("No samples within 100s window, plotting all data.")
 
         t_end = float(np.max(t))
         view_end = min(max_time, t_end)
@@ -369,81 +466,24 @@ class PDController(Node):
         dpi_val = 200
         figsize_val = (10, 4)
 
-        # ====================== 기존: 단일 조인트(MOTOR_INDEX) 그래프 3개 ======================
+        angle_left_path = angle_right_path = None
+        vel_left_path = vel_right_path = None
+        torque_left_path = torque_right_path = None
 
-        # -------- 1) 각도 그래프 (single joint) --------
-        fig, ax = plt.subplots(figsize=figsize_val)
-        ax.plot(t, cur, label="current_angle_deg")
-        ax.plot(t, tgt, label="target_angle_deg", linestyle="--")
-
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Angle [deg]")
-        ax.set_title(f"Joint {MOTOR_INDEX} Angle Tracking\n(Kp={self.kp[MOTOR_INDEX]:.4f}, Kd={self.kd[MOTOR_INDEX]:.4f})")
-
-        ax.set_xlim(0.0, view_end)
-        ax.set_xticks(major_ticks)               # 굵은 눈금 + 라벨
-        ax.set_xticks(minor_ticks, minor=True)   # 가는 눈금 (라벨 없음)
-
-        ax.grid(True, which='major', linewidth=0.8)
-        ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
-
-        ax.legend()
-        fig.tight_layout()
-        angle_path = os.path.join(out_dir, f"pd_angle_{stamp}.png")
-        fig.savefig(angle_path, dpi=dpi_val)
-        plt.close(fig)
-
-        # -------- 2) 속도 그래프 (single joint) --------
-        fig, ax = plt.subplots(figsize=figsize_val)
-        ax.plot(t, vel, label="velocity_deg_s")
-
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Velocity [deg/s]")
-        ax.set_title(f"Joint {MOTOR_INDEX} Velocity\n(Kp={self.kp[MOTOR_INDEX]:.4f}, Kd={self.kd[MOTOR_INDEX]:.4f})")
-
-        ax.set_xlim(0.0, view_end)
-        ax.set_xticks(major_ticks)
-        ax.set_xticks(minor_ticks, minor=True)
-
-        ax.grid(True, which='major', linewidth=0.8)
-        ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
-
-        fig.tight_layout()
-        vel_path = os.path.join(out_dir, f"pd_velocity_{stamp}.png")
-        fig.savefig(vel_path, dpi=dpi_val)
-        plt.close(fig)
-
-        # -------- 3) 토크 그래프 (single joint) --------
-        fig, ax = plt.subplots(figsize=figsize_val)
-        ax.plot(t, tq, label="torque_command")
-
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Torque [arb. unit]")
-        ax.set_title(f"Joint {MOTOR_INDEX} Torque Command\n(Kp={self.kp[MOTOR_INDEX]:.4f}, Kd={self.kd[MOTOR_INDEX]:.4f})")
-
-        ax.set_xlim(0.0, view_end)
-        ax.set_xticks(major_ticks)
-        ax.set_xticks(minor_ticks, minor=True)
-
-        ax.grid(True, which='major', linewidth=0.8)
-        ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
-
-        fig.tight_layout()
-        torque_path = os.path.join(out_dir, f"pd_torque_{stamp}.png")
-        fig.savefig(torque_path, dpi=dpi_val)
-        plt.close(fig)
-
-        # ====================== 추가: 조인트 6개(0~5) 그래프 3개 ======================
+        # ====================== 왼/오른쪽 관절(0~5번) 그래프 ======================
         if angles_all is not None and vel_all is not None and tq_all is not None:
-            joints_to_plot = range(min(6, NUM_JOINTS))  # 0~5까지 6개 조인트
+            # URDF 순서 기준:
+            # 0:hip_L, 1:hip_R, 2:thigh_L, 3:thigh_R, 4:knee_L, 5:knee_R, 6:wheel_L, 7:wheel_R
+            left_indices  = [0, 2, 4]  # hip_L, thigh_L, knee_L
+            right_indices = [1, 3, 5]  # hip_R, thigh_R, knee_R
 
-            # ---- A) 각도 (all joints) ----
+            # ---- A-L) 왼쪽 각도 ----
             fig, ax = plt.subplots(figsize=figsize_val)
-            for j in joints_to_plot:
-                ax.plot(t, angles_all[:, j], label=f"joint{j}")
+            for j in left_indices:
+                ax.plot(t, angles_all[:, j], label=JOINT_NAME_LIST[j])
             ax.set_xlabel("Time [s]")
             ax.set_ylabel("Angle [deg]")
-            ax.set_title("Joint 0-5 Angle (deg)")
+            ax.set_title("Left leg joint angles (deg)")
             ax.set_xlim(0.0, view_end)
             ax.set_xticks(major_ticks)
             ax.set_xticks(minor_ticks, minor=True)
@@ -451,17 +491,35 @@ class PDController(Node):
             ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
             ax.legend()
             fig.tight_layout()
-            angle_all_path = os.path.join(out_dir, f"pd_angle_all_{stamp}.png")
-            fig.savefig(angle_all_path, dpi=dpi_val)
+            angle_left_path = os.path.join(out_dir, f"pd_angle_left_{stamp}.png")
+            fig.savefig(angle_left_path, dpi=dpi_val)
             plt.close(fig)
 
-            # ---- B) 속도 (all joints) ----
+            # ---- A-R) 오른쪽 각도 ----
             fig, ax = plt.subplots(figsize=figsize_val)
-            for j in joints_to_plot:
-                ax.plot(t, vel_all[:, j], label=f"joint{j}")
+            for j in right_indices:
+                ax.plot(t, angles_all[:, j], label=JOINT_NAME_LIST[j])
+            ax.set_xlabel("Time [s]")
+            ax.set_ylabel("Angle [deg]")
+            ax.set_title("Right leg joint angles (deg)")
+            ax.set_xlim(0.0, view_end)
+            ax.set_xticks(major_ticks)
+            ax.set_xticks(minor_ticks, minor=True)
+            ax.grid(True, which='major', linewidth=0.8)
+            ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
+            ax.legend()
+            fig.tight_layout()
+            angle_right_path = os.path.join(out_dir, f"pd_angle_right_{stamp}.png")
+            fig.savefig(angle_right_path, dpi=dpi_val)
+            plt.close(fig)
+
+            # ---- B-L) 왼쪽 속도 ----
+            fig, ax = plt.subplots(figsize=figsize_val)
+            for j in left_indices:
+                ax.plot(t, vel_all[:, j], label=JOINT_NAME_LIST[j])
             ax.set_xlabel("Time [s]")
             ax.set_ylabel("Velocity [deg/s]")
-            ax.set_title("Joint 0-5 Velocity (deg/s)")
+            ax.set_title("Left leg joint velocities (deg/s)")
             ax.set_xlim(0.0, view_end)
             ax.set_xticks(major_ticks)
             ax.set_xticks(minor_ticks, minor=True)
@@ -469,17 +527,17 @@ class PDController(Node):
             ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
             ax.legend()
             fig.tight_layout()
-            vel_all_path = os.path.join(out_dir, f"pd_velocity_all_{stamp}.png")
-            fig.savefig(vel_all_path, dpi=dpi_val)
+            vel_left_path = os.path.join(out_dir, f"pd_velocity_left_{stamp}.png")
+            fig.savefig(vel_left_path, dpi=dpi_val)
             plt.close(fig)
 
-            # ---- C) 토크 (all joints) ----
+            # ---- B-R) 오른쪽 속도 ----
             fig, ax = plt.subplots(figsize=figsize_val)
-            for j in joints_to_plot:
-                ax.plot(t, tq_all[:, j], label=f"joint{j}")
+            for j in right_indices:
+                ax.plot(t, vel_all[:, j], label=JOINT_NAME_LIST[j])
             ax.set_xlabel("Time [s]")
-            ax.set_ylabel("Torque [arb. unit]")
-            ax.set_title("Joint 0-5 Torque Command")
+            ax.set_ylabel("Velocity [deg/s]")
+            ax.set_title("Right leg joint velocities (deg/s)")
             ax.set_xlim(0.0, view_end)
             ax.set_xticks(major_ticks)
             ax.set_xticks(minor_ticks, minor=True)
@@ -487,23 +545,90 @@ class PDController(Node):
             ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
             ax.legend()
             fig.tight_layout()
-            torque_all_path = os.path.join(out_dir, f"pd_torque_all_{stamp}.png")
-            fig.savefig(torque_all_path, dpi=dpi_val)
+            vel_right_path = os.path.join(out_dir, f"pd_velocity_right_{stamp}.png")
+            fig.savefig(vel_right_path, dpi=dpi_val)
+            plt.close(fig)
+
+            # ---- C-L) 왼쪽 토크 ----
+            fig, ax = plt.subplots(figsize=figsize_val)
+            for j in left_indices:
+                ax.plot(t, tq_all[:, j], label=JOINT_NAME_LIST[j])
+            ax.set_xlabel("Time [s]")
+            ax.set_ylabel("Torque [arb. unit]")
+            ax.set_title("Left leg joint torques")
+            ax.set_xlim(0.0, view_end)
+            ax.set_xticks(major_ticks)
+            ax.set_xticks(minor_ticks, minor=True)
+            ax.grid(True, which='major', linewidth=0.8)
+            ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
+            ax.legend()
+            fig.tight_layout()
+            torque_left_path = os.path.join(out_dir, f"pd_torque_left_{stamp}.png")
+            fig.savefig(torque_left_path, dpi=dpi_val)
+            plt.close(fig)
+
+            # ---- C-R) 오른쪽 토크 ----
+            fig, ax = plt.subplots(figsize=figsize_val)
+            for j in right_indices:
+                ax.plot(t, tq_all[:, j], label=JOINT_NAME_LIST[j])
+            ax.set_xlabel("Time [s]")
+            ax.set_ylabel("Torque [arb. unit]")
+            ax.set_title("Right leg joint torques")
+            ax.set_xlim(0.0, view_end)
+            ax.set_xticks(major_ticks)
+            ax.set_xticks(minor_ticks, minor=True)
+            ax.grid(True, which='major', linewidth=0.8)
+            ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
+            ax.legend()
+            fig.tight_layout()
+            torque_right_path = os.path.join(out_dir, f"pd_torque_right_{stamp}.png")
+            fig.savefig(torque_right_path, dpi=dpi_val)
             plt.close(fig)
 
             self.get_logger().info(
-                f"Saved ALL-JOINT PD plots:\n"
-                f"  angle_all   : {angle_all_path}\n"
-                f"  velocity_all: {vel_all_path}\n"
-                f"  torque_all  : {torque_all_path}"
+                "Saved LEFT/RIGHT leg PD plots:\n"
+                f"  angle_left   : {angle_left_path}\n"
+                f"  angle_right  : {angle_right_path}\n"
+                f"  vel_left     : {vel_left_path}\n"
+                f"  vel_right    : {vel_right_path}\n"
+                f"  torque_left  : {torque_left_path}\n"
+                f"  torque_right : {torque_right_path}"
             )
 
-        self.get_logger().info(
-            f"Saved PD plots:\n"
-            f"  angle   : {angle_path}\n"
-            f"  velocity: {vel_path}\n"
-            f"  torque  : {torque_path}"
-        )
+        # ====================== 휠 속도 추종 그래프 (기존 유지) ======================
+        wheel_speed_path = None
+        if self.wheel_time_log:
+            wt = np.array(self.wheel_time_log)
+            w_meas = np.array(self.wheel_speed_meas_log)  # [deg/s], shape [N, 2]
+            w_ref  = np.array(self.wheel_speed_ref_log)   # [deg/s], shape [N, 2]
+
+            mask_w = wt <= max_time
+            if np.any(mask_w):
+                wt = wt[mask_w]
+                w_meas = w_meas[mask_w]
+                w_ref  = w_ref[mask_w]
+
+            fig, ax = plt.subplots(figsize=figsize_val)
+            ax.plot(wt, w_meas[:, 0], label="wheel_L_meas_deg_s")
+            ax.plot(wt, w_ref[:, 0],  '--', label="wheel_L_ref_deg_s")
+            ax.plot(wt, w_meas[:, 1], label="wheel_R_meas_deg_s")
+            ax.plot(wt, w_ref[:, 1],  '--', label="wheel_R_ref_deg_s")
+
+            ax.set_xlabel("Time [s]")
+            ax.set_ylabel("Wheel speed [deg/s]")
+            ax.set_title("Wheel Speed Tracking (L/R)")
+            ax.set_xlim(0.0, view_end)
+            ax.set_xticks(major_ticks)
+            ax.set_xticks(minor_ticks, minor=True)
+            ax.grid(True, which='major', linewidth=0.8)
+            ax.grid(True, which='minor', linewidth=0.3, alpha=0.5)
+            ax.legend()
+            fig.tight_layout()
+            wheel_speed_path = os.path.join(out_dir, f"wheel_speed_{stamp}.png")
+            fig.savefig(wheel_speed_path, dpi=dpi_val)
+            plt.close(fig)
+
+            self.get_logger().info(f"Saved wheel speed plot: {wheel_speed_path}")
 
     def destroy_node(self):
         # 노드 종료시 플롯 저장
