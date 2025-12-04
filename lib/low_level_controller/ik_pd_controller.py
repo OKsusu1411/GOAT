@@ -46,7 +46,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),     # zero-G
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),     # zero-G
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True               # Fixed_base link

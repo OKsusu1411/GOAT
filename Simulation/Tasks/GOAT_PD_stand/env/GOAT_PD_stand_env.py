@@ -73,6 +73,8 @@ class GOATPDStandEnv(GOATBaseEnv):
             joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
             joint_vel = torch.randn_like(joint_pos) * 0.1
 
+        elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
+            
         # Domain randomization (terrain friction)
         material_property = self._robot.root_physx_view.get_material_properties()
         friction_noise = self.terrain_friction_random_per(self.DR_curriculum_level)
@@ -113,10 +115,10 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.joint_vel_noissy = self._add_gaussian_noise(joint_vel, joint_vel_noise)
 
         self.torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
-                                                            joint_vel=self.joint_vel_noissy,
-                                                            joint_pos_cmd=self.joint_pos_cmd,
-                                                            joint_limits=self.joint_limits,
-                                                            torque_limits=self.torque_limits)
+                                                             joint_vel=self.joint_vel_noissy,
+                                                             joint_pos_cmd=self.joint_pos_cmd,
+                                                             joint_limits=self.joint_limits,
+                                                             torque_limits=self.torque_limits)
         self._robot.set_joint_effort_target(self.torque_cmd)
         
         # TODO: wheel controller
@@ -142,7 +144,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2]
         self.contact_force      # TODO: add F/T sensor
         material_property = self._robot.root_physx_view.get_material_properties()
-        self.friction_coefficient = torch.Tensor([material_property[:,0, 0], material_property[:, 0, 1]], device=self.device)
+        self.friction_coefficient = torch.Tensor([material_property[:, 0, 0], material_property[:, 0, 1]], device=self.device)
 
         # Domain randomization (sensor noise)
         self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per(self.DR_curriculum_level))
@@ -189,9 +191,15 @@ class GOATPDStandEnv(GOATBaseEnv):
         if self.task_curriculum_level > len(self.total_task_curriculum_level) - 1:
             self.task_curriculum_level
         elif self.task_curriculum_level < 0:
-            None
+            self.task_curriculum_level = 0
+        
+        if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
+            
+        elif self.total_task_curriculum_level[self.task_curriculum_level] == "recovery":
 
-        return torch.zeros((self.num_envs, 1), dtype=torch.float32, device=self.device)
+        elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
+
+        return total_reward
     
     def _get_dones(self): 
         terminated = False          # Continuous task

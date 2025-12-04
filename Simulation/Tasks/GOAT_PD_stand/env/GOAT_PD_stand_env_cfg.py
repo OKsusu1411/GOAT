@@ -34,7 +34,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level
-    total_task_curriculum_level = ["balancing", "recovery"]
+    total_task_curriculum_level = ["balancing", "recovery", "random"]
 
     max_base_acceleration_noise_per = 10        # Noise percentage (%)
     max_base_angular_vel_noise_per = 20
@@ -51,8 +51,9 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     max_episode_length = 5*60/sim_dt            # 5 minutes for truncated    
 
-    ## ==================== Reward weight ==================== ##
-
+    ## ==================== Reward Shaping ==================== ##
+    target_height = 0.45
+    
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
