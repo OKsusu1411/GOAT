@@ -49,13 +49,13 @@ class RobotSceneCfg(InteractiveSceneCfg):
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),     # zero-G
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
-                    solver_velocity_iteration_count=0, fix_root_link=True               # Fixed_base link
+                    solver_velocity_iteration_count=0, fix_root_link=False               # Fixed_base link
               
                 )
             ),
 
             init_state=ArticulationCfg.InitialStateCfg(
-                pos=(0.0, 0.0, 1.5),
+                pos=(0.0, 0.0, 0.35),
                 joint_pos={
                     "hip_L_Joint": 0.0,
                     "hip_R_Joint": 0.0,

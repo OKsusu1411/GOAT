@@ -111,7 +111,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     
     count = 0
     curriculum_level = 0
-    total_episode = 200
+    total_episode = 2
     curriculum_episode = int(total_episode / cfg.total_DR_curriculum_level)
 
     # ---------- Environment Initialization ----------
