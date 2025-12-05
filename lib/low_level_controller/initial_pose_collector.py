@@ -118,7 +118,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     joint_limits = robot.data.joint_pos_limits
     default_joint_pos = robot.data.default_joint_pos.clone()
     default_joint_vel = robot.data.default_joint_vel.clone()
-    root_state = robot.data.default_root_state.clone()
+    root_state = robot.data.default_root_state.clone().expand(scene.num_envs, -1)
     zero_joint_efforts = torch.zeros(scene.num_envs, robot.num_joints, device=sim.device)
 
     collected_data = []
@@ -128,7 +128,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # -------------- Control loop --------------
     while simulation_app.is_running():
         
-        robot.set_joint_effort_target(zero_joint_efforts)
+        robot.set_joint_effort_target(target=zero_joint_efforts)
         robot.write_data_to_sim()
 
         # Simulation step
@@ -137,7 +137,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         scene.update(sim_dt)
 
         count += 1
-        print("progress: " + count)
+        print(f"progress: {count}")
 
         if count % curriculum_episode == 0:
             curriculum_level += 1
@@ -147,7 +147,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         # ================== Pose initialize sequence ================== #
         lower_limits = joint_limits[:, :, 0]
         upper_limits = joint_limits[:, :, 1]
-        random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
+        random_angle = lower_limits + torch.rand(scene.num_envs, robot.num_joints, device=sim.device) * (upper_limits - lower_limits)
 
         root_state[:, 3:7] = _get_curriculum_quaternions(cfg=cfg, level=curriculum_level,num_envs=scene.num_envs, device=sim.device)
         
