@@ -227,10 +227,10 @@ class GOATPDStandEnv(GOATBaseEnv):
         Random quaternion for base link pose
 
         Args:
-            num_envs (int): 생성할 환경(쿼터니언)의 개수
+            num_envs (int): number of parallel environments
 
         Returns:
-            torch.Tensor: 생성된 쿼터니언 (N, 4) - (w, x, y, z) 형식
+            torch.Tensor: Quaternion (N, 4) - (w, x, y, z) form
         """
         
         level_scale = self.DR_curriculum_level / (self.total_DR_curriculum_level - 1)
