@@ -34,7 +34,7 @@ class MotorStatePublisher(Node, CanMixin):
         self.channel    = self.declare_parameter('channel', 'can0').value
         self.interface  = self.declare_parameter('interface', 'socketcan').value
         self.num_motors = int(self.declare_parameter('num_motors', 8).value)
-        self.poll_hz    = float(self.declare_parameter('poll_hz', 100.0).value)
+        self.poll_hz    = float(self.declare_parameter('poll_hz', 200.0).value)
         # 각도 읽을 모터 인덱스(0-based) 집합
         self.single_turn_indices = set(self.declare_parameter('single_turn_indices', []).value)
         self.multi_turn_indices  = set(self.declare_parameter('multi_turn_indices', []).value)
