@@ -64,7 +64,11 @@ _build
 **/Realworld/log/
 **/Realworld/.vscode/
 **/Realworld/src/goat_control/pd_logs/
+
 **/Realworld/src/goat_description/.vscode/
 **/Realworld/src/goat_description/log/
+
+**/Realworld/src/goat_sysid/.vscode/
+**/Realworld/src/goat_sysid/log/
 
 
