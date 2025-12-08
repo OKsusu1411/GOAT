@@ -24,7 +24,7 @@ class TorqueConverter(Node, CanMixin):
         self.interface = self.declare_parameter('interface', 'socketcan').value   # CAN interface type
         # self.series = self.declare_parameter('series', 'MG').value
         self.num_motors = self.declare_parameter('num_motors', 8).value
-        self.control_frequency = self.declare_parameter('control_frequency', 100.0).value
+        self.control_frequency = self.declare_parameter('control_frequency', 200.0).value
         self.timeout_sec = self.declare_parameter('timeout_sec', 0.5).value
         self.scale = SCALE_A_PER_LSB  # Current scaling factor depending on motor series
 
