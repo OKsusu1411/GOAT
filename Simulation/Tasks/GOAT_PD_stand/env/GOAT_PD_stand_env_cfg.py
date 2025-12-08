@@ -5,6 +5,7 @@ import torch
 from isaaclab.sim import SimulationCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.actuators import DCMotorCfg
+from isaaclab.sensors import ContactSensorCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
@@ -69,7 +70,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     )
     
     # Terrain
-    terrain = TerrainImporterCfg(
+    terrain_importer_cfg = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="plane",
         env_spacing=3.0,
@@ -79,4 +80,10 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
             restitution=default_terrain_restitution         # Collision
         ),
         debug_vis=False
+    )
+
+    contact_sensor = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.wheel_*",
+        history_length=0,
+        update_period=0.0                       # Update every period
     )
