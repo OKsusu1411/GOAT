@@ -44,11 +44,10 @@ DEFAULT_WHEEL_KI = 0.0
 L_WHEEL_TARGET = 10.0  # 왼쪽 휠 목표 속도 (deg/s)
 R_WHEEL_TARGET = 10.0  # 오른쪽 휠 목표 속도 (deg/s)
 INT_TORQUE_LIMIT = 3.0  # 토크 중 적분항으로 허용할 최대 기여
-# INT_LIMIT = INT_TORQUE_LIMIT / DEFAULT_WHEEL_KI
+INT_LIMIT = INT_TORQUE_LIMIT / DEFAULT_WHEEL_KI if DEFAULT_WHEEL_KI != 0 else 0.0
 
 # --- Default gains (scalar) ---
 DEFAULT_KP = 0.0061         # Proportional gain
-\
 DEFAULT_KD = 0.055          # Derivative gain
 
 # LPF / Torque 기본값 (scalar)
@@ -62,14 +61,14 @@ DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 # DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
 
 # --- Per-joint default lists ---> rad ---
-DEFAULT_KP_LIST           = [0.0, 0.70,  0.0,   0.516,  0.0,   2.4, 0.0,    0.0]
+DEFAULT_KP_LIST           = [0.0, 0.001,  0.0,   0.102,  0.0,   2.4, 0.0,    0.0]
 DEFAULT_KD_LIST           = [0.05,  0.0004,  0.01,  0.0002,  0.1,  0.0001,    0.0,    0.0]
 DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
-DEFAULT_MAX_TORQUE_LIST   = [  0.0,    4.5,     0.0,     4.5,    0.0,    4.5,     0.0,    0.0]
+DEFAULT_MAX_TORQUE_LIST   = [  0.0,    0.0,     0.0,     4.5,    0.0,    0.0,     0.0,    0.0]
 
 # 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
 # DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
-DEFAULT_TARGET_ANGLES_DEG = [0.0, 30.0, 0.0, -20.0, 0.0, -20.0, 0.0, 0.0]
+DEFAULT_TARGET_ANGLES_DEG = [-90.0, 90.0, 0.0, -35.0, 50.0, -50.0, 0.0, 0.0]
 # DEFAULT_TARGET_ANGLES_DEG = [0.0 for _ in range(NUM_JOINTS)]
 #DEFAULT_TARGET_ANGLES_DEG[MOTOR_INDEX] = JOINT_DEGREE
      
@@ -322,7 +321,9 @@ class PDController(Node):
 
         # --- PD Control Law (모터별 개별 gain, 내부 rad 기준) ---
         position_error = self.target_angles_rad - self.current_angles_rad   # [rad]
-        velocity_error = -self.current_velocities_rad_s * 0.001             # [rad/s] 스케일 조정용
+        desired_vel_rad_s = np.zeros(NUM_JOINTS)   # 일단 0 가정
+        velocity_error = desired_vel_rad_s - self.current_velocities_rad_s
+        velocity_error *= 0.001  # 스케일 조절은 이 다음에
 
         # 전체 토크 벡터 초기화
         raw_torque_command = np.zeros(NUM_JOINTS, dtype=float)
@@ -341,7 +342,7 @@ class PDController(Node):
             e_w = omega_ref - omega_meas
 
             self.wheel_int[idx] += e_w * dt
-            # self.wheel_int[idx] = np.clip(self.wheel_int[idx], -INT_LIMIT, INT_LIMIT)
+            self.wheel_int[idx] = np.clip(self.wheel_int[idx], -INT_LIMIT, INT_LIMIT)
             tau_pi = self.wheel_kp[idx] * e_w + self.wheel_ki[idx] * self.wheel_int[idx]
             raw_torque_command[idx] = tau_pi
 
@@ -349,9 +350,10 @@ class PDController(Node):
         # 로그는 사람이 보기 편하게 deg / deg/s로 변환해서 출력
         pos_err_deg = np.rad2deg(position_error)
         vel_err_deg_s = np.rad2deg(velocity_error)
-        self.get_logger().info(f"position_error(deg): {np.round(pos_err_deg, 4)}")
-        self.get_logger().info(f"velocity_error(deg/s): {np.round(vel_err_deg_s, 4)}")
-        self.get_logger().info(f"raw_torque_command: {np.round(raw_torque_command, 4)}")
+        # self.get_logger().info_throttle(1.0, "...")
+        # self.get_logger().info(f"position_error(deg): {np.round(pos_err_deg, 4)}")
+        # self.get_logger().info(f"velocity_error(deg/s): {np.round(vel_err_deg_s, 4)}")
+        # self.get_logger().info(f"raw_torque_command: {np.round(raw_torque_command, 4)}")
 
 
         # --- Low-Pass Filter (LPF) ---
