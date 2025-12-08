@@ -2,11 +2,10 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from .utils.can_mixin import CanMixin
-
 import struct
 import time
 import can
-import numpy as np
+import numpy as np  # ← 마찰 토크 파라미터 처리를 위해 추가
 
 # Current-to-LSB conversion ratio per motor series 
 # SCALE_A_PER_LSB = {
@@ -28,10 +27,13 @@ class TorqueConverter(Node, CanMixin):
         self.control_frequency = self.declare_parameter('control_frequency', 100.0).value
         self.timeout_sec = self.declare_parameter('timeout_sec', 0.5).value
         self.scale = SCALE_A_PER_LSB  # Current scaling factor depending on motor series
-              # ===== 토크 리미트 (단위: msg에 들어오는 토크 단위, 예: [Nm]) =====
+
+        # ===== 토크 리미트 (단위: msg에 들어오는 토크 단위, 예: [Nm]) =====
         self.max_joint_torque = 4.5  # 힙/니(0~5) 한계
         self.max_wheel_torque = 4.5  # 휠(6,7) 한계
-        # ===== 마찰 토크 (단위: Nm) =====
+
+        # ===== 조인트별 Coulomb 마찰 토크 feedforward [N·m] =====
+        # 측정한 최소 구동 토크 값 사용
         default_friction = [0.13, 0.14, 0.15, 0.13, 0.32, 0.35, 0.06, 0.08]
         friction_param = self.declare_parameter('friction_tau', default_friction).value
         arr = np.array(friction_param, dtype=float).flatten()
@@ -42,10 +44,13 @@ class TorqueConverter(Node, CanMixin):
         elif arr.size > self.num_motors:
             arr = arr[:self.num_motors]
         self.friction_tau = arr  # shape: [num_motors]
+
         # Open CAN bus
         # NOTE: The user must activate the CAN interface before running this node.
         # Example: sudo ip link set can0 up type can bitrate 1000000
-        self.get_logger().info(f"Attempting to open CAN bus on channel '{self.channel}' with interface '{self.interface}'...")
+        self.get_logger().info(
+            f"Attempting to open CAN bus on channel '{self.channel}' with interface '{self.interface}'..."
+        )
         try:
             self.bus = can.interface.Bus(channel=self.channel, interface=self.interface)
         except Exception as e:
@@ -54,8 +59,10 @@ class TorqueConverter(Node, CanMixin):
 
         # Motor initialization: clear errors and enable drive
         for node_id in range(1, self.num_motors + 1):
-            self._send_command_expect(node_id, 0x9B)      # CLEAR ERRORS (0x9B)
-            response = self._send_command_expect(node_id, 0x88)  # RUN (Enable motor, 0x88)
+            # CLEAR ERRORS (0x9B)
+            self._send_command_expect(node_id, 0x9B)
+            # RUN (Enable motor, 0x88)
+            response = self._send_command_expect(node_id, 0x88)
             if response:
                 self.get_logger().info(f"Motor {node_id:02d}: RUN command acknowledged.")
             else:
@@ -81,40 +88,59 @@ class TorqueConverter(Node, CanMixin):
 
     def joint_torque2current(self, torque):
         if torque != 0.0:
-            current = torque/0.2616  # for joint
-
+            current = torque / 0.2616  # for joint
         else:
             current = 0.0
         return current
 
     def wheel_torque2current(self, torque):
         if torque != 0.0:
-            current = torque/0.2478  # for wheel
+            current = torque / 0.2478  # for wheel
         else:
             current = 0.0
         return current
 
+    def _send_command_expect(self, node_id: int, cmd_byte: int, payload7: bytes = b"\x00" * 7):
+        """Send a specific CAN command and wait briefly for a response."""
+        tx_id = 0x140 + node_id
+        data = bytes([cmd_byte]) + payload7
+        msg = can.Message(arbitration_id=tx_id, data=data, is_extended_id=False)
+        try:
+            self.bus.send(msg)
+        except can.CanError as e:
+            self.get_logger().error(f"CAN send failed for ID {node_id}: {e}")
+            return None
+
+        # Wait up to 0.3 seconds for a response frame
+        end_time = time.time() + 0.3
+        while time.time() < end_time:
+            rx_msg = self.bus.recv(timeout=0.1)
+            if rx_msg is None:
+                continue
+            if rx_msg.arbitration_id == tx_id and len(rx_msg.data) == 8 and rx_msg.data[0] == cmd_byte:
+                return rx_msg
+        return None
+        
     def command_callback(self, msg: Float32MultiArray):
         """Callback when a new torque command message is received."""
         commands_raw = list(msg.data)
 
-        # ==== 1) 조인트별 Coulomb 마찰 feedforward 추가 ====
-        commands_with_fric = []
+        # ==== 1) Coulomb 마찰 토크 feedforward 적용 ====
+        #    τ_eff = τ_cmd + τ_fric * sign(τ_cmd)
+        tau_with_fric = []
         for i, tau in enumerate(commands_raw):
-            # (1) 입력 토크가 거의 0이면 그냥 0 유지 (마찰도 안 줌)
             if abs(tau) < 1e-6:
+                # 매우 작은 명령은 그냥 0 취급 (마찰도 안 넣음)
                 tau_eff = 0.0
             else:
-                # (2) 해당 모터의 마찰 토크를 같은 방향으로 더해줌
+                tau_eff = tau
                 if i < len(self.friction_tau):
-                    tau_eff = tau + self.friction_tau[i] * np.sign(tau)
-                else:
-                    tau_eff = tau
-            commands_with_fric.append(tau_eff)
+                    tau_eff += self.friction_tau[i] * (1.0 if tau > 0.0 else -1.0)
+            tau_with_fric.append(tau_eff)
 
         # ==== 2) 토크 리미트 적용 (메시지 단위에서 잘라주기) ====
         limited_raw = []
-        for i, tau in enumerate(commands_with_fric):
+        for i, tau in enumerate(tau_with_fric):
             # 힙/니(0~5)는 joint 토크 리미트, 휠(6,7)은 wheel 토크 리미트
             if i in (6, 7):
                 limit = self.max_wheel_torque
@@ -132,6 +158,7 @@ class TorqueConverter(Node, CanMixin):
         commands_raw = limited_raw
 
         # ==== 3) 토크 -> 전류 변환 ====
+        # hip/knee(0~5)는 joint_torque2current, wheel(6,7)은 wheel_torque2current
         commands = [
             self.joint_torque2current(commands_raw[i]) if i not in (6, 7)
             else self.wheel_torque2current(commands_raw[i])
@@ -162,7 +189,10 @@ class TorqueConverter(Node, CanMixin):
         if self.got_command and (now - self.last_command_time > self.timeout_sec):
             if not self.safe_mode:
                 # Enter safe mode once
-                self.get_logger().warn(f"No command received for {self.timeout_sec:.2f} seconds. Entering safe mode (sending zero torque).")
+                self.get_logger().warn(
+                    f"No command received for {self.timeout_sec:.2f} seconds. "
+                    "Entering safe mode (sending zero torque)."
+                )
                 self.current_commands = [0.0] * self.num_motors
                 self.safe_mode = True
 
@@ -170,18 +200,8 @@ class TorqueConverter(Node, CanMixin):
         for i in range(self.num_motors):
             node_id = i + 1  # Motor ID (index 0 → ID1, 1 → ID2, ...)
             amps = self.current_commands[i]
-            # Example (manual frame composition, replaced by CanMixin):
-            # iq = int(round(amps / self.scale))
-            # iq = max(min(iq, 2048), -2048)
-            # iq_bytes = struct.pack("<h", iq)
-            # data = bytes([0xA1]) + b"\x00\x00\x00" + iq_bytes + b"\x00\x00"
-            # msg = can.Message(arbitration_id=(0x140 + node_id), data=data, is_extended_id=False)
-            # try:
-            #     self.bus.send(msg)
-            # except can.CanError as e:
-            #     self.get_logger().error(f"Failed to send torque to motor {node_id}: {e}")
 
-            # Use CanMixin-provided torque command and TX/RX logic
+            # CanMixin 제공 함수로 토크 모드 명령 전송
             resp = self.cmd_torque_mode(node_id, amps, timeout=0.02)
             if not resp:
                 self._log().debug(f"[CAN] No response to torque cmd (id={node_id}, A={amps:.3f})")
@@ -195,7 +215,7 @@ class TorqueConverter(Node, CanMixin):
     def destroy_node(self):
         """Cleanup CAN bus when shutting down the node."""
         self.get_logger().info("Shutting down CAN bus.")
-        if self.bus:
+        if hasattr(self, "bus") and self.bus:
             self.bus.shutdown()
         super().destroy_node()
 
