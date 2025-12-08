@@ -2,9 +2,11 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from .utils.can_mixin import CanMixin
+
 import struct
 import time
 import can
+import numpy as np
 
 # Current-to-LSB conversion ratio per motor series 
 # SCALE_A_PER_LSB = {
@@ -29,7 +31,17 @@ class TorqueConverter(Node, CanMixin):
               # ===== 토크 리미트 (단위: msg에 들어오는 토크 단위, 예: [Nm]) =====
         self.max_joint_torque = 4.5  # 힙/니(0~5) 한계
         self.max_wheel_torque = 4.5  # 휠(6,7) 한계
-  
+        # ===== 마찰 토크 (단위: Nm) =====
+        default_friction = [0.13, 0.14, 0.15, 0.13, 0.32, 0.35, 0.06, 0.08]
+        friction_param = self.declare_parameter('friction_tau', default_friction).value
+        arr = np.array(friction_param, dtype=float).flatten()
+        if arr.size < self.num_motors:
+            tmp = np.zeros(self.num_motors, dtype=float)
+            tmp[:arr.size] = arr
+            arr = tmp
+        elif arr.size > self.num_motors:
+            arr = arr[:self.num_motors]
+        self.friction_tau = arr  # shape: [num_motors]
         # Open CAN bus
         # NOTE: The user must activate the CAN interface before running this node.
         # Example: sudo ip link set can0 up type can bitrate 1000000
@@ -82,34 +94,27 @@ class TorqueConverter(Node, CanMixin):
             current = 0.0
         return current
 
-    def _send_command_expect(self, node_id: int, cmd_byte: int, payload7: bytes = b"\x00" * 7):
-        """Send a specific CAN command and wait briefly for a response."""
-        tx_id = 0x140 + node_id
-        data = bytes([cmd_byte]) + payload7
-        msg = can.Message(arbitration_id=tx_id, data=data, is_extended_id=False)
-        try:
-            self.bus.send(msg)
-        except can.CanError as e:
-            self.get_logger().error(f"CAN send failed for ID {node_id}: {e}")
-            return None
-
-        # Wait up to 0.3 seconds for a response frame
-        end_time = time.time() + 0.3
-        while time.time() < end_time:
-            rx_msg = self.bus.recv(timeout=0.1)
-            if rx_msg is None:
-                continue
-            if rx_msg.arbitration_id == tx_id and len(rx_msg.data) == 8 and rx_msg.data[0] == cmd_byte:
-                return rx_msg
-        return None
-        
     def command_callback(self, msg: Float32MultiArray):
         """Callback when a new torque command message is received."""
         commands_raw = list(msg.data)
 
-        # ==== 1) 토크 리미트 적용 (메시지 단위에서 잘라주기) ====
-        limited_raw = []
+        # ==== 1) 조인트별 Coulomb 마찰 feedforward 추가 ====
+        commands_with_fric = []
         for i, tau in enumerate(commands_raw):
+            # (1) 입력 토크가 거의 0이면 그냥 0 유지 (마찰도 안 줌)
+            if abs(tau) < 1e-6:
+                tau_eff = 0.0
+            else:
+                # (2) 해당 모터의 마찰 토크를 같은 방향으로 더해줌
+                if i < len(self.friction_tau):
+                    tau_eff = tau + self.friction_tau[i] * np.sign(tau)
+                else:
+                    tau_eff = tau
+            commands_with_fric.append(tau_eff)
+
+        # ==== 2) 토크 리미트 적용 (메시지 단위에서 잘라주기) ====
+        limited_raw = []
+        for i, tau in enumerate(commands_with_fric):
             # 힙/니(0~5)는 joint 토크 리미트, 휠(6,7)은 wheel 토크 리미트
             if i in (6, 7):
                 limit = self.max_wheel_torque
@@ -126,21 +131,20 @@ class TorqueConverter(Node, CanMixin):
 
         commands_raw = limited_raw
 
-        # ==== 2) 토크 -> 전류 변환 ====
-        # hip/knee(0~5)는 joint_torque2current, wheel(6,7)은 wheel_torque2current
+        # ==== 3) 토크 -> 전류 변환 ====
         commands = [
             self.joint_torque2current(commands_raw[i]) if i not in (6, 7)
             else self.wheel_torque2current(commands_raw[i])
             for i in range(len(commands_raw))
         ]
 
-        # ==== 3) 모터 개수에 맞게 padding / truncate ====
+        # ==== 4) 모터 개수에 맞게 padding / truncate ====
         if len(commands) < self.num_motors:
             commands.extend([0.0] * (self.num_motors - len(commands)))
         elif len(commands) > self.num_motors:
             commands = commands[:self.num_motors]
 
-        # ==== 4) 상태 업데이트 ====
+        # ==== 5) 상태 업데이트 ====
         self.current_commands = commands
         self.last_command_time = time.time()
         self.got_command = True
