@@ -61,10 +61,10 @@ DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 # DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
 
 # --- Per-joint default lists ---> rad --- hip = 30   thigh = 45
-DEFAULT_KP_LIST           = [0.3, 0.01, 0.27,   0.27,  0.0,   2.4, 0.0,    0.0]
-DEFAULT_KD_LIST           = [0.01,  0.0,  0.01,  0.001,  0.1,  0.0001,    0.0,    0.0]
+DEFAULT_KP_LIST           = [0.3, 0.01, 0.27,   0.27,  0.0,   1.4, 0.0,    0.0]
+DEFAULT_KD_LIST           = [0.01,  0.0,  0.01,  0.001,  0.1,  0.0,    0.0,    0.0]
 DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
-DEFAULT_MAX_TORQUE_LIST   = [  4.5,    0.0,     0.0,     0.0,    0.0,    0.0,     0.0,    0.0]
+DEFAULT_MAX_TORQUE_LIST   = [0.0,0.0,     0.0,     0.0,    0.0,    4.5,0.0,    0.0]
 
 # 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
 # DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
@@ -188,7 +188,6 @@ class PDController(Node):
         self.torque_log = []
         self.velocity_log = []        # [deg/s]로 변환해서 저장
         self.start_time = None  # 첫 샘플 시간 (0초 기준 맞추기용)
-        self.logging_started = False  # 토크가 실제로 나오기 시작한 이후부터 로깅 ### <<< 추가
 
         # --- Logging buffers for all joints ---
         self.current_angles_all_log = []   # shape: [N, NUM_JOINTS], [deg]로 변환해서 저장
@@ -371,27 +370,6 @@ class PDController(Node):
 
         # 다음 LPF를 위해 저장
         self.previous_torque_command = torque_output
-
-        # === 여기서부터: 토크가 의미 있게 나오기 전까지는 로깅 안 함 ===
-        TORQUE_START_THRESH = 1e-3  # 이 값보다 크면 "입력이 들어왔다"고 판단 ### <<<
-        max_tau = float(np.max(np.abs(torque_output)))
-
-        if not self.logging_started:
-            if max_tau > TORQUE_START_THRESH:
-                # 이 시점을 로깅 시작 기준으로 사용
-                self.logging_started = True
-                self.start_time = now
-                self.get_logger().info(
-                    f"Logging started at t={now:.3f}s (|tau|max={max_tau:.4f})"
-                )
-            else:
-                # 아직 입력 안 들어왔다고 보고, 토크만 퍼블리시하고 return
-                torque_msg = Float32MultiArray()
-                torque_msg.data = torque_output.flatten().tolist()
-                self.torque_publisher.publish(torque_msg)
-                self.get_logger().info(f"Published Torque Command: {torque_msg.data}")
-                return
-        # === 로깅 시작 이후 ===
 
         # --- Logging for plotting ---
         now = self.get_clock().now().nanoseconds / 1e9  # [s]
