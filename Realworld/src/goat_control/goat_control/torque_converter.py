@@ -5,7 +5,6 @@ from .utils.can_mixin import CanMixin
 import struct
 import time
 import can
-import numpy as np  # ← 마찰 토크 파라미터 처리를 위해 추가
 
 # Current-to-LSB conversion ratio per motor series 
 # SCALE_A_PER_LSB = {
@@ -24,32 +23,20 @@ class TorqueConverter(Node, CanMixin):
         self.interface = self.declare_parameter('interface', 'socketcan').value   # CAN interface type
         # self.series = self.declare_parameter('series', 'MG').value
         self.num_motors = self.declare_parameter('num_motors', 8).value
-        self.control_frequency = self.declare_parameter('control_frequency', 200.0).value
+        self.control_frequency = self.declare_parameter('control_frequency', 100.0).value
         self.timeout_sec = self.declare_parameter('timeout_sec', 0.5).value
         self.scale = SCALE_A_PER_LSB  # Current scaling factor depending on motor series
 
         # ===== 토크 리미트 (단위: msg에 들어오는 토크 단위, 예: [Nm]) =====
         self.max_joint_torque = 4.5  # 힙/니(0~5) 한계
         self.max_wheel_torque = 4.5  # 휠(6,7) 한계
-
-        # ===== 조인트별 Coulomb 마찰 토크 feedforward [N·m] =====
-        # 측정한 최소 구동 토크 값 사용
-        default_friction = [0.13, 0.14, 0.15, 0.13, 0.32, 0.35, 0.06, 0.08]
-        friction_param = self.declare_parameter('friction_tau', default_friction).value
-        arr = np.array(friction_param, dtype=float).flatten()
-        if arr.size < self.num_motors:
-            tmp = np.zeros(self.num_motors, dtype=float)
-            tmp[:arr.size] = arr
-            arr = tmp
-        elif arr.size > self.num_motors:
-            arr = arr[:self.num_motors]
-        self.friction_tau = arr  # shape: [num_motors]
-
+  
         # Open CAN bus
         # NOTE: The user must activate the CAN interface before running this node.
         # Example: sudo ip link set can0 up type can bitrate 1000000
         self.get_logger().info(
-            f"Attempting to open CAN bus on channel '{self.channel}' with interface '{self.interface}'..."
+            f"Attempting to open CAN bus on channel '{self.channel}' "
+            f"with interface '{self.interface}'..."
         )
         try:
             self.bus = can.interface.Bus(channel=self.channel, interface=self.interface)
@@ -86,21 +73,24 @@ class TorqueConverter(Node, CanMixin):
         timer_period = 1.0 / self.control_frequency
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
-    def joint_torque2current(self, torque):
+    def joint_torque2current(self, torque: float) -> float:
+        """힙/무릎 조인트 토크[Nm] → 전류[A] 변환."""
         if torque != 0.0:
             current = torque / 0.2616  # for joint
         else:
             current = 0.0
         return current
 
-    def wheel_torque2current(self, torque):
+    def wheel_torque2current(self, torque: float) -> float:
+        """휠 토크[Nm] → 전류[A] 변환."""
         if torque != 0.0:
             current = torque / 0.2478  # for wheel
         else:
             current = 0.0
         return current
 
-    def _send_command_expect(self, node_id: int, cmd_byte: int, payload7: bytes = b"\x00" * 7):
+    def _send_command_expect(self, node_id: int, cmd_byte: int,
+                             payload7: bytes = b"\x00" * 7):
         """Send a specific CAN command and wait briefly for a response."""
         tx_id = 0x140 + node_id
         data = bytes([cmd_byte]) + payload7
@@ -117,7 +107,11 @@ class TorqueConverter(Node, CanMixin):
             rx_msg = self.bus.recv(timeout=0.1)
             if rx_msg is None:
                 continue
-            if rx_msg.arbitration_id == tx_id and len(rx_msg.data) == 8 and rx_msg.data[0] == cmd_byte:
+            if (
+                rx_msg.arbitration_id == tx_id
+                and len(rx_msg.data) == 8
+                and rx_msg.data[0] == cmd_byte
+            ):
                 return rx_msg
         return None
         
@@ -125,22 +119,9 @@ class TorqueConverter(Node, CanMixin):
         """Callback when a new torque command message is received."""
         commands_raw = list(msg.data)
 
-        # ==== 1) Coulomb 마찰 토크 feedforward 적용 ====
-        #    τ_eff = τ_cmd + τ_fric * sign(τ_cmd)
-        tau_with_fric = []
-        for i, tau in enumerate(commands_raw):
-            if abs(tau) < 1e-6:
-                # 매우 작은 명령은 그냥 0 취급 (마찰도 안 넣음)
-                tau_eff = 0.0
-            else:
-                tau_eff = tau
-                if i < len(self.friction_tau):
-                    tau_eff += self.friction_tau[i] * (1.0 if tau > 0.0 else -1.0)
-            tau_with_fric.append(tau_eff)
-
-        # ==== 2) 토크 리미트 적용 (메시지 단위에서 잘라주기) ====
+        # ==== 1) 토크 리미트 적용 (메시지 단위에서 잘라주기) ====
         limited_raw = []
-        for i, tau in enumerate(tau_with_fric):
+        for i, tau in enumerate(commands_raw):
             # 힙/니(0~5)는 joint 토크 리미트, 휠(6,7)은 wheel 토크 리미트
             if i in (6, 7):
                 limit = self.max_wheel_torque
@@ -157,7 +138,7 @@ class TorqueConverter(Node, CanMixin):
 
         commands_raw = limited_raw
 
-        # ==== 3) 토크 -> 전류 변환 ====
+        # ==== 2) 토크 -> 전류 변환 ====
         # hip/knee(0~5)는 joint_torque2current, wheel(6,7)은 wheel_torque2current
         commands = [
             self.joint_torque2current(commands_raw[i]) if i not in (6, 7)
@@ -165,13 +146,13 @@ class TorqueConverter(Node, CanMixin):
             for i in range(len(commands_raw))
         ]
 
-        # ==== 4) 모터 개수에 맞게 padding / truncate ====
+        # ==== 3) 모터 개수에 맞게 padding / truncate ====
         if len(commands) < self.num_motors:
             commands.extend([0.0] * (self.num_motors - len(commands)))
         elif len(commands) > self.num_motors:
             commands = commands[:self.num_motors]
 
-        # ==== 5) 상태 업데이트 ====
+        # ==== 4) 상태 업데이트 ====
         self.current_commands = commands
         self.last_command_time = time.time()
         self.got_command = True
@@ -204,7 +185,9 @@ class TorqueConverter(Node, CanMixin):
             # CanMixin 제공 함수로 토크 모드 명령 전송
             resp = self.cmd_torque_mode(node_id, amps, timeout=0.02)
             if not resp:
-                self._log().debug(f"[CAN] No response to torque cmd (id={node_id}, A={amps:.3f})")
+                self._log().debug(
+                    f"[CAN] No response to torque cmd (id={node_id}, A={amps:.3f})"
+                )
 
         # (Optional) Periodic state read for debugging
         # Example: using CanMixin state read wrapper
