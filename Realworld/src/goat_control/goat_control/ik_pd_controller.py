@@ -35,20 +35,20 @@ MOTOR_INDEX = 1        # 테스트용으로 제어할 관절 index (0~7)
 
 # 테스트용 기본 목표각 (deg) – 지금은 여기만 수정해서 인가
 JOINT_DEGREE = 0       # degrees
-# KI_KP_ratio = 0.75
-KI_KP_ratio = 0.8
+KI_KP_ratio = 0.76
+#KI_KP_ratio = 0.8
 # 휠 목표 속도 (deg/s)
-DEFAULT_WHEEL_KP = 0.03
-# DEFAULT_WHEEL_KI = KI_KP_ratio * DEFAULT_WHEEL_KP
-DEFAULT_WHEEL_KI = 0.0
-L_WHEEL_TARGET = 10.0  # 왼쪽 휠 목표 속도 (deg/s)
+DEFAULT_WHEEL_KP = 1.8
+DEFAULT_WHEEL_KI = 0.55
+#DEFAULT_WHEEL_KI = 0.0
+L_WHEEL_TARGET = 0.0  # 왼쪽 휠 목표 속도 (deg/s)
 R_WHEEL_TARGET = 10.0  # 오른쪽 휠 목표 속도 (deg/s)
 INT_TORQUE_LIMIT = 3.0  # 토크 중 적분항으로 허용할 최대 기여
 # INT_LIMIT = INT_TORQUE_LIMIT / DEFAULT_WHEEL_KI
 
 # --- Default gains (scalar) ---
 DEFAULT_KP = 0.0061         # Proportional gain
-\
+
 DEFAULT_KD = 0.055          # Derivative gain
 
 # LPF / Torque 기본값 (scalar)
@@ -62,14 +62,14 @@ DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 # DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
 
 # --- Per-joint default lists ---> rad ---
-DEFAULT_KP_LIST           = [0.0, 0.70,  0.0,   0.516,  0.0,   2.4, 0.0,    0.0]
-DEFAULT_KD_LIST           = [0.05,  0.0004,  0.01,  0.0002,  0.1,  0.0001,    0.0,    0.0]
+DEFAULT_KP_LIST           = [0.0, 0.70,  0.0,   0.516,  0.0,   2.2, 0.0,    0.0]
+DEFAULT_KD_LIST           = [0.05,  0.004,  0.01,  0.0002,  0.1,  0.0001,    0.0,    0.0]
 DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
-DEFAULT_MAX_TORQUE_LIST   = [  0.0,    4.5,     0.0,     4.5,    0.0,    4.5,     0.0,    0.0]
+DEFAULT_MAX_TORQUE_LIST   = [  0.0,    4.5,     0.0,     4.5,    0.0,    4.5,     0.0,    4.5]
 
 # 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
 # DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
-DEFAULT_TARGET_ANGLES_DEG = [0.0, 30.0, 0.0, -20.0, 0.0, -20.0, 0.0, 0.0]
+DEFAULT_TARGET_ANGLES_DEG = [0.0, 20.0, 0.0, -20.0, 0.0, -20.0, 0.0, 0.0]
 # DEFAULT_TARGET_ANGLES_DEG = [0.0 for _ in range(NUM_JOINTS)]
 #DEFAULT_TARGET_ANGLES_DEG[MOTOR_INDEX] = JOINT_DEGREE
      
