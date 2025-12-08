@@ -60,15 +60,15 @@ DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 # DEFAULT_LPF_ALPHA_LIST    = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
 # DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
 
-# --- Per-joint default lists ---> rad ---
-DEFAULT_KP_LIST           = [0.0, 0.001,  0.0,   0.102,  0.0,   2.4, 0.0,    0.0]
-DEFAULT_KD_LIST           = [0.05,  0.0004,  0.01,  0.0002,  0.1,  0.0001,    0.0,    0.0]
+# --- Per-joint default lists ---> rad --- hip = 30   thigh = 45
+DEFAULT_KP_LIST           = [0.15, 0.01, 0.27,   0.27,  0.0,   2.4, 0.0,    0.0]
+DEFAULT_KD_LIST           = [0.00,  0.0,  0.01,  0.001,  0.1,  0.0001,    0.0,    0.0]
 DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
-DEFAULT_MAX_TORQUE_LIST   = [  0.0,    0.0,     0.0,     4.5,    0.0,    0.0,     0.0,    0.0]
+DEFAULT_MAX_TORQUE_LIST   = [  4.5,    0.0,     0.0,     0.0,    0.0,    0.0,     0.0,    0.0]
 
 # 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
 # DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
-DEFAULT_TARGET_ANGLES_DEG = [-90.0, 90.0, 0.0, -35.0, 50.0, -50.0, 0.0, 0.0]
+DEFAULT_TARGET_ANGLES_DEG = [-45.0, 0.0, 0.0, -45.0, 50.0, -50.0, 0.0, 0.0]
 # DEFAULT_TARGET_ANGLES_DEG = [0.0 for _ in range(NUM_JOINTS)]
 #DEFAULT_TARGET_ANGLES_DEG[MOTOR_INDEX] = JOINT_DEGREE
      
