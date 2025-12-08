@@ -167,8 +167,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         final_root_pose = robot.data.root_link_pose_w   # (N, 7) [pos, quat]
         final_joint_pos = robot.data.joint_pos          # (N, num_dof)
         
-        # 텐서 결합
-        data_to_save = torch.cat([final_root_pose, final_joint_pos], dim=-1)
+        curriculum_level_save = torch.full((scene.num_envs, 1), curriculum_level, device=sim.device)
+        data_to_save = torch.cat([curriculum_level_save, final_root_pose, final_joint_pos], dim=-1)
         
         # CPU로 이동 및 numpy 변환
         data_np = data_to_save.cpu().numpy()
@@ -181,7 +181,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     print("[INFO] Saving all data to CSV...")
     all_data_np = np.concatenate(collected_data, axis=0) # (total_episode * num_envs, dims)
     
-    header = "root_x,root_y,root_z,root_q_w,root_q_x,root_q_y,root_q_z,"
+    header = "curriculum_level, root_x,root_y,root_z,root_q_w,root_q_x,root_q_y,root_q_z,"
     for i in range(robot.num_joints):
         header += f",joint_{i}"
     
