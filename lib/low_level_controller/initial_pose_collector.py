@@ -125,7 +125,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     print(f"[INFO] Starting collection: {total_episode} iterations x {scene.num_envs} envs")
 
-    # -------------- Control loop --------------
     while simulation_app.is_running():
         
         robot.set_joint_effort_target(target=zero_joint_efforts)
@@ -170,7 +169,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         curriculum_level_save = torch.full((scene.num_envs, 1), curriculum_level, device=sim.device)
         data_to_save = torch.cat([curriculum_level_save, final_root_pose, final_joint_pos], dim=-1)
         
-        # CPU로 이동 및 numpy 변환
         data_np = data_to_save.cpu().numpy()
         collected_data.append(data_np)
         
@@ -179,9 +177,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         
     # ================== Save sequence ================== #
     print("[INFO] Saving all data to CSV...")
-    all_data_np = np.concatenate(collected_data, axis=0) # (total_episode * num_envs, dims)
+    all_data_np = np.concatenate(collected_data, axis=0)        # (total_episode * num_envs, dims)
     
-    header = "curriculum_level, root_x,root_y,root_z,root_q_w,root_q_x,root_q_y,root_q_z,"
+    header = "curriculum_level,root_x,root_y,root_z,root_q_w,root_q_x,root_q_y,root_q_z"
     for i in range(robot.num_joints):
         header += f",joint_{i}"
     
