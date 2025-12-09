@@ -24,59 +24,48 @@ JOINT_NAME_LIST = [
 
 # --- MG Motor scale ---
 ANGLE_LSB_TO_DEG = 0.001      # multi_turn_raw, single_turn_raw : 0.001 deg/LSB
-SPEED_LSB_TO_DPS = 0.001      # speed_dps : 0.001 deg/s per LSB (모터 매뉴얼 기준)
+SPEED_LSB_TO_DPS = 0.01      # speed_dps : 0.001 deg/s per LSB (모터 매뉴얼 기준)
 
 # Controller frequency (Hz)
 DEFAULT_CONTROL_FREQUENCY = 200.0  # 200 Hz (기본 제어 주파수)
 
 # --- Robot size ---
 NUM_JOINTS = 8         # 전체 모터 개수
-MOTOR_INDEX = 1        # 테스트용으로 제어할 관절 index (0~7)
+MOTOR_INDEX = 1        # 로그/디버깅용으로 볼 관절 index (0~7)
 
-# 테스트용 기본 목표각 (deg) – 지금은 여기만 수정해서 인가
-JOINT_DEGREE = 0       # degrees
-# KI_KP_ratio = 0.75
+# 휠 PI 관련 상수
 KI_KP_ratio = 0.8
-# 휠 목표 속도 (deg/s)
-DEFAULT_WHEEL_KP = 0.03
+DEFAULT_WHEEL_KP = 0.026
 # DEFAULT_WHEEL_KI = KI_KP_ratio * DEFAULT_WHEEL_KP
-DEFAULT_WHEEL_KI = 0.0
-L_WHEEL_TARGET = 10.0  # 왼쪽 휠 목표 속도 (deg/s)
-R_WHEEL_TARGET = 10.0  # 오른쪽 휠 목표 속도 (deg/s)
+DEFAULT_WHEEL_KI = 0.01183
+
 INT_TORQUE_LIMIT = 3.0  # 토크 중 적분항으로 허용할 최대 기여
 INT_LIMIT = INT_TORQUE_LIMIT / DEFAULT_WHEEL_KI if DEFAULT_WHEEL_KI != 0 else 0.0
-
-# --- Default gains (scalar) ---
-DEFAULT_KP = 0.0061         # Proportional gain
-DEFAULT_KD = 0.055          # Derivative gain
 
 # LPF / Torque 기본값 (scalar)
 DEFAULT_LPF_ALPHA = 1       # Low-pass filter alpha
 DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 
-# # --- Per-joint default lists ---> degree ---
-# DEFAULT_KP_LIST           = [0.013, 0.015, 0.0061, 0.0061, 0.0161, 0.0161, 0.000061, 0.000061]
-# DEFAULT_KD_LIST           = [0.055,  0.055,  0.055,  0.055,  0.055,  0.055,  0.055,  0.055]
-# DEFAULT_LPF_ALPHA_LIST    = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
-# DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
-
 # --- Per-joint default lists ---> rad --- hip = 30   thigh = 45
-DEFAULT_KP_LIST           = [0.3, 0.01, 0.27,   0.27,  0.0,   1.4, 0.0,    0.0]
-DEFAULT_KD_LIST           = [0.01,  0.0,  0.01,  0.001,  0.1,  0.0,    0.0,    0.0]
-DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
-DEFAULT_MAX_TORQUE_LIST   = [4.5,0.0,     0.0,     0.0,    0.0,    0.0,0.0,    0.0]
+DEFAULT_KP_LIST         = [0.300, 0.300, 0.270,  0.270,  1.4000,  1.4000, 0.026, 0.01183]
+DEFAULT_KD_LIST         = [0.010, 0.010, 0.010,  0.010,  0.0001,  0.0001, 0.026, 0.01183]
+DEFAULT_LPF_ALPHA_LIST  = [0.951, 0.951, 0.951,  0.951,  0.9510,  0.9510, 0.951, 0.951]
+#DEFAULT_MAX_TORQUE_LIST = [4.5, 4.5, 4.5,  4.5,  4.5,  4.5, 4.5, 4.5]
+DEFAULT_MAX_TORQUE_LIST = [0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0, 4.5]
 
-# 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
-# DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
-DEFAULT_TARGET_ANGLES_DEG = [0.0, 0.0, 0.0, -45.0, 50.0, -50.0, 0.0, 0.0]
-# DEFAULT_TARGET_ANGLES_DEG = [0.0 for _ in range(NUM_JOINTS)]
-#DEFAULT_TARGET_ANGLES_DEG[MOTOR_INDEX] = JOINT_DEGREE
-     
+# --- 각도 + 휠 속도 기본값을 한 곳에 모음 ---
+DEFAULT_TARGET_ANGLE_AND_SPEED = {
+    "angles_deg": [-45.0, 0.0, 0.0, -45.0, 50.0, -50.0, 0.0, 0.0],  # 관절 각도 [deg]
+    "wheel_speed_deg_s": [                                         # 휠 목표 속도 [deg/s]
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        10.0, -150.0,
+    ],
+}
+
 # Topic names
-MOTOR_STATES_TOPIC = 'motor_states'
-TARGET_ANGLES_TOPIC = 'target_joint_angles'
+MOTOR_STATES_TOPIC   = 'motor_states'
+TARGET_ANGLES_TOPIC  = 'target_joint_angles'
 TORQUE_COMMANDS_TOPIC = 'torque_commands'
-
 
 
 class PDController(Node):
@@ -89,6 +78,7 @@ class PDController(Node):
     - 모터별로 서로 다른 Kp, Kd, LPF alpha, Max torque를 사용할 수 있게
       kp_gains, kd_gains, lpf_alpha_list, max_torque_list 파라미터 지원.
     - target_angles_deg 파라미터 + target_joint_angles 토픽으로 목표 각도 설정.
+    - wheel_speed_ref_deg_s 파라미터로 휠 목표 속도 설정.
     """
     def __init__(self):
         super().__init__('pd_controller')
@@ -105,74 +95,69 @@ class PDController(Node):
         kp_param = self.declare_parameter('kp_gains', DEFAULT_KP_LIST).value
         kd_param = self.declare_parameter('kd_gains', DEFAULT_KD_LIST).value
 
-        self.kp = self._build_array_param(kp_param, DEFAULT_KP, 'Kp')
-        self.kd = self._build_array_param(kd_param, DEFAULT_KD, 'Kd')
+        # default_scalar는 진짜 예외 상황에서만 쓰이니까 0.0으로 둠
+        self.kp = self._build_array_param(kp_param, 0.0, 'Kp')
+        self.kd = self._build_array_param(kd_param, 0.0, 'Kd')
 
         # 2) LPF alpha, Max torque (per-joint)
-        lpf_param = self.declare_parameter('lpf_alpha_list', DEFAULT_LPF_ALPHA_LIST).value
+        lpf_param        = self.declare_parameter('lpf_alpha_list', DEFAULT_LPF_ALPHA_LIST).value
         max_torque_param = self.declare_parameter('max_torque_list', DEFAULT_MAX_TORQUE_LIST).value
 
         self.lpf_alpha  = self._build_array_param(lpf_param, DEFAULT_LPF_ALPHA, 'LPF alpha')
         self.max_torque = self._build_array_param(max_torque_param, DEFAULT_MAX_TORQUE, 'Max torque')
 
-        # 3) 초기 타겟 각도 (deg) – 테스트용 기본값, 이후 토픽으로 override 가능
+        # 3) 초기 타겟 각도 (deg) – DEFAULT_TARGET_ANGLE_AND_SPEED에서 angles_deg만 사용
         target_param = self.declare_parameter(
-            'target_angles_deg', DEFAULT_TARGET_ANGLES_DEG
+            'target_angles_deg', DEFAULT_TARGET_ANGLE_AND_SPEED["angles_deg"]
         ).value
         self.target_angles_deg = self._build_array_param(
             target_param, 0.0, 'target angles (deg)'
         )
         self.target_angles_rad = np.deg2rad(self.target_angles_deg)
-    
+
+        # 4) 휠 목표 속도 (deg/s)도 DEFAULT_TARGET_ANGLE_AND_SPEED에서 wheel_speed_deg_s 사용
+        wheel_speed_param = self.declare_parameter(
+            'wheel_speed_ref_deg_s', DEFAULT_TARGET_ANGLE_AND_SPEED["wheel_speed_deg_s"]
+        ).value
+        self.wheel_speed_ref_deg_s = self._build_array_param(
+            wheel_speed_param, 0.0, 'wheel_speed_ref_deg_s'
+        )
+        # 내부 계산용은 rad/s
+        self.wheel_speed_ref = np.deg2rad(self.wheel_speed_ref_deg_s)
 
         self.get_logger().info(f"Kp gains per joint        : {self.kp.tolist()}")
         self.get_logger().info(f"Kd gains per joint        : {self.kd.tolist()}")
         self.get_logger().info(f"LPF alpha per joint       : {self.lpf_alpha.tolist()}")
         self.get_logger().info(f"Max torque per joint      : {self.max_torque.tolist()}")
-        # 로그는 사람이 보기 좋게 deg로 변환해서 출력
         self.get_logger().info(
-            f"Initial target angles (deg): {np.rad2deg(self.target_angles_rad).tolist()}"
+            f"Initial target angles (deg): {self.target_angles_deg.tolist()}"
+        )
+        self.get_logger().info(
+            f"Initial wheel speed ref (deg/s): {self.wheel_speed_ref_deg_s.tolist()}"
         )
 
         # --- State Variables (rad 기준, 내부 계산용) ---
-        self.current_angles_rad = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [rad]
-        self.current_velocities_rad_s = np.zeros(NUM_JOINTS)  # 현재 관절 각속도 [rad/s]
-        self.current_angles_deg = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [rad] (변수명 유지)
-        self.current_velocities_deg_s = np.zeros(NUM_JOINTS)  # 현재 관절 각속도 [rad/s] (변수명 유지)
+        self.current_angles_rad        = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [rad]
+        self.current_velocities_rad_s  = np.zeros(NUM_JOINTS)        # 현재 관절 각속도 [rad/s]
+        self.current_angles_deg        = np.zeros(NUM_JOINTS)        # 현재 관절 각도 [deg]
+        self.current_velocities_deg_s  = np.zeros(NUM_JOINTS)        # 현재 관절 각속도 [deg/s]
     
-        self.previous_torque_command = np.zeros(NUM_JOINTS)
+        self.previous_torque_command   = np.zeros(NUM_JOINTS)
 
         self.last_angle_update_time = None
-        self.last_angles_deg = None  # [rad]
+        self.last_angles_rad        = None
 
         # wheel control variables
         self.wheel_indices = [6, 7]
 
-        # 기본값을 "0 리스트"가 아니라 "None"으로 두고, 없을 때만 default_scalar 적용
-        wheel_kp_param = self.declare_parameter('wheel_kp_gains', None).value
-        wheel_ki_param = self.declare_parameter('wheel_ki_gains', None).value
-
-        if wheel_kp_param is None:
-            self.wheel_kp = np.full(NUM_JOINTS, DEFAULT_WHEEL_KP, dtype=float)
-        else:
-            self.wheel_kp = self._build_array_param(wheel_kp_param, DEFAULT_WHEEL_KP, 'wheel Kp')
-
-        if wheel_ki_param is None:
-            self.wheel_ki = np.full(NUM_JOINTS, DEFAULT_WHEEL_KI, dtype=float)
-        else:
-            self.wheel_ki = self._build_array_param(wheel_ki_param, DEFAULT_WHEEL_KI, 'wheel Ki')
-
+        # 휠도 kp_gains / kd_gains 리스트 안에서 같이 튜닝하고,
+        # 여기서는 별도 wheel_kp/ki 배열 없이 PI 항만 위한 적분 상태만 유지
         self.wheel_int = np.zeros(NUM_JOINTS, dtype=float)
-        self.wheel_speed_ref = np.zeros(NUM_JOINTS, dtype=float)  # rad/s
-        # 실험용: 코드 내부에서 휠 목표 속도 설정 (deg/s → rad/s)
-        self.wheel_speed_ref[6] = np.deg2rad(L_WHEEL_TARGET)
-        self.wheel_speed_ref[7] = np.deg2rad(R_WHEEL_TARGET)
-
 
         # --- ROS2 Communications ---
         self.create_subscription(MotorStates, MOTOR_STATES_TOPIC, self.motor_states_callback, 100)
 
-        # 토픽으로 목표각 업데이트 받을 준비 (없으면 파라미터 값으로만 동작)
+        # 토픽으로 목표각 업데이트 받기 (없으면 파라미터 값으로만 동작)
         self.create_subscription(Float32MultiArray, TARGET_ANGLES_TOPIC, self.target_angles_callback, 100)
 
         self.torque_publisher = self.create_publisher(Float32MultiArray, TORQUE_COMMANDS_TOPIC, 100)
@@ -182,21 +167,20 @@ class PDController(Node):
         self.timer = self.create_timer(timer_period, self.controller_callback)
 
         # --- Logging buffers for plotting (single joint) ---
-        self.time_log = []
-        self.current_angle_log = []   # [deg]로 변환해서 저장
-        self.target_angle_log = []    # [deg]로 변환해서 저장
-        self.torque_log = []
-        self.velocity_log = []        # [deg/s]로 변환해서 저장
-        self.start_time = None  # 첫 샘플 시간 (0초 기준 맞추기용)
+        self.time_log          = []
+        self.current_angle_log = []   # [deg]
+        self.target_angle_log  = []   # [deg]
+        self.torque_log        = []
+        self.velocity_log      = []   # [deg/s]
+        self.start_time        = None  # 첫 샘플 시간 (0초 기준 맞추기용)
 
         # --- Logging buffers for all joints ---
-        self.current_angles_all_log = []   # shape: [N, NUM_JOINTS], [deg]로 변환해서 저장
-        self.velocities_all_log = []       # shape: [N, NUM_JOINTS], [deg/s]로 변환해서 저장
-        self.torques_all_log = []          # shape: [N, NUM_JOINTS]
+        self.current_angles_all_log = []   # shape: [N, NUM_JOINTS], [deg]
+        self.velocities_all_log     = []   # shape: [N, NUM_JOINTS], [deg/s]
+        self.torques_all_log        = []   # shape: [N, NUM_JOINTS]
 
         # --- Wheel logging (speed tracking) ---
-        # 휠 속도 추종 그래프용 로그 (rad/s → 저장 시 deg/s로 변환)
-        self.wheel_time_log = []
+        self.wheel_time_log       = []
         self.wheel_speed_meas_log = []   # shape: [N, 2]
         self.wheel_speed_ref_log  = []   # shape: [N, 2]
 
@@ -280,25 +264,37 @@ class PDController(Node):
 
     def target_angles_callback(self, msg: Float32MultiArray):
         """
-        목표 각도 업데이트 (토픽 입력은 deg 단위).
+        목표 값 업데이트 (토픽 입력은 deg 단위).
+        규칙:
+          - data[0:6] : 관절 각도 [deg]
+          - data[6:8] : 휠 목표 속도 [deg/s]
         - msg.data 길이가 NUM_JOINTS와 다르면 에러만 찍고 무시.
-        - 파라미터로 설정한 초기 target_angles_deg 위에 override.
+        - 파라미터로 설정한 초기 target_angles_deg, wheel_speed_ref_deg_s 를 override.
         """
-        arr_deg = np.array(msg.data, dtype=float).flatten()
+        arr = np.array(msg.data, dtype=float).flatten()
 
-        if arr_deg.size != NUM_JOINTS:
+        if arr.size != NUM_JOINTS:
             self.get_logger().error(
-                f"Received {arr_deg.size} target angles, expected {NUM_JOINTS}. "
-                "Target angles update ignored."
+                f"Received {arr.size} target values, expected {NUM_JOINTS}. "
+                "Target update ignored."
             )
             return
 
-        # deg / rad 둘 다 유지
-        self.target_angles_deg = arr_deg
-        self.target_angles_rad = np.deg2rad(arr_deg)
+        # 0~5번: 관절 각도 [deg]
+        self.target_angles_deg[:6] = arr[:6]
+        self.target_angles_rad = np.deg2rad(self.target_angles_deg)
 
-        # 로그는 degree 기준으로 출력
-        self.get_logger().info(f"Updated target angles (deg): {self.target_angles_deg.tolist()}")
+        # 6,7번: 휠 목표 속도 [deg/s]
+        self.wheel_speed_ref_deg_s[self.wheel_indices] = arr[self.wheel_indices]
+        self.wheel_speed_ref[self.wheel_indices] = np.deg2rad(
+            self.wheel_speed_ref_deg_s[self.wheel_indices]
+        )
+
+        self.get_logger().info(
+            f"Updated target angles (deg, 0~5): {self.target_angles_deg[:6].tolist()}, "
+            f"wheel_speed_ref (deg/s, 6~7): {self.wheel_speed_ref_deg_s[self.wheel_indices].tolist()}"
+        )
+
 
     def controller_callback(self):
         """
@@ -335,6 +331,7 @@ class PDController(Node):
         )
 
         # 2) 휠(6,7)은 속도 PI 제어 (rad/s 기준)로 덮어쓰기
+        #    이때 kp_gains[idx]를 PI의 Kp, kd_gains[idx]를 PI의 Ki로 사용
         for idx in self.wheel_indices:
             omega_ref = self.wheel_speed_ref[idx]               # [rad/s]
             omega_meas = self.current_velocities_rad_s[idx]     # [rad/s]
@@ -342,8 +339,11 @@ class PDController(Node):
             e_w = omega_ref - omega_meas
 
             self.wheel_int[idx] += e_w * dt
+            # INT_LIMIT는 전역 스칼라지만, 필요하면 나중에 per-joint로 바꿀 수 있음
             self.wheel_int[idx] = np.clip(self.wheel_int[idx], -INT_LIMIT, INT_LIMIT)
-            tau_pi = self.wheel_kp[idx] * e_w + self.wheel_ki[idx] * self.wheel_int[idx]
+
+            # 여기서 self.kp[idx] = 휠 속도 PI의 Kp, self.kd[idx] = 휠 속도 PI의 Ki
+            tau_pi = self.kp[idx] * e_w + self.kd[idx] * self.wheel_int[idx]
             raw_torque_command[idx] = tau_pi
 
         # 디버깅용 로그 (필요 없으면 주석)
