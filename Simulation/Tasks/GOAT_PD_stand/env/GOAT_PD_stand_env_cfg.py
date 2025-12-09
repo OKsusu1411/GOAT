@@ -10,7 +10,6 @@ from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.terrains import TerrainImporterCfg
-from isaaclab.utils.noise.noise_cfg import GaussianNoiseCfg, NoiseModelCfg
 from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
 from gymnasium.spaces import Dict
 
@@ -35,7 +34,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level
-    total_task_curriculum_level = ["balancing", "recovery", "random"]
+    total_task_curriculum_level = ["balancing", "recovery"]
 
     max_base_acceleration_noise_per = 10        # Noise percentage (%)
     max_base_angular_vel_noise_per = 20

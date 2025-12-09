@@ -77,10 +77,6 @@ class GOATPDStandEnv(GOATBaseEnv):
             
             # Data length
             self.num_init_samples = full_data.shape[0]
-            
-            print(f"[INFO] Loaded {self.num_init_samples} samples.")
-            print(f"      - Root Pos shape: {self.init_root_pos.shape}")
-            print(f"      - Joint Pos shape: {self.init_joint_pos.shape}")
 
     def _reset_idx(self, env_ids: torch.Tensor):
         
@@ -124,7 +120,7 @@ class GOATPDStandEnv(GOATBaseEnv):
             self._robot.write_root_velocity_to_sim(root_state[:, 7:], env_ids)
             self._robot.write_joint_state_to_sim(sampled_joint_pos, joint_vel, env_ids)
 
-        elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
+        # elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
             
         # Domain randomization (terrain friction)
         material_property = self._robot.root_physx_view.get_material_properties()
@@ -193,7 +189,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         # State(privileged) data
         self.base_vel = self._robot.root_physx_view.get_link_velocities()[:, 0, :3]
         self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2]
-        self.contact_force = self._contact_sensor.data.net_forces_w.view(self.num_envs, -1)      # TODO: add F/T sensor
+        self.contact_force = self._contact_sensor.data.net_forces_w.view(self.num_envs, -1)
         material_property = self._robot.root_physx_view.get_material_properties()
         self.friction_coefficient = torch.Tensor([material_property[:, 0, 0], material_property[:, 0, 1]], device=self.device)
 
@@ -239,16 +235,17 @@ class GOATPDStandEnv(GOATBaseEnv):
                 self.DR_curriculum_level = 0
 
         # Task curriculum
-        if self.task_curriculum_level > len(self.total_task_curriculum_level) - 1:
-            self.task_curriculum_level
-        elif self.task_curriculum_level < 0:
+        if self.task_curriculum_level > len(self.total_task_curriculum_level) - 1:      # Maximum level
+            self.task_curriculum_level -= 1
+
+        elif self.task_curriculum_level < 0:                                            # Lowest level
             self.task_curriculum_level = 0
         
         if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
-            
+            height_error = self.base_height - self.cfg.target_height
         elif self.total_task_curriculum_level[self.task_curriculum_level] == "recovery":
 
-        elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
+        # elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
 
         return total_reward
     
@@ -257,7 +254,6 @@ class GOATPDStandEnv(GOATBaseEnv):
         truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1
         return terminated, truncated
     
-
     ## ==================== Auxilliary functions ==================== ##
     def _add_gaussian_noise(self, data: torch.Tensor, noise_percentage: int) -> torch.Tensor:
         """

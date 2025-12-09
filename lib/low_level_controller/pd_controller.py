@@ -46,7 +46,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),     # zero-G
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),     # zero-G
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True               # Fixed_base link
@@ -180,7 +180,7 @@ class PD_Controller():
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
         
         # LPF for torque
-        torque = 0.8 * self.old_torque + 0.2 * torque
+        torque = 0.951 * self.old_torque + (1 - 0.951) * torque
         self.old_torque = torque.clone()
 
         # Clip torque based on torque_limits
@@ -200,8 +200,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # --- Initialize PD torque Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = PD_Controller(kp=torch.tensor([[50.0, 50.0, 50.0]]),
-                                   kd=torch.tensor([[30.0, 30.0, 30.0]]),
+    leg_controller = PD_Controller(kp=torch.tensor([[0.3, 0.27, 1.4]]),
+                                   kd=torch.tensor([[0.01, 0.01, 0.0001]]),
                                    num_envs=scene.num_envs,
                                    num_dof=leg_dof,
                                    device=scene.device,
@@ -297,7 +297,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         # Random joint angle within limits
         lower_limits = joint_limits[:, :, 0]
         upper_limits = joint_limits[:, :, 1]
-        random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
+        joint_pos_tmp = robot.data.joint_pos                # tmp
+        joint_pos_tmp[:, :2] += torch.pi/6
+        # random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
+        random_angle = joint_pos_tmp
         robot.write_joint_state_to_sim(random_angle, default_joint_vel)
         target_link_pose = robot.data.body_link_pose_w
 
@@ -334,10 +337,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
             # Compute torque
             torque = leg_controller.compute_torque(joint_pos=joint_pos,
-                                                    joint_vel=joint_vel,
-                                                    joint_pos_cmd=random_angle,
-                                                    joint_limits=joint_limits,
-                                                    torque_limits=torque_limits)
+                                                   joint_vel=joint_vel,
+                                                   joint_pos_cmd=random_angle,
+                                                   joint_limits=joint_limits,
+                                                   torque_limits=torque_limits)
 
             robot.set_joint_effort_target(torque)
             robot.write_data_to_sim()

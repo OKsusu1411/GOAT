@@ -51,7 +51,8 @@ else:
 
 
 GOAT_Cfg: ArticulationCfg = ArticulationCfg(
-    prim_path="{ENV_REGEX_NS}/Robot",               # Path for GridCloner
+    #prim_path="{ENV_REGEX_NS}/Robot",               # Path for GridCloner
+    prim_path="/World/Robot",
     spawn=sim_utils.UsdFileCfg(
         usd_path=urdf_converter.usd_path,
         scale=(1.0, 1.0, 1.0),
