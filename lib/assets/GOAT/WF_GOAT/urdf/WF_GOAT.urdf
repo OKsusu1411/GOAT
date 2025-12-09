@@ -282,7 +282,7 @@
         <child link="hip_L_Link"/>
         <axis xyz="-1 0 0"/>
         <limit effort="4.5" lower="-2.05949" upper="1.09956" velocity="15.0"/>
-        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics damping="2.401586E-03" friction="6.453013E-02"/>
     </joint>
     
     <joint name="hip_R_Joint" type="revolute">
@@ -291,7 +291,7 @@
         <child link="hip_R_Link"/>
         <axis xyz="-1 0 0"/>
         <limit effort="4.5" lower="-1.09956" upper="2.05949" velocity="15.0"/>
-        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics damping="2.401586E-03" friction="6.453013E-02"/>
     </joint>
     
     <joint name="thigh_L_Joint" type="revolute">
@@ -300,7 +300,7 @@
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
         <limit effort="4.5" lower="-0.593412" upper="1.88496" velocity="15.0"/>
-        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics damping="2.401586E-03" friction="6.453013E-02"/>
     </joint>
 
     <joint name="thigh_R_Joint" type="revolute">
@@ -309,7 +309,7 @@
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
         <limit effort="4.5" lower="-1.88496" upper="0.593412" velocity="15.0"/>
-        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics damping="2.401586E-03" friction="6.453013E-02"/>
     </joint>
 
     <joint name="knee_L_Joint" type="revolute">
@@ -318,7 +318,7 @@
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
         <limit effort="4.5" lower="0.0" upper="1.75192" velocity="15"/>
-        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics damping="1.797208E-02" friction="2.341112E-01"/>
     </joint>
 
     <joint name="knee_R_Joint" type="revolute">
@@ -327,7 +327,7 @@
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
         <limit effort="4.5" lower="-1.75192" upper="0.0" velocity="15"/>
-        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics damping="1.797208E-02" friction="2.341112E-01"/>
     </joint>
 
     <joint name="wheel_L_Joint" type="revolute">
