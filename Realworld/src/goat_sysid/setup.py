@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'breakaway_torque_tester = goat_sysid.breakaway_torque_tester:main',
+            'dynamic_friction_excitation = goat_sysid.dynamic_friction_excitation:main',
         ],
     },
 )
