@@ -49,7 +49,7 @@ class DynamicFrictionSysID(Node):
         # 로그 저장 경로
         default_filename = f"sysid_joint{self.joint_index}_{int(time.time())}.csv"
         self.save_path = str(
-            self.declare_parameter('save_path', default_filename).value
+            self.declare_parameter('save_path', f'./test_log/{default_filename}').value
         )
 
         self.get_logger().info(
