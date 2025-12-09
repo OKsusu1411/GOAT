@@ -35,7 +35,7 @@ class DynamicFrictionSysID(Node):
         # 사인 파라미터 (deg, Hz)
         self.amplitude_deg = float(self.declare_parameter('amplitude_deg', 20.0).value)
         self.frequency_hz = float(self.declare_parameter('frequency_hz', 0.5).value)
-        self.offset_deg = float(self.declare_parameter('offset_deg', 0.0).value)
+        self.offset_deg = float(self.declare_parameter('offset_deg', 20.0).value)
 
         # 컨트롤 주파수
         self.control_frequency = float(
