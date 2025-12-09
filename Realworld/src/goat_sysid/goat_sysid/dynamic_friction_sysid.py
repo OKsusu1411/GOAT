@@ -8,7 +8,6 @@ import time
 import os
 
 NUM_JOINTS = 8
-JOINT_INDEX = 0
 TARGET_TOPIC = 'target_joint_angles'   # pd_controller가 구독
 MOTOR_STATES_TOPIC = 'motor_states'
 TORQUE_COMMANDS_TOPIC = 'torque_commands'
@@ -31,7 +30,7 @@ class DynamicFrictionSysID(Node):
         super().__init__('dynamic_friction_sysid')
 
         # ====== 파라미터 ======
-        self.joint_index = int(self.declare_parameter('joint_index', JOINT_INDEX).value)
+        self.joint_index = int(self.declare_parameter('joint_index', 0).value)
 
         # 사인 파라미터 (deg, Hz)
         self.amplitude_deg = float(self.declare_parameter('amplitude_deg', 20.0).value)
