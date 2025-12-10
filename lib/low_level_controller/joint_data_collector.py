@@ -2,9 +2,8 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="PD torque control for an articulation.")
+parser = argparse.ArgumentParser(description="PD torque control data collector.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
-parser.add_argument("--mode", type=str, default="plotting", choices=["plotting", "iteration"])
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -219,185 +218,127 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     robot.update(sim_dt)
 
     # -------------- Control loop --------------
-    if args_cli.mode == "iteration":
-        count = 0
-        while simulation_app.is_running():
-            if count % 600 == 0:
-                # reset state
-                # Joint reset to initial pose
-                robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
-                # Joint torque reset to 0
-                robot.set_joint_effort_target(zero_joint_efforts)
-                robot.write_data_to_sim()
-                robot.reset()
-                robot.update(sim_dt)
+    log_t = []
+    log_q = []
+    log_angle = []
+    log_torque = []
 
-                print("[INFO] Reset state...")
-                # Random joint angle within limits
-                lower_limits = joint_limits[:, :, 0]
-                upper_limits = joint_limits[:, :, 1]
-                random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
-                robot.write_joint_state_to_sim(random_angle, default_joint_vel)
-                target_link_pose = robot.data.body_link_pose_w
+    # reset state
+    print("[INFO] Reset state for plotting...")
 
-                # Visualize target foot position
-                frame_marker_cfg = FRAME_MARKER_CFG.copy()
-                frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-                
-                left_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/left_foot_marker"))
-                right_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/right_foot_marker"))
+    # Random joint angle within limits
+    lower_limits = joint_limits[:, :, 0]
+    upper_limits = joint_limits[:, :, 1]
 
-                left_marker.visualize(target_link_pose[0, 7, :3].unsqueeze(0), target_link_pose[0, 7, 3:].unsqueeze(0))
-                right_marker.visualize(target_link_pose[0, 8, :3].unsqueeze(0), target_link_pose[0, 8, 3:].unsqueeze(0))
+    joint_pos_tmp = default_joint_pos
+    joint_pos_tmp[:, 0] += torch.pi/6
+    joint_pos_tmp[:, 1] += torch.pi/6
+    # joint_pos_tmp[:, 2] += torch.pi/6
+    # joint_pos_tmp[:, 3] -= torch.pi/6
+    # joint_pos_tmp[:, 4] += torch.pi/6
+    # joint_pos_tmp[:, 5] -= torch.pi/6
+    reference_angle = joint_pos_tmp
 
-                # Joint reset to initial pose
-                robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
-                # Joint torque reset to 0
-                robot.set_joint_effort_target(zero_joint_efforts)
-                robot.write_data_to_sim()
-                robot.reset()
-                robot.update(sim_dt)
-                
-            else:
-               # --------- Control ------------
-                # State awareness
-                joint_pos = robot.data.joint_pos
-                joint_vel = robot.data.joint_vel
+    robot.write_joint_state_to_sim(reference_angle, default_joint_vel)
+    target_link_pose = robot.data.body_link_pose_w
 
-                # Compute torque
-                torque = leg_controller.compute_torque(joint_pos=joint_pos,
-                                                       joint_vel=joint_vel,
-                                                       joint_pos_cmd=random_angle,
-                                                       joint_limits=joint_limits,
-                                                       torque_limits=torque_limits)
+    # Visualize target foot position
+    frame_marker_cfg = FRAME_MARKER_CFG.copy()
+    frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+    
+    left_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/left_foot_marker"))
+    right_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/right_foot_marker"))
 
-                robot.set_joint_effort_target(torque)
-                robot.write_data_to_sim()
+    left_marker.visualize(target_link_pose[0, 7, :3].unsqueeze(0), target_link_pose[0, 7, 3:].unsqueeze(0))
+    right_marker.visualize(target_link_pose[0, 8, :3].unsqueeze(0), target_link_pose[0, 8, 3:].unsqueeze(0))
 
-            # Simulation step
-            sim.step()
-            robot.update(sim_dt)
-            scene.update(sim_dt)
+    # Joint reset to initial pose
+    robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
+    # Joint torque reset to 0
+    robot.set_joint_effort_target(zero_joint_efforts)
+    robot.write_data_to_sim()
+    robot.reset()
+    robot.update(sim_dt)
 
-            # Simulation step
-            sim.step()
-            robot.update(sim_dt)
-            scene.update(sim_dt)
-            count += 1
+    # Logging initial state
+    t = 0.0
+    log_t.append(0.0)
+    log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
+    log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+    log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
 
-    elif args_cli.mode == "plotting":
-        log_t = []
-        log_q = []
-        log_angle = []
-        log_torque = []
+    while t <= sim_len:
+        # --------- Control ------------
+        # State awareness
+        joint_pos = robot.data.joint_pos
+        joint_vel = robot.data.joint_vel
 
-        # reset state
-        print("[INFO] Reset state for plotting...")
+        # Compute torque
+        torque = leg_controller.compute_torque(joint_pos=joint_pos,
+                                               joint_vel=joint_vel,
+                                               joint_pos_cmd=reference_angle,
+                                               joint_limits=joint_limits,
+                                               torque_limits=torque_limits)
 
-        # Random joint angle within limits
-        lower_limits = joint_limits[:, :, 0]
-        upper_limits = joint_limits[:, :, 1]
-        random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
-        robot.write_joint_state_to_sim(random_angle, default_joint_vel)
-        target_link_pose = robot.data.body_link_pose_w
-
-        # Visualize target foot position
-        frame_marker_cfg = FRAME_MARKER_CFG.copy()
-        frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-        
-        left_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/left_foot_marker"))
-        right_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/right_foot_marker"))
-
-        left_marker.visualize(target_link_pose[0, 7, :3].unsqueeze(0), target_link_pose[0, 7, 3:].unsqueeze(0))
-        right_marker.visualize(target_link_pose[0, 8, :3].unsqueeze(0), target_link_pose[0, 8, 3:].unsqueeze(0))
-
-        # Joint reset to initial pose
-        robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
-        # Joint torque reset to 0
-        robot.set_joint_effort_target(zero_joint_efforts)
+        robot.set_joint_effort_target(torque)
         robot.write_data_to_sim()
-        robot.reset()
+
+        # Simulation step
+        sim.step()
         robot.update(sim_dt)
-
-        # Logging initial state
-        t = 0.0
-        log_t.append(0.0)
+        scene.update(sim_dt)
+        t += sim_dt
+        log_t.append(t)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
-        log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
-        log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+        log_torque.append(torque[:, :n_leg_j].clone())
 
-        while t <= sim_len:
-            # --------- Control ------------
-            # State awareness
-            joint_pos = robot.data.joint_pos
-            joint_vel = robot.data.joint_vel
+    # --- 결과 플롯 ---
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import math
 
-            # Compute torque
-            torque = leg_controller.compute_torque(joint_pos=joint_pos,
-                                                   joint_vel=joint_vel,
-                                                   joint_pos_cmd=random_angle,
-                                                   joint_limits=joint_limits,
-                                                   torque_limits=torque_limits)
+    log_t_np = np.asarray(log_t)
+    log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
+    log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
 
-            robot.set_joint_effort_target(torque)
-            robot.write_data_to_sim()
+    n_cols = 3
+    n_rows = math.ceil(n_leg_j / n_cols)
+    joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
 
-            # Simulation step
-            sim.step()
-            robot.update(sim_dt)
-            scene.update(sim_dt)
-            t += sim_dt
-            log_t.append(t)
-            log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
-            log_torque.append(torque[:, :n_leg_j].clone())
+    # Joint Angle Plot
+    fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
+    axies = axies.flatten()
 
-        # --- 결과 플롯 ---
-        import matplotlib.pyplot as plt
-        import numpy as np
-        import math
+    for i in range(n_leg_j):
+        ax = axies[i]
+        ax.plot(log_t_np, log_q_np[:, i], label="actual")
+        ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
+        ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
+        ax.axhline(reference_angle[0, i].cpu(), ls="--", label="optimal_angle", color="b")
+        ax.set_title(f"Joint Angle: {joint_name[i]}")
+        ax.set_ylabel("angle [rad]")
+        if i // n_cols == n_rows - 1:
+            ax.set_xlabel("time [s]")
+        if i == 0:
+            ax.legend(loc="best")
+    fig.tight_layout()
 
-        log_t_np = np.asarray(log_t)
-        log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
-        log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
+    # Joint Torque Plot
+    fig_torque, axies_torque = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
+    axies_torque = axies_torque.flatten()
 
-        n_cols = 3
-        n_rows = math.ceil(n_leg_j / n_cols)
-        joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
+    for i in range(n_leg_j):
+        ax = axies_torque[i]
+        ax.plot(log_t_np, log_torque_np[:, i], label="torque")
+        ax.set_title(f"Joint Torque: {joint_name[i]}")
+        ax.set_ylabel("Torque [Nm]")
+        if i // n_cols == n_rows - 1:
+            ax.set_xlabel("time [s]")
+        if i == 0:
+            ax.legend(loc="best")
+    fig_torque.tight_layout()
 
-        # Joint Angle Plot
-        fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
-        axies = axies.flatten()
-
-        for i in range(n_leg_j):
-            ax = axies[i]
-            ax.plot(log_t_np, log_q_np[:, i], label="actual")
-            ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
-            ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-            ax.axhline(random_angle[0, i].cpu(), ls="--", label="optimal_angle", color="b")
-            ax.set_title(f"Joint Angle: {joint_name[i]}")
-            ax.set_ylabel("angle [rad]")
-            if i // n_cols == n_rows - 1:
-                ax.set_xlabel("time [s]")
-            if i == 0:
-                ax.legend(loc="best")
-        fig.tight_layout()
-
-        # Joint Torque Plot
-        fig_torque, axies_torque = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
-        axies_torque = axies_torque.flatten()
-
-        for i in range(n_leg_j):
-            ax = axies_torque[i]
-            ax.plot(log_t_np, log_torque_np[:, i], label="torque")
-            ax.set_title(f"Joint Torque: {joint_name[i]}")
-            ax.set_ylabel("Torque [Nm]")
-            if i // n_cols == n_rows - 1:
-                ax.set_xlabel("time [s]")
-            if i == 0:
-                ax.legend(loc="best")
-        fig_torque.tight_layout()
-
-        plt.show()
+    plt.show()
 
 def main():
     """Main function."""
