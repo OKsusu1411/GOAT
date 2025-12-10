@@ -45,9 +45,9 @@ urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
 
 # URDF conversion check
 if urdf_converter.usd_path == GOAT_ASSET["usd_path"]:
-    print("urdf convertion success!")
+    print("urdf conversion success!")
 else:
-    print("urdf convertion failed!")
+    print("urdf conversion failed!")
 
 
 GOAT_Cfg: ArticulationCfg = ArticulationCfg(
@@ -95,14 +95,40 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
 
     # Actuators cfg
     actuators={
-        "leg": DCMotorCfg(
-            joint_names_expr=["hip_.*", "thigh_.*", "knee_.*",],       # parameter reference from TRON
+        "hip": DCMotorCfg(
+            joint_names_expr=["hip_.*",],
             effort_limit=4.5,
             saturation_effort=4.5,
             velocity_limit=15.0,
-            stiffness=40.0,
-            damping=2.5,
-            friction=0.0,
+            stiffness=0.0,                          # Internal PD controller not used
+            damping=0.0,                            # Internal PD controller not used
+            friction=None,                           # Static friction coefficient
+            dynamic_friction=5.646268e-02,          # Dynamic friction coefficient 
+            viscous_friction=3.190248e-01,          # Viscous friction coefficient
+        ),
+
+        "thigh": DCMotorCfg(
+            joint_names_expr=["thigh_.*",],
+            effort_limit=4.5,
+            saturation_effort=4.5,
+            velocity_limit=15.0,
+            stiffness=0.0,
+            damping=0.0,
+            friction=None,
+            dynamic_friction=5.646268e-02,
+            viscous_friction=3.190248e-01,
+        ),
+
+        "knee": DCMotorCfg(
+            joint_names_expr=["knee_.*",],
+            effort_limit=4.5,
+            saturation_effort=4.5,
+            velocity_limit=15.0,
+            stiffness=0.0,
+            damping=0.0,
+            friction=None,
+            dynamic_friction=4.432008e-01,
+            viscous_friction=2.993308e-01,
         ),
         
         "wheel": DCMotorCfg(
@@ -111,8 +137,10 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             saturation_effort=2.5,
             velocity_limit=15.0,
             stiffness=0.0,
-            damping=0.8,
-            friction=0.0,
+            damping=0.0,
+            friction=None,
+            dynamic_friction=4.432008e-01,
+            viscous_friction=2.993308e-01,
         )
     }
 )
