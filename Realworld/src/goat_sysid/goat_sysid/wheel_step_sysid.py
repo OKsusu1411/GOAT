@@ -35,8 +35,8 @@ class WheelStepSysID(Node):
         # ===== 파라미터 =====
         # 스텝 속도 리스트 [deg/s]
         default_step_speeds = [
-            0.0, 100.0, 200.0, 300.0, 200.0, 100.0,
-            0.0, -100.0, -200.0, -300.0, -200.0, -100.0, 0.0,
+            0.0, 5.0, 10.0, 15.0, 10.0, 5.0,
+            0.0, -5.0, -10.0, -15.0,  -20.0, -15.0,  -10.0, -5.0,  0.0,
         ]
         step_param = self.declare_parameter(
             'step_speeds_dps', default_step_speeds
