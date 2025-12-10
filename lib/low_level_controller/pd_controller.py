@@ -48,7 +48,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
             spawn=GOAT_Cfg.spawn.replace(
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),     # zero-G
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                    enabled_self_collisions=True, solver_position_iteration_count=4,
+                    enabled_self_collisions=False, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True               # Fixed_base link
               
                 )
@@ -78,26 +78,27 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 class PD_Controller():
     """
-    
     τ = Kp*e + Kd*ė
     """
-    def __init__(self, kp, kd, num_envs: int, num_dof: int, device: str, dt: float):
+    def __init__(self, kp, kd, num_envs: int, num_dof: int, num_leg: int, device: str, dt: float):
         """
-        Controller initialization
+        PD Controller initialization for joint
 
         Args:
             kp (float or torch.Tensor): Proportional gain. float value or (1, num_dof) size tensor.
             kd (float or torch.Tensor): Derivative gain. float value or (1, num_dof) size tensor.
             num_envs (int): Number of pararell training environments.
             num_dof (int): controllable dof per leg.
+            num_leg (int): Number of legs
             device (str): "cuda:0" or "cpu".
             dt (float): Simulation time-step.
         """
         self.device = device
         self.num_envs = num_envs
         self.num_dof = num_dof
+        self.num_leg = num_leg
         self.dt = dt
-        self.old_torque = torch.zeros(self.num_envs, num_dof * 2 + 2, device=self.device)
+        self.old_torque = torch.zeros(self.num_envs, num_dof * num_leg, device=self.device)
 
         # kp gain
         if isinstance(kp, float):
@@ -184,11 +185,122 @@ class PD_Controller():
         self.old_torque = torque.clone()
 
         # Clip torque based on torque_limits
-        torque = torch.clamp(torque, -torque_limits, torque_limits)
+        torque = torch.clamp(torque, -4.5, 4.5)
         
         # TODO : Wheel controller
         return torque
+    
+class PI_Controller():
+    def __intit__(self, kp, ki, num_envs: int, num_dof: int, num_leg: int, device: str, dt: float):
+        """
+        PI Controller for wheel initialization
 
+        Args:
+            kp (float or torch.Tensor): Proportional gain. float value or (1, num_dof) size tensor.
+            ki (float or torch.Tensor): Intergral gain. float value or (1, num_dof) size tensor.
+            num_envs (int): Number of pararell training environments.
+            num_dof (int): controllable dof per leg.
+            num_leg (int): Number of legs
+            device (str): "cuda:0" or "cpu".
+            dt (float): Simulation time-step.
+        """
+        self.device = device
+        self.num_envs = num_envs
+        self.num_dof = num_dof
+        self.num_leg = num_leg
+        self.dt = dt
+        self.old_torque = torch.zeros(self.num_envs, num_dof * num_leg, device=self.device)
+
+        # kp gain
+        if isinstance(kp, float):
+            self.kp = torch.full((num_envs, num_dof), kp, device=device)
+        elif isinstance(kp, torch.Tensor):
+            if kp.shape != (1, num_dof):
+                raise ValueError(f"kp tensor must have shape (1, {num_dof}), but got {kp.shape}")
+            self.kp = kp.to(device).expand(num_envs, -1) # Expand as num_envs
+        else:
+            raise TypeError("kp must be a float or a torch.Tensor of shape (1, num_dof)")
+
+        # ki gain
+        if isinstance(ki, float):
+            self.ki = torch.full((num_envs, num_dof), ki, device=device)
+        elif isinstance(ki, torch.Tensor):
+            if ki.shape != (1, num_dof):
+                raise ValueError(f"ki tensor must have shape (1, {num_dof}), but got {ki.shape}")
+            self.ki = ki.to(device).expand(num_envs, -1) # Expand as num_envs
+        else:
+            raise TypeError("ki must be a float or a torch.Tensor of shape (1, num_dof)")
+    
+    def compute_torque(
+        self,
+        joint_pos: torch.Tensor,
+        joint_vel: torch.Tensor,
+        joint_pos_cmd: torch.Tensor,
+        joint_limits: torch.Tensor,
+        torque_limits: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute joint input torque using PD controller.
+
+        Args:
+            joint_pos (torch.Tensor): Current joint position [rad].
+            joint_vel (torch.Tensor): Current joint velocity [rad/s].
+            joint_pos_cmd (torch.Tensor): Reference joint pos(angle) [num_env, 2(L, R), num_joints].
+            joint_limits (torch.Tensor): Joint position limits [num_env, num_joints, 2].
+            torque_limits (torch.Tensor): Joint torque limits [num_env, num_joints].
+
+        Returns:
+            torch.Tensor: Joint torque.
+        """
+        # Robot dof
+        leg_dof = self.num_dof                  # hip, thigh, knee joints
+        num_total_joints = leg_dof * 2 + 2      # 6(revolute) + 2(wheel)
+
+        # Define joint indices for each leg
+        # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
+        left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.long)
+        right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.long)
+
+
+        # --- Left Leg slicing ---
+        joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
+        joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
+        joint_pos_cmd_left = torch.index_select(joint_pos_cmd, 1, left_leg_indices)
+        joint_limits_left = torch.index_select(joint_limits, 1, left_leg_indices)
+
+        # --- Right Leg slicing ---
+        joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
+        joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
+        joint_pos_cmd_right = torch.index_select(joint_pos_cmd, 1, right_leg_indices)
+        joint_limits_right = torch.index_select(joint_limits, 1, right_leg_indices)
+
+        # Left foot PD control
+        joint_pos_cmd_left = torch.clamp(joint_pos_cmd_left, joint_limits_left[:, :, 0], joint_limits_left[:, :, 1])            # Clipping joint position command
+        joint_pos_left_error = joint_pos_cmd_left - joint_pos_left
+        joint_vel_left_error = - joint_vel_left                                                                                 # reference joint velocity = 0
+        torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
+
+        # Right foot PD control
+        joint_pos_cmd_right = torch.clamp(joint_pos_cmd_right, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
+        joint_pos_right_error = joint_pos_cmd_right - joint_pos_right
+        joint_vel_right_error = - joint_vel_right                                                                               # reference joint velocity = 0
+        torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
+        
+        # Combine torque inputs
+        torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
+        torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+        
+        # LPF for torque
+        torque = 0.951 * self.old_torque + (1 - 0.951) * torque
+        self.old_torque = torque.clone()
+
+        # Clip torque based on torque_limits
+        torque = torch.clamp(torque, -4.5, 4.5)
+        
+        # TODO : Wheel controller
+        return torque
+        
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene): 
     # define scene
     robot = scene["robot"]
@@ -200,8 +312,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # --- Initialize PD torque Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = PD_Controller(kp=torch.tensor([[0.3, 0.27, 1.4]]),
-                                   kd=torch.tensor([[0.01, 0.01, 0.0001]]),
+    leg_controller = PD_Controller(kp=torch.tensor([[0.3, 0.27, 0.4]]),
+                                   kd=torch.tensor([[0.01, 0.01, 0.001]]),
                                    num_envs=scene.num_envs,
                                    num_dof=leg_dof,
                                    device=scene.device,
@@ -273,11 +385,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 robot.set_joint_effort_target(torque)
                 robot.write_data_to_sim()
-
-            # Simulation step
-            sim.step()
-            robot.update(sim_dt)
-            scene.update(sim_dt)
 
             # Simulation step
             sim.step()
