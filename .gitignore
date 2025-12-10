@@ -70,5 +70,6 @@ _build
 
 **/Realworld/src/goat_sysid/.vscode/
 **/Realworld/src/goat_sysid/log/
+**/Realworld/test_log/
 
 
