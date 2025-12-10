@@ -46,7 +46,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),     # zero-G
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),     # zero-G
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
                     enabled_self_collisions=True, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True               # Fixed_base link
@@ -208,7 +208,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                    dt=sim_dt)
 
     # ---------- Environment Initialization ----------
-    sim_len = 25.0  # [s] simulation length
+    sim_len = 10.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
     torque_limits = robot.data.joint_effort_limits
     default_joint_pos = robot.data.default_joint_pos.clone()
@@ -297,10 +297,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         # Random joint angle within limits
         lower_limits = joint_limits[:, :, 0]
         upper_limits = joint_limits[:, :, 1]
-        joint_pos_tmp = robot.data.joint_pos                # tmp
-        joint_pos_tmp[:, :2] += torch.pi/6
+        joint_pos_tmp = default_joint_pos               # tmp
+        joint_pos_tmp[:, 1] += torch.pi/6
+        joint_pos_tmp[:, 0] -= torch.pi/6
         # random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
         random_angle = joint_pos_tmp
+        print(random_angle)
         robot.write_joint_state_to_sim(random_angle, default_joint_vel)
         target_link_pose = robot.data.body_link_pose_w
 
