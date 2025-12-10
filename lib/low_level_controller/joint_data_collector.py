@@ -130,7 +130,8 @@ class PD_Controller():
         joint_vel: torch.Tensor,
         joint_pos_cmd: torch.Tensor,
         joint_limits: torch.Tensor,
-        torque_limits: torch.Tensor
+        torque_limits: torch.Tensor,
+        coriolis_full: torch.Tensor
     ) -> torch.Tensor:
         """
         Compute joint input torque using PD controller.
@@ -154,7 +155,9 @@ class PD_Controller():
         left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.long)
         right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.long)
 
-
+        coriolis_left = coriolis_full.index_select(1, left_leg_indices)
+        coriolis_right = coriolis_full.index_select(1, right_leg_indices)
+        
         # --- Left Leg slicing ---
         joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
         joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
@@ -179,7 +182,7 @@ class PD_Controller():
         
         # Clip friction compensation to prevent it from overpowering the PD torque and reversing the command's sign
         # clipped_friction_comp_left = torch.clamp(friction_comp_left, -torch.abs(pd_torque_left), torch.abs(pd_torque_left))
-        torque_left = pd_torque_left - friction_comp_left
+        torque_left = pd_torque_left - friction_comp_left + coriolis_left
 
         # Right foot PD control
         joint_pos_cmd_right = torch.clamp(joint_pos_cmd_right, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
@@ -193,12 +196,17 @@ class PD_Controller():
 
         # Clip friction compensation to prevent it from overpowering the PD torque and reversing the command's sign
         # clipped_friction_comp_right = torch.clamp(friction_comp_right, -torch.abs(pd_torque_right), torch.abs(pd_torque_right))
-        torque_right = pd_torque_right - friction_comp_right
+        torque_right = pd_torque_right - friction_comp_right + coriolis_right
         
         # Combine torque inputs
         torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        pd_torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        
         torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+
+        pd_torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), pd_torque_left)
+        pd_torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), pd_torque_right)
         
         # LPF for torque
         torque = 0.951 * self.old_torque + (1 - 0.951) * torque
@@ -208,7 +216,7 @@ class PD_Controller():
         torque = torch.clamp(torque, -torque_limits, torque_limits)
         
         # TODO : Wheel controller
-        return torque
+        return torque, pd_torque
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene): 
     # define scene
@@ -295,12 +303,16 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         joint_pos = robot.data.joint_pos
         joint_vel = robot.data.joint_vel
 
+        #coriilis
+        coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
+    
         # Compute torque
-        torque = leg_controller.compute_torque(joint_pos=joint_pos,
-                                               joint_vel=joint_vel,
-                                               joint_pos_cmd=reference_angle,
-                                               joint_limits=joint_limits,
-                                               torque_limits=torque_limits)
+        torque, pd_torque = leg_controller.compute_torque(joint_pos=joint_pos,
+                                                          joint_vel=joint_vel,
+                                                          joint_pos_cmd=reference_angle,
+                                                          joint_limits=joint_limits,
+                                                          torque_limits=torque_limits,
+                                                          coriolis_full=coriolis_full)
 
         # torque[:, 0] = 0
         # torque[:, 1] = 0
@@ -320,7 +332,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         t += sim_dt
         log_t.append(t)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
-        log_torque.append(torque[:, :n_leg_j].clone())
+        log_torque.append(pd_torque[:, :n_leg_j].clone())
 
     # --- 결과 플롯 ---
     import matplotlib.pyplot as plt
@@ -386,3 +398,4 @@ def main():
 if __name__ == "__main__":
     main()
     simulation_app.close()
+
