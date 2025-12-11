@@ -21,16 +21,19 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     decimation = 2                              # 100Hz policy
     action_space = [2, 4]                       # [L + R, joint pos + wheel velocity]
     observation_space = 35                      # Observation space
-    state_space = 47                            # Privilege state information
+    state_space = 47                            # Inclde privilege state information
 
     ## ==================== Controller gain ==================== ##
-    kp=torch.tensor([[1.0, 1.0, 1.0]])
-    kd=torch.tensor([[0.1, 0.1, 0.1]])
+    joint_kp=torch.tensor([[1.0, 1.0, 1.0]])
+    joint_kd=torch.tensor([[0.1, 0.1, 0.1]])
+    wheel_kp=torch.tensor([[0.1]])
+    wheel_ki=torch.tensor([[0.1]])
     
     ## ==================== Robot configuration ==================== ##
     leg_dof = 3                                 # Hip, Thigh, Knee
-    n_leg_j = leg_dof * 2
-    num_total_joints = n_leg_j + 2              # Two wheels
+    num_leg = 2
+    n_leg_j = leg_dof * num_leg
+    num_total_joints = n_leg_j + num_leg        # Whee per legs
 
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level

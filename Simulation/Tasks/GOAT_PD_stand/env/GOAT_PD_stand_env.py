@@ -7,7 +7,8 @@ from isaaclab.utils.math import normalize, quat_from_angle_axis
 from isaaclab.terrains import TerrainImporterCfg
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
-from lib.low_level_controller.pd_controller import PD_Controller
+from lib.low_level_controller.pd_controller import PD_Controller, PI_Controller
+from lib.utils.Running_mean_std import RunningMeanStd
 
 csv_path = "initial_pose_data.csv"              # Path to csv file
 
@@ -42,17 +43,31 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.privileged_info = torch.zeros((self.num_envs, self.cfg.state_space - self.cfg.observation_space), dtype=torch.float32, device=self.device)
         self.state = torch.zeros((self.num_envs, self.cfg.state_space), dtype=torch.float32, device=self.device)
 
+        # Running mean std initialization (for normalization)
+        self.observation_normalizer = RunningMeanStd(shape=self.cfg.observation_space, device=self.device)
+        self.state_normalizer = RunningMeanStd(shape=self.cfg.state_space, device=self.device)
+
         # Torque controller initialization
         self.zero_joint_efforts = torch.zeros(self.num_envs, cfg.num_total_joints, device=self.device)
-        self.leg_controller = PD_Controller(kp=self.cfg.kp,
-                                            kd=self.cfg.kd,
+        self.leg_controller = PD_Controller(kp=self.cfg.joint_kp,
+                                            kd=self.cfg.joint_kd,
                                             num_envs=self.num_envs,
                                             num_dof=self.cfg.leg_dof,
+                                            num_leg=self.cfg.num_leg,
                                             device=self.device,
                                             dt=self.cfg.sim_dt)
-
+        self.wheel_controller = PI_Controller(kp=self.cfg.wheel_kp,
+                                              ki=self.cfg.wheel_ki,
+                                              num_envs=self.num_envs,
+                                              num_dof=self.cfg.num_leg,         # One wheel per legs
+                                              num_leg=self.cfg.num_leg,
+                                              device=self.device,
+                                              dt=self.cfg.sim_dt)
+        
+        # TODO: HW limit이 제대로 안불러와지면 그냥 하드 코딩 ㄱㄱ
         # HW limits
-        self.joint_limits = self._robot.data.joint_pos_limits
+        self.joint_pos_limits = self._robot.data.joint_pos_limits
+        self.joint_vel_limits = self._robot.data.joint_vel_limits
         self.torque_limits = self._robot.data.joint_effort_limits
 
         if os.path.exists(csv_path):
@@ -91,7 +106,7 @@ class GOATPDStandEnv(GOATBaseEnv):
             root_state[:, 2] = 0.35 + torch.rand(len(env_ids), device=self.device) * 0.1
             root_state[:, 3:7] = self._get_curriculum_quaternions(len(env_ids), self.device)
 
-            limits = self.joint_limits[env_ids]
+            limits = self.joint_pos_limits[env_ids]
             joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
             joint_vel = torch.randn_like(joint_pos) * 0.1
 
@@ -161,14 +176,22 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
         self.joint_vel_noissy = self._add_gaussian_noise(joint_vel, joint_vel_noise)
 
-        self.torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
-                                                             joint_vel=self.joint_vel_noissy,
-                                                             joint_pos_cmd=self.joint_pos_cmd,
-                                                             joint_limits=self.joint_limits,
-                                                             torque_limits=self.torque_limits)
-        self._robot.set_joint_effort_target(self.torque_cmd)
+        self.joint_torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
+                                                                   joint_vel=self.joint_vel_noissy,
+                                                                   joint_pos_cmd=self.joint_pos_cmd,
+                                                                   joint_pos_limits=self.joint_pos_limits,
+                                                                   torque_limits=self.torque_limits)
         
-        # TODO: wheel controller
+        self.wheel_torque_cmd = self.wheel_controller.compute_torque(joint_vel=self.joint_vel_noissy,
+                                                                     joint_vel_cmd=self.wheel_cmd_vel,
+                                                                     joint_vel_limits=self.joint_vel_limits,
+                                                                     torque_limits=self.torque_limits)
+        
+        # Combine torque commands
+        self.torque_cmd = torch.cat((self.joint_torque_cmd, self.wheel_torque_cmd), dim=1)
+        
+        # Load to sim buffer
+        self._robot.set_joint_effort_target(self.torque_cmd)
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
         """
@@ -215,7 +238,12 @@ class GOATPDStandEnv(GOATBaseEnv):
                                           dim=1)
         
         self.state = torch.cat((self.observation, self.privileged_info), dim=1)
-        return {"policy": self.observation, "value": self.state}
+
+        # Normalize observation, state space
+        self.normalized_observation = self.observation_normalizer.normalize(self.observation)
+        self.normalized_state = self.state_normalizer.normalize(self.state)
+
+        return {"policy": self.normalized_observation, "value": self.normalized_state}
     
     def _get_rewards(self) -> torch.Tensor:
         # Scheduler
@@ -250,7 +278,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         return total_reward
     
     def _get_dones(self): 
-        terminated = False          # Continuous task
+        terminated = False          # No terminate condition
         truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1
         return terminated, truncated
     
