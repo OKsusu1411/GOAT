@@ -48,17 +48,17 @@ DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
 
 # --- Per-joint default lists ---> rad --- hip = 30   thigh = 45
 DEFAULT_KP_LIST         = [0.300, 0.300, 0.270,  0.270,  1.4000,  1.4000, 0.026, 0.01183]
-DEFAULT_KD_LIST         = [0.010, 0.010, 0.010,  0.010,  0.0001,  0.0001, 0.026, 0.01183]
+DEFAULT_KD_LIST         = [0.015, 0.015, 0.010,  0.010,  0.0001,  0.0001, 0.026, 0.01183]
 DEFAULT_LPF_ALPHA_LIST  = [0.951, 0.951, 0.951,  0.951,  0.9510,  0.9510, 0.951, 0.951]
 #DEFAULT_MAX_TORQUE_LIST = [4.5, 4.5, 4.5,  4.5,  4.5,  4.5, 4.5, 4.5]
-DEFAULT_MAX_TORQUE_LIST = [4.5,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0, 0.0]
+DEFAULT_MAX_TORQUE_LIST = [4.5,  4.5, 4.5, 4.5,  4.5, 4.5, 4.5, 4.5]
 
 # --- 각도 + 휠 속도 기본값을 한 곳에 모음 ---
 DEFAULT_TARGET_ANGLE_AND_SPEED = {
-    "angles_deg": [0.0, 0.0, 0.0, -45.0, 50.0, -50.0, 0.0, 0.0],  # 관절 각도 [deg]
+    "angles_deg": [-0.0, 0.0, 0.0, -0.0, 0.0, -0.0, 0.0, 0.0],  # 관절 각도 [deg]
     "wheel_speed_deg_s": [                                         # 휠 목표 속도 [deg/s]
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        10.0, -150.0,
+        0.0, 0.0,
     ],
 }
 
@@ -635,7 +635,8 @@ class PDController(Node):
     def destroy_node(self):
         # 노드 종료시 플롯 저장
         try:
-            self.save_plots()
+            # self.save_plots()
+            print("PDController destroy_node called, but plotting disabled.")
         except Exception as e:
             try:
                 self.get_logger().error(f"Failed to save plots: {e}")

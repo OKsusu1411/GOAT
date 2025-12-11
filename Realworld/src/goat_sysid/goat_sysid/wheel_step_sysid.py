@@ -38,7 +38,9 @@ class WheelStepSysID(Node):
         # ===== 파라미터 =====
         # 스텝 속도 리스트 [deg/s]
         default_step_speeds = [
-            0.0, 50.0, 100.0, 150.0, 100.0, 50.0, 0.0, -50.0, -100.0, -150.0, -100.0, -50.0, 0.0]
+            0.0, 5.0,  10.0, 15.0, 10.0, 5.0, 0.0,
+            -5.0, -10.0, -15.0,- 10.0, -5.0, 0.0,
+        ]
         step_param = self.declare_parameter(
             'step_speeds_dps', default_step_speeds
         ).value
@@ -48,7 +50,7 @@ class WheelStepSysID(Node):
         # 각 스텝 유지 시간 [s]
         self.step_duration = float(
             self.declare_parameter('step_duration', 5.0).value
-        )
+       )
 
         # 제어 주기/주파수
         self.control_frequency = float(
