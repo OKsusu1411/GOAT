@@ -1,0 +1,25 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/heachanlee/turtlebot3_ws/install/turtlebot3_fake_node/include/**",
+        "/home/heachanlee/turtlebot3_ws/install/turtlebot3_msgs/include/**",
+        "/home/heachanlee/turtlebot3_ws/install/turtlebot3_gazebo/include/**",
+        "/home/heachanlee/turtlebot3_ws/install/dynamixel_sdk_custom_interfaces/include/**",
+        "/home/heachanlee/turtlebot3_ws/install/dynamixel_sdk/include/**",
+        "/opt/ros/humble/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ros2",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}

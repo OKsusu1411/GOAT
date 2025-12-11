@@ -1,0 +1,13 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/heachanlee/turtlebot3_ws/build/turtlebot3_teleop",
+        "/home/heachanlee/turtlebot3_ws/install/turtlebot3_teleop/lib/python3.10/site-packages",
+        "/home/heachanlee/turtlebot3_ws/build/turtlebot3_example",
+        "/home/heachanlee/turtlebot3_ws/install/turtlebot3_example/lib/python3.10/site-packages",
+        "/home/heachanlee/turtlebot3_ws/install/turtlebot3_msgs/local/lib/python3.10/dist-packages",
+        "/home/heachanlee/turtlebot3_ws/install/dynamixel_sdk_custom_interfaces/local/lib/python3.10/dist-packages",
+        "/home/heachanlee/turtlebot3_ws/install/dynamixel_sdk/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}

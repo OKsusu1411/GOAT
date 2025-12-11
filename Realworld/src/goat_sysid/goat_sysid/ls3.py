@@ -144,7 +144,7 @@ def plot_full_joint_fric_only(dq_used_rad, qdd_used_rad, tau_used,
 
     fig, ax = plt.subplots(figsize=(10, 8))  # 🔹 figure 크게
 
-    ax.scatter(dq_deg, tau_fric_only, s=4, alpha=0.3, label="data (tau - J*qdd)")
+    ax.scatter(dq_deg, tau_fric_only, s=1, alpha=0.3, label="data (tau - J*qdd)")
     ax.plot(dq_line_deg, tau_fric_fit, linewidth=2,
             label="friction model a*dq + b*sign(dq)")
 
