@@ -37,6 +37,7 @@ setup(
             'imu_publisher = goat_control.imu_publisher:main',
             'policy = goat_control.policy:main',
             'pd_controller = goat_control.pd_controller:main',
+            'joint_torque_controller = goat_control.joint_torque_controller:main',
         ],
     },
 )
