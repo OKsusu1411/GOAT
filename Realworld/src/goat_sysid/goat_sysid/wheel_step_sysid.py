@@ -12,18 +12,21 @@ NUM_JOINTS = 8
 WHEEL_INDEX = 7  # 휠 조인트 index 고정
 MOTOR_STATES_TOPIC = 'motor_states'
 TORQUE_COMMANDS_TOPIC = 'torque_commands'
-TARGET_TOPIC = 'target_joint_angles'  # PD 컨트롤러가 구독하는 토픽
+
+# ✅ 이제 이 토픽에는 "속도" 명령을 실어 보낸다고 가정
+TARGET_TOPIC = 'target_joint_angles'  # 또는 'target_joint_speeds' 등 실제 PI 노드 토픽으로 변경
+
+ANGLE_LSB_TO_DEG = 0.001  # 예: 0.001 deg/LSB (모터 매뉴얼 기준에 맞게 조정)
 
 
 class WheelStepSysID(Node):
     """
-    휠 속도 SysID용 스텝 스윕 노드.
+    휠 속도 SysID용 스텝 스윕 노드 (속도 PI 제어기용).
 
     - WHEEL_INDEX(7번) 조인트에 대해,
       v_ref(속도 참조, deg/s)를 step 형태로 바꿔가며 인가.
-    - PD 컨트롤러는 각도 명령만 받으므로,
-      v_ref 를 dt로 적분해서 q_ref[deg]를 만들어
-      target_joint_angles (길이 8)로 퍼블리시.
+    - target 토픽(길이 8)에 "속도 명령"을 퍼블리시:
+        cmd[WHEEL_INDEX] = v_ref, 나머지 0
     - motor_states.speed_dps 는 LSB 이므로 0.01을 곱해 deg/s로 사용.
     - 매 루프마다: [t, step_index, v_ref_dps, v_meas_dps, tau_cmd] 로깅.
     - 모든 스텝이 끝나면 CSV 저장 후 자동 종료.
@@ -35,9 +38,7 @@ class WheelStepSysID(Node):
         # ===== 파라미터 =====
         # 스텝 속도 리스트 [deg/s]
         default_step_speeds = [
-            0.0, 10.0, 20.0, 30.0, 200.0, 100.0,
-            0.0, -100.0, -200.0, -300.0, -200.0, -100.0, 0.0,
-        ]
+            0.0, 50.0, 100.0, 150.0, 100.0, 50.0, 0.0, -50.0, -100.0, -150.0, -100.0, -50.0, 0.0]
         step_param = self.declare_parameter(
             'step_speeds_dps', default_step_speeds
         ).value
@@ -79,11 +80,11 @@ class WheelStepSysID(Node):
         self.last_tau_cmd = np.zeros(NUM_JOINTS, dtype=float)
         self.have_tau = False
 
-        # 휠 각도 참조 [deg] – v_ref 적분해서 업데이트
-        self.ref_angles_deg = np.zeros(NUM_JOINTS, dtype=float)
+        # 현재 각도 [deg] (원하면 로그/디버그에 쓸 수 있음)
+        self.current_angle_deg = np.zeros(NUM_JOINTS, dtype=float)
+        self.have_angle = False
 
         self.t0 = time.time()
-        self.last_time = self.t0
         self.finished = False
 
         # 스텝 진행 상태
@@ -118,19 +119,32 @@ class WheelStepSysID(Node):
     # -------- MotorStates 콜백 --------
     def motor_states_callback(self, msg: MotorStates):
         """
-        MotorStates에서 휠 속도 읽기.
-        msg.speed_dps 는 LSB 이므로 0.01 곱해서 deg/s로 변환.
+        MotorStates에서 휠 속도 + 각도 읽기.
+        speed_dps : 0.01 deg/s per LSB
+        multi_turn_raw : 0.001 deg per LSB (예시)
         """
-        speed_raw = np.array(msg.speed_dps, dtype=float)  # LSB (0.01 deg/s per LSB)
+        speed_raw = np.array(msg.speed_dps, dtype=float)
         if speed_raw.size != NUM_JOINTS:
             self.get_logger().error(
                 f"[WheelStepSysID] motor_states: got {speed_raw.size} speeds, expected {NUM_JOINTS}"
             )
             return
 
-        # LSB -> deg/s
+        # 🔹 속도: LSB -> deg/s
         self.current_speed_dps = speed_raw * 0.01
+
+        # 🔹 각도: multi_turn_raw (또는 single_turn_raw) -> deg
+        angle_raw = np.array(msg.multi_turn_raw, dtype=float)  # ← msg 필드 이름 실제 정의에 맞출 것
+        if angle_raw.size != NUM_JOINTS:
+            self.get_logger().error(
+                f"[WheelStepSysID] motor_states: got {angle_raw.size} angles, expected {NUM_JOINTS}"
+            )
+            return
+
+        self.current_angle_deg = angle_raw * ANGLE_LSB_TO_DEG
+
         self.have_state = True
+        self.have_angle = True
 
     # -------- torque_commands 콜백 --------
     def torque_commands_callback(self, msg: Float32MultiArray):
@@ -148,24 +162,19 @@ class WheelStepSysID(Node):
 
     # -------- 메인 타이머 루프 --------
     def timer_cb(self):
-        # 종료 후에는 각도 0 유지
         now = time.time()
+
+        # 종료 후에는 속도 0 유지
         if self.finished:
-            self.publish_angle_cmd_zero()
-            self.last_time = now
+            self.publish_speed_cmd_zero()
             return
 
-        # 상태, 토크 아직 안 들어왔으면 0도 명령만
+        # 상태, 토크 아직 안 들어왔으면 속도 0 명령만
         if not (self.have_state and self.have_tau):
-            self.publish_angle_cmd_zero()
-            self.last_time = now
+            self.publish_speed_cmd_zero()
             return
 
         t = now - self.t0
-        dt = now - self.last_time
-        if dt <= 0.0:
-            dt = self.dt_nominal
-        self.last_time = now
 
         # 스텝 시작 시점 초기화
         if self.step_start_time is None:
@@ -187,7 +196,7 @@ class WheelStepSysID(Node):
                 )
                 self.finish_and_save()
                 self.finished = True
-                self.publish_angle_cmd_zero()
+                self.publish_speed_cmd_zero()
                 return
             else:
                 self.step_start_time = now
@@ -199,35 +208,31 @@ class WheelStepSysID(Node):
         # 현재 스텝에서 속도 참조 [deg/s]
         v_ref = float(self.step_speeds_dps[self.current_step_idx])
 
-        # 🔹 속도 -> 각도: q_ref += v_ref * dt
-        self.ref_angles_deg[WHEEL_INDEX] += v_ref * dt
-
-        # PD가 쓰는 각도 명령 퍼블리시 (8개 중 7번만 움직임)
-        self.publish_angle_cmd_array()
+        # ✅ 속도 PI 제어기에 "속도 명령" 직접 퍼블리시
+        self.publish_speed_cmd_array(v_ref)
 
         # 로깅 (휠 조인트 7번만 기록)
         v_meas = float(self.current_speed_dps[WHEEL_INDEX])  # deg/s
         tau = float(self.last_tau_cmd[WHEEL_INDEX])
         self.log_data.append([t, self.current_step_idx, v_ref, v_meas, tau])
 
-    # -------- 각도 명령 퍼블리시 --------
-    def publish_angle_cmd_zero(self):
+    # -------- 속도 명령 퍼블리시 --------
+    def publish_speed_cmd_zero(self):
         """
-        전체 조인트 각도 0도로 명령.
+        전체 조인트 속도 0으로 명령.
         """
         cmd = np.zeros(NUM_JOINTS, dtype=float)
         msg = Float32MultiArray()
         msg.data = cmd.tolist()
         self.pub_target.publish(msg)
 
-    def publish_angle_cmd_array(self):
+    def publish_speed_cmd_array(self, v_ref_dps: float):
         """
-        ref_angles_deg를 이용해서 target_joint_angles 퍼블리시.
-        7번 조인트만 ref_angles_deg에서 가져오고,
+        WHEEL_INDEX 조인트에만 v_ref_dps[deg/s]를 넣어서 퍼블리시.
         나머지는 0으로 둔다 (안전하게 가기 위해).
         """
         cmd = np.zeros(NUM_JOINTS, dtype=float)
-        cmd[WHEEL_INDEX] = self.ref_angles_deg[WHEEL_INDEX]
+        cmd[WHEEL_INDEX] = v_ref_dps
 
         msg = Float32MultiArray()
         msg.data = cmd.tolist()

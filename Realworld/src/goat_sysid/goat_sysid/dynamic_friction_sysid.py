@@ -30,12 +30,12 @@ class DynamicFrictionSysID(Node):
         super().__init__('dynamic_friction_sysid')
 
         # ====== 파라미터 ======
-        self.joint_index = int(self.declare_parameter('joint_index', 5).value)
+        self.joint_index = int(self.declare_parameter('joint_index', 1).value)
 
         # 사인 파라미터 (deg, Hz)
         self.amplitude_deg = float(self.declare_parameter('amplitude_deg', 20.0).value)
-        self.frequency_hz = float(self.declare_parameter('frequency_hz', 0.5).value)
-        self.offset_deg = float(self.declare_parameter('offset_deg', -8.0).value)
+        self.frequency_hz = float(self.declare_parameter('frequency_hz', 0.3).value)
+        self.offset_deg = float(self.declare_parameter('offset_deg', 0.0).value)
 
         # 컨트롤 주파수
         self.control_frequency = float(
@@ -44,7 +44,7 @@ class DynamicFrictionSysID(Node):
         self.dt = 1.0 / self.control_frequency
 
         # 실험 시간 (초)
-        self.duration = float(self.declare_parameter('duration', 60.0).value)
+        self.duration = float(self.declare_parameter('duration', 200.0).value)
 
         # 로그 저장 경로
         default_filename = f"sysid_joint{self.joint_index}_{int(time.time())}.csv"
