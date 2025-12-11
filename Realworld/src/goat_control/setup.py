@@ -38,6 +38,7 @@ setup(
             'policy = goat_control.policy:main',
             'pd_controller = goat_control.pd_controller:main',
             'joint_torque_controller = goat_control.joint_torque_controller:main',
+            'data_logger = goat_control.data_logger:main',
         ],
     },
 )

@@ -27,6 +27,7 @@ setup(
             'breakaway_torque_tester = goat_sysid.breakaway_torque_tester:main',
             'dynamic_friction_sysid = goat_sysid.dynamic_friction_sysid:main',
             'wheel_step_sysid = goat_sysid.wheel_step_sysid:main',
+            'step_trajectory_publisher = goat_sysid.step_trajectory_publisher:main',
         ],
     },
 )

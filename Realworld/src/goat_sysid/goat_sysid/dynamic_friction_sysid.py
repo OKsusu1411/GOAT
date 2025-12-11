@@ -33,7 +33,7 @@ class DynamicFrictionSysID(Node):
         self.joint_index = int(self.declare_parameter('joint_index', 5).value)
 
         # 사인 파라미터 (deg, Hz)
-        self.amplitude_deg = float(self.declare_parameter('amplitude_deg', 20.0).value)
+        self.amplitude_deg = float(self.declare_parameter('amplitude_deg', 50.0).value)
         self.frequency_hz = float(self.declare_parameter('frequency_hz', 0.5).value)
         self.offset_deg = float(self.declare_parameter('offset_deg', -8.0).value)
 
