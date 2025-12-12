@@ -203,7 +203,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         # Observation data
         self.base_acceleration = self._robot.root_physx_view.get_link_accelerations()[:, 0, 3:]
         self.base_angular_vel = self._robot.root_physx_view.get_link_velocities()[:, 0, :3]
-        self.gravity_vector = self._robot.data.projected_gravivity_b
+        self.gravity_vector = self._robot.data.projected_gravity_b          # Unit vector
         self.base_quaternion = self._robot.root_physx_view.get_root_transforms()[:, 3:]
         self.joint_pos = self._robot.data.joint_pos
         self.joint_vel = self._robot.data.joint_vel

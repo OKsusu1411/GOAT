@@ -305,7 +305,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         #coriilis
         coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
-    
+        print(robot.data.projected_gravity_b)
         # Compute torque
         torque, pd_torque = leg_controller.compute_torque(joint_pos=joint_pos,
                                                           joint_vel=joint_vel,
