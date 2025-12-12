@@ -191,7 +191,7 @@ class PD_Controller():
         return torque
     
 class PI_Controller():
-    def __intit__(self, kp, ki, num_envs: int, num_dof: int, num_leg: int, device: str, dt: float):
+    def __init__(self, kp, ki, num_envs: int, num_dof: int, num_leg: int, device: str, dt: float):
         """
         PI Controller initialization  for velocity control
 
@@ -312,6 +312,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                    num_dof=leg_dof,
                                    device=scene.device,
                                    dt=sim_dt)
+    
+    wheel_controller = PI_Controller(kp=1,
+                                     ki=1,
+                                     num_envs=scene.num_envs,
+                                     num_dof=1,
+                                     num_leg=2,
+                                     device=scene.device,
+                                     dt=sim_dt)
 
     # ---------- Environment Initialization ----------
     sim_len = 10.0  # [s] simulation length
