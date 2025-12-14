@@ -246,28 +246,53 @@ class GOATPDStandEnv(GOATBaseEnv):
         return {"policy": self.normalized_observation, "value": self.normalized_state}
     
     def _get_rewards(self) -> torch.Tensor:
+        # TODO: self.cfg.upright_threshold, self.cfg.height_threshold, self.cfg.curriculum_level_up_threshold, self.curriculum_level_down_threshold
         # Scheduler
-        self.success_rate       # TODO: success rate랑 threshold 정의해야됨
+        # Target gravity in base frame (Upright state = [0, 0, -1])
+        target_gravity = torch.tensor([0.0, 0.0, -1.0], device=self.device).repeat(self.num_envs, 1)
+        
+        # Upright_rate (1.0: upright properly, -1.0: upside down)
+        upright_rate = torch.sum(self.gravity_vector * target_gravity, dim=1)       # Dot product
+        
+        # boolean for success measure
+        is_upright = upright_rate > (self.cfg.upright_threshold * torch.pi / 180)
+        
+        is_height_reached = torch.abs(self.base_height - self.cfg.target_height) < self.cfg.height_threshold
+        
+        # Velocity criteria (Only strict for balancing)
+        lin_vel_norm = torch.norm(self.base_vel, dim=1)
+        ang_vel_norm = torch.norm(self.base_angular_vel, dim=1)
+        is_stable = (lin_vel_norm < 0.5) & (ang_vel_norm < 1.0)
+
+        # Task-specific success definition
+        current_task_name = self.total_task_curriculum_level[self.task_curriculum_level]
+
+        if current_task_name == "balancing":
+            # Balancing: must be upright, at height, and stable
+            success_measure = is_upright & is_height_reached & is_stable
+        elif current_task_name == "recovery":
+            # Recovery: Just need to get up (velocity constraint is relaxed)
+            success_measure = is_upright & is_height_reached
+
+        # Compute batch success rate
+        self.success_rate = torch.mean(success_measure.float())
 
         # Domain randomization curriculum
-        if self.success_rate > self.threshold:
+        if self.success_rate > self.cfg.curriculum_level_up_threshold:
             self.DR_curriculum_level += 1
-            if self.DR_curriculum_level > self.total_DR_curriculum_level:
+            if self.DR_curriculum_level >= self.total_DR_curriculum_level:
                 self.task_curriculum_level += 1         # I'm on the next level
                 self.DR_curriculum_level = 0
 
-        elif self.success_rate < self.threshold:
+        elif self.success_rate < self.curriculum_level_down_threshold:
             self.DR_curriculum_level -= 1
             if self.DR_curriculum_level < 0:
                 self.task_curriculum_level -= 1         # Downgrade
                 self.DR_curriculum_level = 0
 
-        # Task curriculum
-        if self.task_curriculum_level > len(self.total_task_curriculum_level) - 1:      # Maximum level
-            self.task_curriculum_level -= 1
-
-        elif self.task_curriculum_level < 0:                                            # Lowest level
-            self.task_curriculum_level = 0
+        # Clipping
+        self.task_curriculum_level = max(0, min(self.task_curriculum_level, len(self.total_task_curriculum_level) - 1))
+        self.DR_curriculum_level = max(0, min(self.DR_curriculum_level, self.total_DR_curriculum_level - 1))
         
         if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
             height_error = self.base_height - self.cfg.target_height
