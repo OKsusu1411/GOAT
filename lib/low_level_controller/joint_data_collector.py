@@ -1,9 +1,4 @@
 import argparse
-import time
-import math
-import numpy as np
-import pandas as pd
-import torch
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -19,6 +14,7 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import torch
 import isaaclab.sim as sim_utils
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
@@ -32,9 +28,9 @@ from lib.RRT.RRT_wrapper import RRTWrapper
 from lib.utils import Env
 
 HIP_COL_FRI = 5.646268e-02
-HIP_VIS_FRI = 3.190248e-01
-KNEE_COL_FRI = 4.432008e-01
-KNEE_VIS_FRI = 2.993308e-01
+HIP_VIS_FRI = 3.190248e-02
+TIGH_COL_FRI = 4.432008e-01
+TIGH_VIS_FRI = 2.993308e-02
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -123,8 +119,8 @@ class PD_Controller():
         # Friction coefficients
         # Order: [hip, thigh, knee]
         # Assuming knee friction is 0 as it's not defined.
-        coulomb_coeffs = torch.tensor([HIP_COL_FRI, HIP_COL_FRI, KNEE_COL_FRI], device=device).unsqueeze(0)
-        viscous_coeffs = torch.tensor([HIP_VIS_FRI, HIP_COL_FRI, KNEE_VIS_FRI], device=device).unsqueeze(0)
+        coulomb_coeffs = torch.tensor([HIP_COL_FRI, TIGH_COL_FRI, 0.0], device=device).unsqueeze(0)
+        viscous_coeffs = torch.tensor([HIP_VIS_FRI, TIGH_VIS_FRI, 0.0], device=device).unsqueeze(0)
         self.coulomb_coeffs = coulomb_coeffs.expand(num_envs, -1)
         self.viscous_coeffs = viscous_coeffs.expand(num_envs, -1)
 
@@ -180,14 +176,13 @@ class PD_Controller():
         joint_vel_left_error = - joint_vel_left                                                                                 # reference joint velocity = 0
         
         pd_torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
-        pd_torque_left[:, -1] *= 2
         
         # Friction compensation (Note: to cancel friction, this term should typically be added, not subtracted)
         friction_comp_left = self.coulomb_coeffs * torch.sign(joint_vel_left) + self.viscous_coeffs * joint_vel_left
         
         # Clip friction compensation to prevent it from overpowering the PD torque and reversing the command's sign
         # clipped_friction_comp_left = torch.clamp(friction_comp_left, -torch.abs(pd_torque_left), torch.abs(pd_torque_left))
-        torque_left = pd_torque_left - friction_comp_left
+        torque_left = pd_torque_left - friction_comp_left + coriolis_left
 
         # Right foot PD control
         joint_pos_cmd_right = torch.clamp(joint_pos_cmd_right, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
@@ -195,14 +190,13 @@ class PD_Controller():
         joint_vel_right_error = - joint_vel_right                                                                               # reference joint velocity = 0
 
         pd_torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
-        pd_torque_right[:, -1] *= 2
 
         # Friction compensation (Note: to cancel friction, this term should typically be added, not subtracted)
         friction_comp_right = self.coulomb_coeffs * torch.sign(joint_vel_right) + self.viscous_coeffs * joint_vel_right
 
         # Clip friction compensation to prevent it from overpowering the PD torque and reversing the command's sign
         # clipped_friction_comp_right = torch.clamp(friction_comp_right, -torch.abs(pd_torque_right), torch.abs(pd_torque_right))
-        torque_right = pd_torque_right - friction_comp_right
+        torque_right = pd_torque_right - friction_comp_right + coriolis_right
         
         # Combine torque inputs
         torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
@@ -220,7 +214,7 @@ class PD_Controller():
 
         # Clip torque based on torque_limits
         torque = torch.clamp(torque, -torque_limits, torque_limits)
-        torque = torch.round(torque*100)/100
+        
         # TODO : Wheel controller
         return torque, pd_torque
 
@@ -235,10 +229,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # --- Initialize PD torque Controller ---
     # Create separate controllers for each leg for independent control
-#    DEFAULT_KP_LIST         = [0.300, 0.300, 0.270,  0.270,  1.4000,  1.4000, 0.026, 0.01183]
-#    DEFAULT_KD_LIST         = [0.010, 0.010, 0.010,  0.010,  0.0001,  0.0001, 0.026, 0.01183]
-    leg_controller = PD_Controller(kp=torch.tensor([[0.33, 0.27, 1.4]]),
-                                   kd=torch.tensor([[0.01, 0.01, 0.001]]),
+    leg_controller = PD_Controller(kp=torch.tensor([[1.0, 1.0, 2.0]]),
+                                   kd=torch.tensor([[0.001, 0.001, 0.001]]),
                                    num_envs=scene.num_envs,
                                    num_dof=leg_dof,
                                    device=scene.device,
@@ -260,9 +252,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_q = []
     log_angle = []
     log_torque = []
-    
-    # List to store CSV data
-    csv_data = []
 
     # reset state
     print("[INFO] Reset state for plotting...")
@@ -272,12 +261,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     upper_limits = joint_limits[:, :, 1]
 
     joint_pos_tmp = default_joint_pos.clone()
-    joint_pos_tmp[:, 0] -=  torch.pi/180*80.0
-    # joint_pos_tmp[:, 1] +=  torch.pi/180*50.0
-    # joint_pos_tmp[:, 2] +=  torch.pi/180*20.0
-    joint_pos_tmp[:, 3] -= torch.pi/180*80.0
-    # joint_pos_tmp[:, 4] += torch.pi/180*20.0
-    # joint_pos_tmp[:, 5] -= torch.pi/180*20.0
+    # joint_pos_tmp[:, 0] -= torch.pi/6
+    # joint_pos_tmp[:, 1] += torch.pi/6
+    joint_pos_tmp[:, 2] += torch.pi/6
+    joint_pos_tmp[:, 3] -= torch.pi/6
+    # joint_pos_tmp[:, 4] += torch.pi/6
+    # joint_pos_tmp[:, 5] -= torch.pi/6
     reference_angle = joint_pos_tmp
 
     robot.write_joint_state_to_sim(reference_angle, default_joint_vel)
@@ -316,7 +305,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         #coriilis
         coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
-    
+        print(robot.data.projected_gravity_b)
         # Compute torque
         torque, pd_torque = leg_controller.compute_torque(joint_pos=joint_pos,
                                                           joint_vel=joint_vel,
@@ -341,67 +330,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         robot.update(sim_dt)
         scene.update(sim_dt)
         t += sim_dt
-        
-        # Logging for Plot
         log_t.append(t)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
-        log_torque.append((torch.round(pd_torque[:, :n_leg_j] * 100) / 100).clone())
-        
-        # --- CSV Logging Logic ---
-        # Get current timestamp
-        current_time_ns = time.time_ns()
-        
-        # We extract data for the first environment (index 0)
-        # Convert to CPU numpy for storage
-        env_idx = 0
-        j_pos = joint_pos[env_idx].cpu().numpy()     # All 8 joints
-        j_vel = joint_vel[env_idx].cpu().numpy()     # All 8 joints (rad/s)
-        j_eff = pd_torque[env_idx].cpu().numpy()     # Using PD calculated torque as eff (approx)
-        j_target = reference_angle[env_idx].cpu().numpy() # Target Position
-        j_cmd = torque[env_idx].cpu().numpy()        # Final Command Torque
-        
-        # Convert vel to degrees per second
-        j_vel_dps = np.degrees(j_vel)
-        
-        data_row = {
-            "time_sec": current_time_ns // 1_000_000_000,
-            "time_nanosec": current_time_ns % 1_000_000_000
-        }
-        
-        # Fill data for all 8 joints (0 to 7)
-        for i in range(8):
-            data_row[f"pos_{i}"] = j_pos[i]
-            data_row[f"motor_speed_dps_{i}"] = j_vel_dps[i]
-            data_row[f"eff_{i}"] = j_eff[i]
-            data_row[f"target_value_{i}"] = j_target[i]
-            data_row[f"torque_command_{i}"] = j_cmd[i]
-            
-        csv_data.append(data_row)
-
-    # --- Save CSV ---
-    print("[INFO] Saving CSV data...")
-    df = pd.DataFrame(csv_data)
-    
-    # Define column order to match the requested format
-    cols = ["time_sec", "time_nanosec"]
-    for i in range(8): cols.append(f"pos_{i}")
-    for i in range(8): cols.append(f"motor_speed_dps_{i}")
-    for i in range(8): cols.append(f"eff_{i}")
-    for i in range(8): cols.append(f"target_value_{i}")
-    for i in range(8): cols.append(f"torque_command_{i}")
-    
-    # Reorder columns
-    df = df[cols]
-    
-    csv_filename = "simulation_data.csv"
-    df.to_csv(csv_filename, index=False)
-    print(f"[INFO] Data saved to {csv_filename}")
-
+        log_torque.append(pd_torque[:, :n_leg_j].clone())
 
     # --- 결과 플롯 ---
     import matplotlib.pyplot as plt
-    # import numpy as np # Already imported
-    # import math # Already imported
+    import numpy as np
+    import math
 
     log_t_np = np.asarray(log_t)
     log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
@@ -462,3 +398,4 @@ def main():
 if __name__ == "__main__":
     main()
     simulation_app.close()
+
