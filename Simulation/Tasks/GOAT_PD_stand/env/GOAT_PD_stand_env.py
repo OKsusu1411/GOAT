@@ -27,6 +27,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.task_curriculum_level = 0
         self.total_task_curriculum_level = cfg.total_task_curriculum_level
         self.total_DR_curriculum_level = cfg.total_DR_curriculum_level - 1
+        self.rollout = 0
 
         # Noise curriculum (linear schedular)
         self.base_acceleration_noise_per = torch.linspace(start=0, end=cfg.max_base_acceleration_noise_per, steps=cfg.total_DR_curriculum_level)
@@ -246,8 +247,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         return {"policy": self.normalized_observation, "value": self.normalized_state}
     
     def _get_rewards(self) -> torch.Tensor:
-        # TODO: self.cfg.upright_threshold, self.cfg.height_threshold, self.cfg.curriculum_level_up_threshold, self.curriculum_level_down_threshold
-        # Scheduler
+        # ======================= Scheduler ======================= #
         # Target gravity in base frame (Upright state = [0, 0, -1])
         target_gravity = torch.tensor([0.0, 0.0, -1.0], device=self.device).repeat(self.num_envs, 1)
         
@@ -256,7 +256,6 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # boolean for success measure
         is_upright = upright_rate > (self.cfg.upright_threshold * torch.pi / 180)
-        
         is_height_reached = torch.abs(self.base_height - self.cfg.target_height) < self.cfg.height_threshold
         
         # Velocity criteria (Only strict for balancing)
@@ -264,9 +263,9 @@ class GOATPDStandEnv(GOATBaseEnv):
         ang_vel_norm = torch.norm(self.base_angular_vel, dim=1)
         is_stable = (lin_vel_norm < 0.5) & (ang_vel_norm < 1.0)
 
-        # Task-specific success definition
         current_task_name = self.total_task_curriculum_level[self.task_curriculum_level]
 
+        # Task-specific success definition
         if current_task_name == "balancing":
             # Balancing: must be upright, at height, and stable
             success_measure = is_upright & is_height_reached & is_stable
@@ -275,30 +274,58 @@ class GOATPDStandEnv(GOATBaseEnv):
             success_measure = is_upright & is_height_reached
 
         # Compute batch success rate
-        self.success_rate = torch.mean(success_measure.float())
+        self.success_rate = torch.mean(success_measure.float()) # TODO: 이거 매번 초기화해줘야됨 그리고 level up하고 유예 시간 좀 줘야함
 
-        # Domain randomization curriculum
+        # Level adjustment by curriculum
         if self.success_rate > self.cfg.curriculum_level_up_threshold:
             self.DR_curriculum_level += 1
             if self.DR_curriculum_level >= self.total_DR_curriculum_level:
                 self.task_curriculum_level += 1         # I'm on the next level
-                self.DR_curriculum_level = 0
 
-        elif self.success_rate < self.curriculum_level_down_threshold:
+        elif self.success_rate < self.cfg.curriculum_level_down_threshold:
             self.DR_curriculum_level -= 1
             if self.DR_curriculum_level < 0:
                 self.task_curriculum_level -= 1         # Downgrade
-                self.DR_curriculum_level = 0
-
+        
         # Clipping
         self.task_curriculum_level = max(0, min(self.task_curriculum_level, len(self.total_task_curriculum_level) - 1))
         self.DR_curriculum_level = max(0, min(self.DR_curriculum_level, self.total_DR_curriculum_level - 1))
         
-        if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
-            height_error = self.base_height - self.cfg.target_height
-        elif self.total_task_curriculum_level[self.task_curriculum_level] == "recovery":
+        # ======================= Reward ======================= #
+        # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
+        orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
+        r_orient = torch.exp(-torch.square(orient_error) / 0.25)                                    # exp(-error^2 / sigma)
 
-        # elif self.total_task_curriculum_level[self.task_curriculum_level] == "random":
+        # Base Height Reward
+        r_height = torch.exp(-torch.square(self.base_height - self.cfg.target_height) / 0.04)
+
+        # Joint Regularization (Keep nominal pose)
+        # # Assuming self._robot.data.default_joint_pos contains the standing pose
+        # joint_error = torch.norm(self.joint_pos - self._robot.data.default_joint_pos, dim=1)
+        # r_joint = torch.exp(-torch.square(joint_error) / 0.5)
+
+        # Phase-Dependent Velocity Penalty (Adaptive)
+        # Logic: Penalize velocity ONLY when the robot is nearly upright.
+        # When lying down (upright_rate low), scale is 0.0 -> No penalty -> Free movement
+        # When standing (upright_rate high), scale is 1.0 -> High penalty -> Stability
+        
+        vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
+        vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
+
+        r_vel_lin = -torch.sum(torch.square(self.base_vel), dim=1) * vel_penalty_scale              # Penalty
+        r_vel_ang = -torch.sum(torch.square(self.base_angular_vel), dim=1) * vel_penalty_scale      # Penalty
+
+        # Energy / Action Smoothness
+        r_effort = -torch.sum(torch.square(self.torque_cmd), dim=1)                                 # Penalty
+        
+        # Total Reward Summation
+        total_reward = (
+            self.cfg.r_orient_weight * r_orient +
+            self.cfg.r_height_weight * r_height +
+            self.cfg.r_vel_lin_weight * r_vel_lin +
+            self.cfg.r_vel_ang_weight * r_vel_ang +
+            self.cfg.r_effort_weight * r_effort
+        )
 
         return total_reward
     
@@ -319,10 +346,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         return noisy_data
 
-    def _get_curriculum_quaternions(
-        self,
-        num_envs: int
-    ) -> torch.Tensor:
+    def _get_curriculum_quaternions(self, num_envs: int) -> torch.Tensor:
         """
         Random quaternion for base link pose
 
@@ -343,3 +367,12 @@ class GOATPDStandEnv(GOATBaseEnv):
         quaternions = quat_from_angle_axis(random_angles, random_axes)
 
         return quaternions
+    
+    def get_rollout(self, rollout: int):
+        """
+        Get rollout number of agent
+        
+        Args:
+            rollout (int): rollout number 
+        """
+        self.rollout = rollout

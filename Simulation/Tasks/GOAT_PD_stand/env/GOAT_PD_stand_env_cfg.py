@@ -31,9 +31,11 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     
     ## ==================== Robot configuration ==================== ##
     leg_dof = 3                                 # Hip, Thigh, Knee
-    num_leg = 2
+    num_leg = 2                                 # Bipedal
     n_leg_j = leg_dof * num_leg
     num_total_joints = n_leg_j + num_leg        # Whee per legs
+    torque_limits = torch.tensor([4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 2.5, 2.5])
+    
 
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level
@@ -55,8 +57,17 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     max_episode_length = 5*60/sim_dt            # 5 minutes for truncated    
 
     ## ==================== Reward Shaping ==================== ##
-    target_height = 0.45
-    
+    target_height = 0.45                        # meter (m)
+    upright_threshold = 5                       # degree
+    height_threshold = 0.1                      # meter (m)
+    curriculum_level_up_threshold = 0.8         # success rate
+    curriculum_level_down_threshold = 0.2
+
+    r_orient_weight = 3.0
+    r_height_weight = 3.0
+    r_vel_lin_weight = 1.0
+    r_vel_ang_weight = 1.0
+    r_effort_weight = 0.05
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
