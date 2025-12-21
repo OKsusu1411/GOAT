@@ -23,6 +23,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self._contact_sensor = self.scene["contact_sensor"]
         
         # Curriculum level initialization
+        self.env_DR_curriculum_level = torch.zeros((self.num_envs, 1), dtype=torch.int, device=self.device)         # DR level of each parallel environments
         self.DR_curriculum_level = 0
         self.task_curriculum_level = 0
         self.total_task_curriculum_level = cfg.total_task_curriculum_level
@@ -111,6 +112,8 @@ class GOATPDStandEnv(GOATBaseEnv):
             joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
             joint_vel = torch.randn_like(joint_pos) * 0.1
 
+            self.env_DR_curriculum_level[env_ids] = self.DR_curriculum_level
+
             # Slicing indices based on curriculum level
             curriculum_ids = int(self.num_init_samples/self.total_DR_curriculum_level)
             start_ids = curriculum_ids*self.DR_curriculum_level
@@ -172,8 +175,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         joint_vel = self._robot.data.joint_vel
 
         # Domain randomization (sensor noise)set_material_properties
-        joint_pos_noise = self.joint_pos_noise_per(self.DR_curriculum_level)
-        joint_vel_noise = self.joint_vel_noise_per(self.DR_curriculum_level)
+        joint_pos_noise = self.joint_pos_noise_per[self.env_DR_curriculum_level]
+        joint_vel_noise = self.joint_vel_noise_per[self.env_DR_curriculum_level]
         self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
         self.joint_vel_noissy = self._add_gaussian_noise(joint_vel, joint_vel_noise)
 
@@ -218,10 +221,10 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.friction_coefficient = torch.Tensor([material_property[:, 0, 0], material_property[:, 0, 1]], device=self.device)
 
         # Domain randomization (sensor noise)
-        self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per(self.DR_curriculum_level))
-        self.base_angular_vel_noissy = self._add_gaussian_noise(self.base_angular_vel, self.base_angular_vel_noise_per(self.DR_curriculum_level))
-        self.gravity_vector_noissy = self._add_gaussian_noise(self.gravity_vector, self.gravity_vector_noise_per(self.DR_curriculum_level))
-        self.base_quaternion_noissy = self._add_gaussian_noise(self.base_quaternion, self.base_quaternion_noise_per(self.DR_curriculum_level))
+        self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per[self.env_DR_curriculum_level])
+        self.base_angular_vel_noissy = self._add_gaussian_noise(self.base_angular_vel, self.base_angular_vel_noise_per[self.env_DR_curriculum_level])
+        self.gravity_vector_noissy = self._add_gaussian_noise(self.gravity_vector, self.gravity_vector_noise_per[self.env_DR_curriculum_level])
+        self.base_quaternion_noissy = self._add_gaussian_noise(self.base_quaternion, self.base_quaternion_noise_per[self.env_DR_curriculum_level])
 
         self.observation = torch.cat((self.base_acceleration_noissy,
                                       self.base_angular_vel_noissy,
@@ -274,19 +277,21 @@ class GOATPDStandEnv(GOATBaseEnv):
             success_measure = is_upright & is_height_reached
 
         # Compute batch success rate
-        self.success_rate = torch.mean(success_measure.float()) # TODO: 이거 매번 초기화해줘야됨 그리고 level up하고 유예 시간 좀 줘야함
+        self.success_rate = torch.mean(success_measure.float()) # TODO: 이거 매번 초기화해줘야됨 그리고 level up하고 유예 시간 좀 줘야함 또 문제 이거 success measure가 incremental 로 쌓여야할듯
 
         # Level adjustment by curriculum
         if self.success_rate > self.cfg.curriculum_level_up_threshold:
             self.DR_curriculum_level += 1
             if self.DR_curriculum_level >= self.total_DR_curriculum_level:
                 self.task_curriculum_level += 1         # I'm on the next level
+            self.success_rate = 0
 
         elif self.success_rate < self.cfg.curriculum_level_down_threshold:
             self.DR_curriculum_level -= 1
             if self.DR_curriculum_level < 0:
                 self.task_curriculum_level -= 1         # Downgrade
-        
+            self.success_rate = 0
+
         # Clipping
         self.task_curriculum_level = max(0, min(self.task_curriculum_level, len(self.total_task_curriculum_level) - 1))
         self.DR_curriculum_level = max(0, min(self.DR_curriculum_level, self.total_DR_curriculum_level - 1))
@@ -335,7 +340,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         return terminated, truncated
     
     ## ==================== Auxilliary functions ==================== ##
-    def _add_gaussian_noise(self, data: torch.Tensor, noise_percentage: int) -> torch.Tensor:
+    def _add_gaussian_noise(self, data: torch.Tensor, noise_percentage: torch.Tensor) -> torch.Tensor:
         """
         Add (noise_percentage)% noise to all components of data
         """
