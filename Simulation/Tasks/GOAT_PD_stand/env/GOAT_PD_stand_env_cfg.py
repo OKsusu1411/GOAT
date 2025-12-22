@@ -40,6 +40,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level
     total_task_curriculum_level = ["balancing", "recovery"]
+    success_rate_buffer_len
 
     max_base_acceleration_noise_per = 10        # Noise percentage (%)
     max_base_angular_vel_noise_per = 20
@@ -67,6 +68,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     r_height_weight = 3.0
     r_vel_lin_weight = 1.0
     r_vel_ang_weight = 1.0
+    r_vel_joint_weight = 1.0
     r_effort_weight = 0.05
 
     # Simulation
