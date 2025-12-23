@@ -163,6 +163,7 @@ class SequentialTrainer(Trainer):
             # post-interaction
             for agent in self.agents:
                 agent.post_interaction(timestep=timestep, timesteps=self.cfg.timesteps)
+                self.env._unwrapped.get_rollout(agent._rollout)
 
             # reset environments
             # - parallel/vectorized environments (single or multi-agent)

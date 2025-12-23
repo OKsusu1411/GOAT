@@ -1,0 +1,74 @@
+# Configuration of GOAT_PD_Stand task PPO RL
+
+## ---------------- Agent ---------------- ## 
+agent:
+  class: PPO
+  rollouts: 36
+  learning_epochs: 4
+  mini_batches: 24 
+  discount_factor: 0.99
+  lambda: 0.95
+  learning_rate: 2.0e-04
+
+  state_preprocessor: RunningStandardScaler
+  state_preprocessor_kwargs: null
+  value_preprocessor: RunningStandardScaler
+  value_preprocessor_kwargs: null
+
+  learning_rate_scheduler: KLAdaptiveLR
+  learning_rate_scheduler_kwargs:
+    kl_threshold: 0.004
+
+  random_timesteps: 0
+  learning_starts: 0
+
+  grad_norm_clip: 1.0
+  ratio_clip: 0.2
+  value_clip: 0.2
+  clip_predicted_values: True
+
+  entropy_loss_scale: 0.005
+  value_loss_scale: 2.0
+  kl_threshold: 0.0
+  rewards_shaper_scale: 0.1
+  time_limit_bootstrap: True
+
+  # logging and checkpoint
+  experiment:
+    directory: "goat_spawn"
+    experiment_name: ""
+    write_interval: auto
+    checkpoint_interval: auto
+
+## ---------------- Model ---------------- ##
+model:
+  actor:
+    clip_actions: False
+    clip_log_std: True
+    min_log_std: -20
+    max_log_std: 2
+    reduction: "sum"
+  
+  critic:
+    clip_actions: False
+
+## ---------------- Trainer ---------------- ##
+trainer:
+  close_environment_at_exit: False
+  timesteps: 100000
+    """Number of timesteps to train/evaluate for."""
+
+  headless: True
+    """Whether to run in headless mode (do not call ``env.render()``)."""
+
+  disable_progressbar: bool | None = False
+    """Whether to disable the progressbar. If None, disable on non-TTY."""
+
+  close_environment_at_exit: bool = True
+    """Whether to close the environment on normal program termination."""
+
+  environment_info: str = "episode"
+    """Key used to get and log environment info."""
+
+  stochastic_evaluation: bool = False
+    """Whether to use actions rather than (deterministic) mean actions during evaluation."""
