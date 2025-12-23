@@ -2,7 +2,7 @@ import gymnasium
 import torch
 
 from typing import Any, Mapping, Tuple, Union
-from lib.wrapper import Wrapper
+from lib.wrapper.wrapper import Wrapper
 from lib.utils.wrapper_utils import tensorize_space, flatten_tensorized_space, unflatten_tensorized_space
 
 class IsaacLabWrapper(Wrapper):

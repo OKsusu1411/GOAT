@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import torch
 import os
 import numpy as np
 
-from __future__ import annotations
 from isaaclab.utils.math import normalize, quat_from_angle_axis
 from isaaclab.terrains import TerrainImporterCfg
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg

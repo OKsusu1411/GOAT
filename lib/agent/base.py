@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
 import collections
@@ -9,10 +11,9 @@ import gymnasium
 
 from abc import ABC, abstractmethod
 from packaging import version
-from __future__ import annotations
 from typing import Any, Literal
 from skrl import config, logger
-from skrl.utils.tensorboard import SummaryWriter
+from lib.utils.tensorboard import SummaryWriter
 from lib.memory import Memory
 from lib.model import Model
 

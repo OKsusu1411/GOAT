@@ -1,14 +1,15 @@
+from __future__ import annotations
+
 import copy
 import dataclasses
 import sys
 import tqdm
 import torch
 
-from __future__ import annotations
 from lib.agent import Agent
 from lib.wrapper import Wrapper
 from lib.trainer import Trainer, TrainerCfg
-from skrl.utils import ScopedTimer
+from lib.utils import ScopedTimer
 
 
 @dataclasses.dataclass(kw_only=True)

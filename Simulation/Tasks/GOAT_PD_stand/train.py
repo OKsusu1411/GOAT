@@ -54,8 +54,8 @@ import numpy as np
 
 from lib.agent.ppo import PPO
 from lib.memory.random import RandomMemory
-from .model.asymmetric_actor_critic import Asymmetric_Actor, Asymmetric_Critic
-from .trainer.sequential import SequentialTrainer
+from Simulation.Tasks.GOAT_PD_stand.model.asymmetric_actor_critic import Asymmetric_Actor, Asymmetric_Critic
+from Simulation.Tasks.GOAT_PD_stand.trainer.sequential import SequentialTrainer
 
 from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
 from lib.wrapper.isaaclab_wrapper import IsaacLabWrapper

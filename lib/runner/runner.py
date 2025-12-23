@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import copy
 
-from __future__ import annotations
 from typing import Any, Type
 from skrl import logger
 from lib.agent import Agent
