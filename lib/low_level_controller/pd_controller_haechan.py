@@ -31,10 +31,10 @@ from lib.env.GOAT_base_env_cfg import GOAT_Cfg
 from lib.RRT.RRT_wrapper import RRTWrapper
 from lib.utils import Env
 
-HIP_COL_FRI = 0
-HIP_VIS_FRI = 0
-KNEE_COL_FRI = 0
-KNEE_VIS_FRI = 0
+HIP_COL_FRI = 5.646268e-02
+HIP_VIS_FRI = 3.190248e-01
+KNEE_COL_FRI = 4.432008e-01
+KNEE_VIS_FRI = 2.993308e-01
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -175,12 +175,12 @@ class PD_Controller():
         joint_limits_right = torch.index_select(joint_limits, 1, right_leg_indices)
 
         # Left foot PD control
-        # joint_pos_cmd_left = torch.clamp(joint_pos_cmd_left, joint_limits_left[:, :, 0], joint_limits_left[:, :, 1])            # Clipping joint position command
+        joint_pos_cmd_left = torch.clamp(joint_pos_cmd_left, joint_limits_left[:, :, 0], joint_limits_left[:, :, 1])            # Clipping joint position command
         joint_pos_left_error = joint_pos_cmd_left - joint_pos_left
         joint_vel_left_error = - joint_vel_left                                                                                 # reference joint velocity = 0
         
         pd_torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
-        # pd_torque_left[:, -1] /= 2
+        pd_torque_left[:, -1] *= 2
         
         # Friction compensation (Note: to cancel friction, this term should typically be added, not subtracted)
         friction_comp_left = self.coulomb_coeffs * torch.sign(joint_vel_left) + self.viscous_coeffs * joint_vel_left
@@ -190,12 +190,12 @@ class PD_Controller():
         torque_left = pd_torque_left - friction_comp_left
 
         # Right foot PD control
-        # joint_pos_cmd_right = torch.clamp(joint_pos_cmd_right, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
+        joint_pos_cmd_right = torch.clamp(joint_pos_cmd_right, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
         joint_pos_right_error = joint_pos_cmd_right - joint_pos_right
         joint_vel_right_error = - joint_vel_right                                                                               # reference joint velocity = 0
 
         pd_torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
-        # pd_torque_right[:, -1] /= 2
+        pd_torque_right[:, -1] *= 2
 
         # Friction compensation (Note: to cancel friction, this term should typically be added, not subtracted)
         friction_comp_right = self.coulomb_coeffs * torch.sign(joint_vel_right) + self.viscous_coeffs * joint_vel_right
@@ -203,7 +203,7 @@ class PD_Controller():
         # Clip friction compensation to prevent it from overpowering the PD torque and reversing the command's sign
         # clipped_friction_comp_right = torch.clamp(friction_comp_right, -torch.abs(pd_torque_right), torch.abs(pd_torque_right))
         torque_right = pd_torque_right - friction_comp_right
-        # print(torque_left)
+        
         # Combine torque inputs
         torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
         pd_torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
@@ -214,9 +214,9 @@ class PD_Controller():
         pd_torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), pd_torque_left)
         pd_torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), pd_torque_right)
         
-        # # LPF for torque
-        # torque = 0.951 * self.old_torque + (1 - 0.951) * torque
-        # self.old_torque = torque.clone()
+        # LPF for torque
+        torque = 0.951 * self.old_torque + (1 - 0.951) * torque
+        self.old_torque = torque.clone()
 
         # Clip torque based on torque_limits
         torque = torch.clamp(torque, -torque_limits, torque_limits)
@@ -233,23 +233,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     n_leg_j = leg_dof * 2
     num_total_joints = n_leg_j + 2
 
-    # # --- Initialize PD torque Controller ---
-    # leg_controller = PD_Controller(kp=torch.tensor([[0.33, 0.27, 1.4]]),
-    #                                kd=torch.tensor([[0.01, 0.01, 0.001]]),
-    #                                num_envs=scene.num_envs,
-    #                                num_dof=leg_dof,
-    #                                device=scene.device,
-    # #                                dt=sim_dt)
-    #     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.248, 1.27]]),
-    #                                kd=torch.tensor([[0.01, 0.001, 0.001]]),
     # --- Initialize PD torque Controller ---
-    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0, 4.37]]),
-                                   kd=torch.tensor([[0.01, 0.00, 0.001]]),
+    # Create separate controllers for each leg for independent control
+#    DEFAULT_KP_LIST         = [0.300, 0.300, 0.270,  0.270,  1.4000,  1.4000, 0.026, 0.01183]
+#    DEFAULT_KD_LIST         = [0.010, 0.010, 0.010,  0.010,  0.0001,  0.0001, 0.026, 0.01183]
+    leg_controller = PD_Controller(kp=torch.tensor([[0.33, 0.27, 1.4]]),
+                                   kd=torch.tensor([[0.01, 0.01, 0.001]]),
                                    num_envs=scene.num_envs,
                                    num_dof=leg_dof,
                                    device=scene.device,
                                    dt=sim_dt)
+
     # ---------- Environment Initialization ----------
+    sim_len = 10.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
     torque_limits = robot.data.joint_effort_limits
     default_joint_pos = robot.data.default_joint_pos.clone()
@@ -271,26 +267,18 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # reset state
     print("[INFO] Reset state for plotting...")
 
-    # ---------- User Configuration for Step Input ----------
-    TARGET_JOINT_IDX = 5         # [Index] 제어할 관절 인덱스 (0: hip_L, 1: hip_R, 2: thigh_L, 3: thigh_R, 4: knee_L, 5: knee_R)
-    STEP_INTERVAL = 3.0       # [sec] Time interval between steps (3초마다)
-    STEP_DEGREE = -20.0        # [deg] Degree increase per step (20도씩 증가)
-    NUM_STEPS = 9             # [count] Total number of steps (원하는 횟수만큼 설정)
-    
-    # Calculate simulation length based on steps (Give some buffer after last step)
-    sim_len = STEP_INTERVAL * (NUM_STEPS + 2) 
-    print(f"[INFO] Simulation Length set to {sim_len}s based on {NUM_STEPS} steps.")
+    # Random joint angle within limits
+    lower_limits = joint_limits[:, :, 0]
+    upper_limits = joint_limits[:, :, 1]
 
-    # Set Initial Base Angle (Initial Offset)
-    base_joint_pos = default_joint_pos.clone()
-    # base_joint_pos[:, 0] -= torch.pi/180*80.0
-    # base_joint_pos[:, 1] +=  torch.pi/180*50.0
-    # base_joint_pos[:, 2] +=  torch.pi/180*20.0
-    # base_joint_pos[:, 3] -= torch.pi/180*80.0
-    # base_joint_pos[:, 4] += torch.pi/180*20.0
-    # base_joint_pos[:, 5] -= torch.pi/180*20.0
-    
-    reference_angle = base_joint_pos.clone()
+    joint_pos_tmp = default_joint_pos.clone()
+    joint_pos_tmp[:, 0] -=  torch.pi/180*80.0
+    # joint_pos_tmp[:, 1] +=  torch.pi/180*50.0
+    # joint_pos_tmp[:, 2] +=  torch.pi/180*20.0
+    joint_pos_tmp[:, 3] -= torch.pi/180*80.0
+    # joint_pos_tmp[:, 4] += torch.pi/180*20.0
+    # joint_pos_tmp[:, 5] -= torch.pi/180*20.0
+    reference_angle = joint_pos_tmp
 
     robot.write_joint_state_to_sim(reference_angle, default_joint_vel)
     target_link_pose = robot.data.body_link_pose_w
@@ -321,23 +309,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
 
     while t <= sim_len:
-        # --------- Step Input Calculation ------------ #
-        # Calculate current step count
-        current_step = int(t // STEP_INTERVAL)
-        
-        # Limit steps to NUM_STEPS
-        if current_step > NUM_STEPS:
-            current_step = NUM_STEPS
-            
-        # Calculate angle to add (in radians)
-        added_angle_rad = (STEP_DEGREE * math.pi / 180.0) * current_step
-        
-        # Update reference angle based on base position + step increase
-        reference_angle = base_joint_pos.clone()
-        
-        # [수정됨] 사용자가 지정한 하나의 관절(TARGET_JOINT_IDX)에만 스텝 입력을 적용
-        reference_angle[:, TARGET_JOINT_IDX] += added_angle_rad
-        
         # --------- Control ------------ #
         # State awareness
         joint_pos = robot.data.joint_pos
@@ -354,6 +325,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                                           torque_limits=torque_limits,
                                                           coriolis_full=coriolis_full)
 
+        # torque[:, 0] = 0
+        # torque[:, 1] = 0
+        # torque[:, 2] = 0
+        # torque[:, 3] = 0
+        # torque[:, 4] = 0
+        # torque[:, 5] = 0
+        # torque[:, 6] = 0
+        # torque[:, 7] = 0
         robot.set_joint_effort_target(torque)
         robot.write_data_to_sim()
 
@@ -369,18 +348,23 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_torque.append((torch.round(pd_torque[:, :n_leg_j] * 100) / 100).clone())
         
         # --- CSV Logging Logic ---
+        # Get current timestamp
         current_time_ns = time.time_ns()
         
+        # We extract data for the first environment (index 0)
+        # Convert to CPU numpy for storage
         env_idx = 0
-        j_pos = joint_pos[env_idx].cpu().numpy()
-        j_vel = joint_vel[env_idx].cpu().numpy()
-        j_eff = pd_torque[env_idx].cpu().numpy()
+        j_pos = joint_pos[env_idx].cpu().numpy()     # All 8 joints
+        j_vel = joint_vel[env_idx].cpu().numpy()     # All 8 joints (rad/s)
+        j_eff = pd_torque[env_idx].cpu().numpy()     # Using PD calculated torque as eff (approx)
         
         # Retrieve target angle and convert to Degrees
-        j_target_rad = reference_angle[env_idx].cpu().numpy() 
-        j_target_deg = np.degrees(j_target_rad)               
+        j_target_rad = reference_angle[env_idx].cpu().numpy() # Target Position (Radians)
+        j_target_deg = np.degrees(j_target_rad)               # Target Position (Degrees)
 
-        j_cmd = torque[env_idx].cpu().numpy()
+        j_cmd = torque[env_idx].cpu().numpy()        # Final Command Torque
+        
+        # Convert vel to degrees per second
         j_vel_dps = np.degrees(j_vel)
         
         data_row = {
@@ -388,11 +372,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             "time_nanosec": current_time_ns % 1_000_000_000
         }
         
+        # Fill data for all 8 joints (0 to 7)
         for i in range(8):
             data_row[f"pos_{i}"] = j_pos[i]
             data_row[f"motor_speed_dps_{i}"] = j_vel_dps[i]
             data_row[f"eff_{i}"] = j_eff[i]
-            data_row[f"target_value_{i}"] = j_target_deg[i] 
+            data_row[f"target_value_{i}"] = j_target_deg[i] # Saving in Degrees
             data_row[f"torque_command_{i}"] = j_cmd[i]
             
         csv_data.append(data_row)
@@ -401,6 +386,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     print("[INFO] Saving CSV data...")
     df = pd.DataFrame(csv_data)
     
+    # Define column order to match the requested format
     cols = ["time_sec", "time_nanosec"]
     for i in range(8): cols.append(f"pos_{i}")
     for i in range(8): cols.append(f"motor_speed_dps_{i}")
@@ -408,15 +394,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     for i in range(8): cols.append(f"target_value_{i}")
     for i in range(8): cols.append(f"torque_command_{i}")
     
+    # Reorder columns
     df = df[cols]
-    csv_filename = "simulation_data_hip.csv"
+    
+    csv_filename = "simulation_data.csv"
     df.to_csv(csv_filename, index=False)
     print(f"[INFO] Data saved to {csv_filename}")
 
 
     # --- 결과 플롯 ---
     import matplotlib.pyplot as plt
-    
+    # import numpy as np # Already imported
+    # import math # Already imported
+
     log_t_np = np.asarray(log_t)
     log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
     log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
@@ -434,13 +424,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         ax.plot(log_t_np, log_q_np[:, i], label="actual")
         ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
         ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-        # Reference angle varies over time, so we can't plot a single line. 
-        # But we can plot the target for the final step or modify this to log target over time if needed.
-        # For now, keeping as is or plotting the final reference might be confusing. 
-        # Let's plot the reference from the CSV log or similar if we logged it. 
-        # Since we didn't log reference_angle in log_*, this line might show the FINAL reference angle.
-        ax.axhline(reference_angle[0, i].cpu(), ls="--", label="final_target", color="b")
-        
+        ax.axhline(reference_angle[0, i].cpu(), ls="--", label="optimal_angle", color="b")
         ax.set_title(f"Joint Angle: {joint_name[i]}")
         ax.set_ylabel("angle [rad]")
         if i // n_cols == n_rows - 1:

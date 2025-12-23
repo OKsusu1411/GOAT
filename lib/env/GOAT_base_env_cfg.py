@@ -102,7 +102,7 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             velocity_limit=15.0,
             stiffness=0.0,                          # Internal PD controller not used
             damping=0.0,                            # Internal PD controller not used
-            friction=0.0013,                           # Static friction coefficient
+            friction=0.0033,                           # Static friction coefficient
             dynamic_friction=5.646268e-02,          # Dynamic friction coefficient 
             viscous_friction=3.190248e-01,          # Viscous friction coefficient
         ),
@@ -113,8 +113,8 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             saturation_effort=4.5,
             velocity_limit=15.0,
             stiffness=0.0,
-            damping=0.0,
-            friction=0.0013,
+            damping=0.32,
+            friction=0.0033,
             dynamic_friction=5.646268e-02,
             viscous_friction=3.190248e-01,
         ),
@@ -126,7 +126,7 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             velocity_limit=15.0,
             stiffness=0.0,
             damping=0.0,
-            friction=0.006,
+            friction=0.0235,
             dynamic_friction=4.432008e-01,
             viscous_friction=2.993308e-01,
         ),
