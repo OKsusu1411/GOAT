@@ -35,7 +35,7 @@ agent:
 
   # logging and checkpoint
   experiment:
-    directory: "goat_spawn"
+    directory: "goat_pd_stand"
     experiment_name: ""
     write_interval: auto
     checkpoint_interval: auto
@@ -61,14 +61,13 @@ trainer:
   headless: True
     """Whether to run in headless mode (do not call ``env.render()``)."""
 
-  disable_progressbar: bool | None = False
+  disable_progressbar: False
     """Whether to disable the progressbar. If None, disable on non-TTY."""
 
-  close_environment_at_exit: bool = True
+  close_environment_at_exit: True
     """Whether to close the environment on normal program termination."""
 
-  environment_info: str = "episode"
-    """Key used to get and log environment info."""
+  environment_info: "episode"
 
-  stochastic_evaluation: bool = False
+  stochastic_evaluation: False
     """Whether to use actions rather than (deterministic) mean actions during evaluation."""

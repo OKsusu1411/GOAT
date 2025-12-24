@@ -5,7 +5,7 @@ from isaaclab.utils.math import sample_uniform
 from isaaclab.controllers import DifferentialIKControllerCfg
 from .GOAT_IK_stand_env_cfg import GOATIKStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
-from lib.low_level_controller.ik_pd_controller import IK_PD_Controller
+from lib.low_level_controller.ik_pd_controller_test import IK_PD_Controller
 
 
 class GOATIKStandEnv(GOATBaseEnv):

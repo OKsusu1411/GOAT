@@ -24,13 +24,10 @@ class GOATBaseEnv(DirectRLEnv):
 
         # Total env ids
         self.total_env_ids = torch.arange(self.num_envs, device=self.device)
-        
-        # Joint Index
-        self.joint_idx = self._robot.find_joints(".*_Joint")[0]
 
-        # Joint & Link Limits
-        self.robot_dof_lower_limits = self._robot.data.joint_pos_limits[0, :, 0].to(device=self.device)
-        self.robot_dof_upper_limits = self._robot.data.joint_pos_limits[0, :, 1].to(device=self.device)
+        # # Joint & Link Limits
+        # self.robot_dof_lower_limits = self._robot.data.joint_pos_limits[0, :, 0].to(device=self.device)
+        # self.robot_dof_upper_limits = self._robot.data.joint_pos_limits[0, :, 1].to(device=self.device)
         
         # unit tensors
         self.x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float32, device=self.device).repeat((self.num_envs, 1))
@@ -39,17 +36,8 @@ class GOATBaseEnv(DirectRLEnv):
 
     # Create scene
     def _setup_scene(self):
-        """Setup the scene for the environment.
-
-        This function is responsible for creating the scene objects and setting up the scene for the environment.
-        The scene creation can happen through :class:`isaaclab.scene.InteractiveSceneCfg` or through
-        directly creating the scene objects and registering them with the scene manager.
-
-        We leave the implementation of this function to the derived classes. If the environment does not require
-        any explicit scene setup, the function can be left empty.
-        """
-        pass
-
+        self._robot = Articulation(self.cfg.GOAT_cfg)
+        self.scene.articulations["robot"] = self._robot
 
     # Reset Env
     def _reset_idx(self, env_ids: torch.Tensor):

@@ -6,9 +6,10 @@ import numpy as np
 
 from isaaclab.utils.math import normalize, quat_from_angle_axis
 from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.sensors import ContactSensor
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
-from lib.low_level_controller.pd_controller import PD_Controller, PI_Controller
+from lib.low_level_controller.joint_controller import PD_Controller, PI_Controller
 from lib.utils.Running_mean_std import RunningMeanStd
 
 csv_path = "initial_pose_data.csv"              # Path to csv file
@@ -20,8 +21,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.cfg = cfg
-        self._robot = self.scene["robot"]
-        self._contact_sensor = self.scene["contact_sensor"]
+        self._contact_sensor =  self.scene.sensors["contact_sensor"]
         
         # Curriculum level initialization
         self.env_DR_curriculum_level = torch.zeros((self.num_envs, 1), dtype=torch.int, device=self.device)         # DR level of each parallel environments
@@ -101,6 +101,13 @@ class GOATPDStandEnv(GOATBaseEnv):
             
             # Data length
             self.num_init_samples = full_data.shape[0]
+    
+    def _setup_scene(self):
+        super()._setup_scene()
+
+        # Spawn contact sensor
+        contact_sensor = ContactSensor(cfg=self.cfg.contact_sensor)
+        self.scene.sensors["contact_sensor"] = contact_sensor
 
     def _reset_idx(self, env_ids: torch.Tensor):
         

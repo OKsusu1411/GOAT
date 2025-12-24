@@ -10,6 +10,8 @@ Script to play a checkpoint of an RL agent.
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import os
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -22,7 +24,7 @@ parser.add_argument("--disable_fabric",
                     default=False, 
                     help="Disable fabric and use USD I/O operations.")
 
-parser.add_argument("--num_envs", type=int, default=4096, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default="GOAT-stand-v0", help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
 
@@ -46,11 +48,6 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import gymnasium as gym
-import os
-import time
-import torch
-import copy
-import numpy as np
 
 from lib.agent.ppo import PPO
 from lib.memory.random import RandomMemory
