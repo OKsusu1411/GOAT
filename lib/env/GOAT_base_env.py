@@ -39,6 +39,8 @@ class GOATBaseEnv(DirectRLEnv):
         self._robot = Articulation(self.cfg.GOAT_cfg)
         self.scene.articulations["robot"] = self._robot
 
+        self.scene.clone_environments(self.num_envs)            # clone environents
+
     # Reset Env
     def _reset_idx(self, env_ids: torch.Tensor):
         super()._reset_idx(env_ids)

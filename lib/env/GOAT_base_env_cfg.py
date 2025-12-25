@@ -51,8 +51,8 @@ else:
 
 
 GOAT_Cfg: ArticulationCfg = ArticulationCfg(
-    prim_path="{ENV_REGEX_NS}/Robot",               # Path for GridCloner
-    # prim_path="/World/Robot",
+    # prim_path="{ENV_REGEX_NS}/Robot",               # Path for Interactivescene's clone_environemnts
+    prim_path="/World/envs/env_.*/Robot",               # Path for DirectRLEnv
     spawn=sim_utils.UsdFileCfg(
         usd_path=urdf_converter.usd_path,
         scale=(1.0, 1.0, 1.0),
@@ -102,7 +102,7 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             velocity_limit=15.0,
             stiffness=0.0,                          # Internal PD controller not used
             damping=0.0,                            # Internal PD controller not used
-            friction=0.0033,                           # Static friction coefficient
+            friction=0.0033,                        # Static friction coefficient
             dynamic_friction=5.646268e-02,          # Dynamic friction coefficient 
             viscous_friction=3.190248e-01,          # Viscous friction coefficient
         ),

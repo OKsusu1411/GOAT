@@ -98,7 +98,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     )
 
     contact_sensor = ContactSensorCfg(
-        prim_path="/{ENV_REGEX_NS}/Robot/.wheel_*",
+        prim_path="/World/envs/env_.*/Robot/.*wheel.*",
         history_length=0,
         update_period=0.0                       # Update every period
     )
