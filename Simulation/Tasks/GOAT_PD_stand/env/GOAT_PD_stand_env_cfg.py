@@ -26,8 +26,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     ## ==================== Controller gain ==================== ##
     joint_kp=torch.tensor([[1.0, 1.0, 1.0]])
     joint_kd=torch.tensor([[0.1, 0.1, 0.1]])
-    wheel_kp=torch.tensor([[0.1]])
-    wheel_ki=torch.tensor([[0.1]])
+    wheel_kp=torch.tensor([[0.1, 0.1]])
+    wheel_ki=torch.tensor([[0.1, 0.1]])
     
     ## ==================== Robot configuration ==================== ##
     leg_dof = 3                                 # Hip, Thigh, Knee

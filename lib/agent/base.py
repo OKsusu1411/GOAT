@@ -12,7 +12,7 @@ import gymnasium
 from abc import ABC, abstractmethod
 from packaging import version
 from typing import Any, Literal
-from skrl import config, logger
+from lib.utils import config, logger
 from lib.utils.tensorboard import SummaryWriter
 from lib.memory import Memory
 from lib.model import Model
@@ -82,7 +82,7 @@ class Agent(ABC):
     def __init__(
         self,
         *,
-        cfg: AgentCfg,
+        cfg: dict,
         models: dict[str, Model],
         memory: Memory | None = None,
         observation_space: gymnasium.Space | None = None,
@@ -221,13 +221,13 @@ class Agent(ABC):
 
         # main entry to log data for consumption and visualization by TensorBoard
         if self.write_interval == "auto":
-            self.write_interval = int(trainer_cfg.get("timesteps", 0) / 100)
+            self.write_interval = int(float(trainer_cfg.get("timesteps", 0)) / 100)
         if self.write_interval > 0:
             self.writer = SummaryWriter(log_dir=self.experiment_dir)
 
         # checkpoint directory creation
         if self.checkpoint_interval == "auto":
-            self.checkpoint_interval = int(trainer_cfg.get("timesteps", 0) / 10)
+            self.checkpoint_interval = int(float(trainer_cfg.get("timesteps", 0)) / 10)
         if self.checkpoint_interval > 0:
             os.makedirs(os.path.join(self.experiment_dir, "checkpoints"), exist_ok=True)
 

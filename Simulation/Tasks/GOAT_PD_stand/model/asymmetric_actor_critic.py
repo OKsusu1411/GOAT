@@ -6,7 +6,7 @@ from skrl.models.torch import Model, GaussianMixin, DeterministicMixin
 class Asymmetric_Actor(GaussianMixin, Model):
     def __init__(self, observation_space, action_space, device, cfg):
         Model.__init__(self, observation_space=observation_space, action_space=action_space, device=device)
-        GaussianMixin.__init__(self, cfg.clip_actions, cfg.clip_log_std, cfg.min_log_std, cfg.max_log_std, cfg.reduction)
+        GaussianMixin.__init__(self, cfg["clip_actions"], cfg["clip_log_std"], cfg["min_log_std"], cfg["max_log_std"], cfg["reduction"])
 
         self.net = nn.Sequential(nn.Linear(self.num_observations, 128),
                                  nn.ReLU(),
@@ -28,7 +28,7 @@ class Asymmetric_Actor(GaussianMixin, Model):
 class Asymmetric_Critic(DeterministicMixin, Model):
     def __init__(self, state_space, action_space, device, cfg):
         Model.__init__(self, observation_space=state_space, action_space=action_space, device=device)
-        DeterministicMixin.__init__(self, cfg.clip_actions)
+        DeterministicMixin.__init__(self, cfg["clip_actions"])
         
         self.num_states = self.num_observations
         

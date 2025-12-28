@@ -12,6 +12,7 @@ from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.sim.spawners.materials import RigidBodyMaterialCfg
 
 
 # Robot asset paths
@@ -166,6 +167,12 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
             restitution=0.0
         ),
         debug_vis=False
+    )
+
+    physics_material: RigidBodyMaterialCfg = RigidBodyMaterialCfg(
+        static_friction=1.0,
+        dynamic_friction=1.0,
+        restitution=0.0,
     )
 
     # Light

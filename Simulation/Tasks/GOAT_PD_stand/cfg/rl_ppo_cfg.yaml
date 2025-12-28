@@ -2,18 +2,18 @@
 
 ## ---------------- Agent ---------------- ## 
 agent:
-  class: PPO
+  # class: PPO
   rollouts: 36
   learning_epochs: 4
   mini_batches: 24 
   discount_factor: 0.99
-  lambda: 0.95
+  lambda_coeff: 0.95
   learning_rate: 2.0e-04
 
-  state_preprocessor: RunningStandardScaler
-  state_preprocessor_kwargs: null
-  value_preprocessor: RunningStandardScaler
-  value_preprocessor_kwargs: null
+  # state_preprocessor: RunningStandardScaler
+  # state_preprocessor_kwargs: null
+  # value_preprocessor: RunningStandardScaler
+  # value_preprocessor_kwargs: null
 
   learning_rate_scheduler: KLAdaptiveLR
   learning_rate_scheduler_kwargs:
@@ -25,12 +25,10 @@ agent:
   grad_norm_clip: 1.0
   ratio_clip: 0.2
   value_clip: 0.2
-  clip_predicted_values: True
 
   entropy_loss_scale: 0.005
   value_loss_scale: 2.0
   kl_threshold: 0.0
-  rewards_shaper_scale: 0.1
   time_limit_bootstrap: True
 
   # logging and checkpoint
@@ -56,18 +54,13 @@ model:
 trainer:
   close_environment_at_exit: False
   timesteps: 100000
-    """Number of timesteps to train/evaluate for."""
 
   headless: True
-    """Whether to run in headless mode (do not call ``env.render()``)."""
 
   disable_progressbar: False
-    """Whether to disable the progressbar. If None, disable on non-TTY."""
 
   close_environment_at_exit: True
-    """Whether to close the environment on normal program termination."""
 
   environment_info: "episode"
 
   stochastic_evaluation: False
-    """Whether to use actions rather than (deterministic) mean actions during evaluation."""

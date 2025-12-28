@@ -6,13 +6,13 @@
 #from __future__ import annotations
 
 import torch
-
 from abc import abstractmethod
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.terrains import TerrainImporter
 from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
+import isaaclab.sim as sim_utils
 
 
 class GOATBaseEnv(DirectRLEnv):
@@ -39,7 +39,7 @@ class GOATBaseEnv(DirectRLEnv):
         self._robot = Articulation(self.cfg.GOAT_cfg)
         self.scene.articulations["robot"] = self._robot
 
-        self.scene.clone_environments(self.num_envs)            # clone environents
+        self.scene.clone_environments(copy_from_source=True)          # clone environents
 
     # Reset Env
     def _reset_idx(self, env_ids: torch.Tensor):

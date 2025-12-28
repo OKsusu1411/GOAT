@@ -24,7 +24,7 @@ parser.add_argument("--disable_fabric",
                     default=False, 
                     help="Disable fabric and use USD I/O operations.")
 
-parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=4, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default="GOAT-stand-v0", help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
 
@@ -40,6 +40,7 @@ args_cli = parser.parse_args()
 # always enable cameras to record video
 if args_cli.video:
     args_cli.enable_cameras = True
+args_cli.headless = True
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -49,7 +50,7 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 
-from lib.agent.ppo import PPO
+from lib.agent.PPO.ppo import PPO
 from lib.memory.random import RandomMemory
 from Simulation.Tasks.GOAT_PD_stand.model.asymmetric_actor_critic import Asymmetric_Actor, Asymmetric_Critic
 from Simulation.Tasks.GOAT_PD_stand.trainer.sequential import SequentialTrainer
@@ -83,6 +84,7 @@ def main():
         resume_path = None
 
     # create isaac environment
+    env_cfg.scene.num_envs = args_cli.num_envs
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
     # get environment (step) dt for real-time evaluation
@@ -111,30 +113,36 @@ def main():
                                        device=env.device,
                                        cfg=model_cfg["critic"])
     
-    memory = RandomMemory(memory_size=agent_cfg["rollouts"],num_envs=env.num_envs,device=env.device)
+    memory = RandomMemory(memory_size=agent_cfg["rollouts"],
+                          num_envs=env.num_envs,
+                          device=env.device)
+    
     agent = PPO(models=model,
                 memory=memory,
                 observation_space=env.observation_space,
                 action_space=env.action_space,
+                device=env.device,
                 cfg=agent_cfg)
-    trainer = SequentialTrainer(env=env, agents=agent, cfg=trainer_cfg)
+    
+    trainer = SequentialTrainer(env=env,
+                                agents=agent,
+                                cfg=trainer_cfg)
 
-    if resume_path is not None:
-        print(f"[INFO] Loading model checkpoint from: {resume_path}")
-        agent.load(resume_path)
-    agent.set_running_mode("eval")
+    # if resume_path is not None:
+    #     print(f"[INFO] Loading model checkpoint from: {resume_path}")
+    #     agent.load(resume_path)
+    # agent.set_running_mode("eval")
 
     timestep = 0
+
     # simulate environment
-    while simulation_app.is_running():
+    trainer.train()
 
-        trainer.train()
-
-        if args_cli.video:
-            timestep += 1
-            # exit the play loop after recording one video
-            if timestep == args_cli.video_length:
-                break
+    if args_cli.video:
+        timestep += 1
+        # exit the play loop after recording one video
+        # if timestep == args_cli.video_length:
+        #     break
 
         # time delay for real-time evaluation
         # sleep_time = dt - (time.time() - start_time)

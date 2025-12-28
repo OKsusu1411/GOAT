@@ -30,7 +30,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.total_task_curriculum_level = cfg.total_task_curriculum_level
         self.total_DR_curriculum_level = cfg.total_DR_curriculum_level - 1
         self.rollout = 0
-        self.success_rate_buffer = torch.zeros(self.num_envs, cfg.success_rate_buffer_len, dtype=torch.bool, device=self.device)
+        self.success_rate_buffer = torch.zeros(self.num_envs, cfg.success_rate_buffer_len, dtype=torch.float, device=self.device)
         self.buffer_ids = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.env_success_rate = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         
@@ -128,7 +128,7 @@ class GOATPDStandEnv(GOATBaseEnv):
 
             # Joint state
             limits = self.joint_pos_limits[env_ids]
-            joint_pos = limits[:, 0] + torch.rand_like(limits[:, 0]) * (limits[:, 1] - limits[:, 0]) * 0.5
+            joint_pos = limits[:, :, 0] + torch.rand_like(limits[:, :, 0]) * (limits[:, :, 1] - limits[:, :, 0]) * 0.5
             joint_vel = torch.randn_like(joint_pos) * 0.1
 
         elif self.total_task_curriculum_level[self.task_curriculum_level] == "recovery":
@@ -149,7 +149,7 @@ class GOATPDStandEnv(GOATBaseEnv):
             root_state = torch.cat([root_pos, root_quat, root_vel], dim=-1)
 
             # Joint state
-            joint_pos = self.init_joint_pos[random_ids].clone()
+            joint_pos = self.init_joint_pos[random_ids, :].clone()
             joint_vel = torch.zeros_like(joint_pos)
 
         # DR_curriculum update for each environment
@@ -157,17 +157,20 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # Domain randomization (terrain friction)
         material_property = self._robot.root_physx_view.get_material_properties()
-        friction_noise = self.terrain_friction_random_per(self.DR_curriculum_level)
-        restitution_noise = self.terrain_restitution_random_per(self.DR_curriculum_level)
+        friction_noise = self.terrain_friction_random_per[self.DR_curriculum_level]
+        restitution_noise = self.terrain_restitution_random_per[self.DR_curriculum_level]
 
         material_property[env_ids, :, 0] = self._add_gaussian_noise(self.cfg.default_terrain_static_friction, friction_noise)
         material_property[env_ids, :, 1] = self._add_gaussian_noise(self.cfg.default_terrain_dynamic_friction, friction_noise)
         material_property[env_ids, :, 2] = self._add_gaussian_noise(self.cfg.default_terrain_restitution, restitution_noise)
 
         # Publish to sim
-        self._robot.root_physx_view.set_material_properties(material_property, env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids)
-        self._robot.write_root_state_to_sim(root_state, env_ids)
+        # self._robot.root_physx_view.set_material_properties(material_property, env_ids)
+        self._robot.write_joint_state_to_sim(position=joint_pos,
+                                             velocity=joint_vel,
+                                             env_ids=env_ids)
+        self._robot.write_root_state_to_sim(root_state=root_state,
+                                            env_ids=env_ids)
         
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
         """
@@ -231,8 +234,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2]
         self.contact_force = self._contact_sensor.data.net_forces_w.view(self.num_envs, -1)
         material_property = self._robot.root_physx_view.get_material_properties()
-        self.friction_coefficient = torch.Tensor([material_property[:, 0, 0], material_property[:, 0, 1]], device=self.device)
-
+        self.friction_coefficient = torch.stack([material_property[:, 0, 0], material_property[:, 0, 1]], dim=-1)
+        
         # Domain randomization (sensor noise)
         self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per[self.env_DR_curriculum_level])
         self.base_angular_vel_noissy = self._add_gaussian_noise(self.base_angular_vel, self.base_angular_vel_noise_per[self.env_DR_curriculum_level])
@@ -361,12 +364,15 @@ class GOATPDStandEnv(GOATBaseEnv):
         return terminated, truncated
     
     ## ==================== Auxilliary functions ==================== ##
-    def _add_gaussian_noise(self, data: torch.Tensor, noise_percentage: torch.Tensor) -> torch.Tensor:
+    def _add_gaussian_noise(self, data: torch.Tensor | float, noise_percentage: torch.Tensor) -> torch.Tensor:
         """
         Add (noise_percentage)% noise to all components of data
         """
         noise_ratio = noise_percentage / 100.0
-        # Standard normal distribution 
+        # Standard normal distribution
+        if not isinstance(data, torch.Tensor):
+            data = torch.tensor(data, dtype=torch.float32, device=self.device)
+
         noise = torch.randn_like(data, device=self.device)
         noisy_data = data * (1 + noise_ratio * noise)
         
