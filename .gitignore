@@ -73,3 +73,11 @@ _build
 **/Realworld/test_log/
 
 
+# VS Code
+.vscode/
+**/.vscode/
+
+# VS Code C/C++ database
+*.vc.db
+*.vc.db-shm
+*.vc.db-wal
