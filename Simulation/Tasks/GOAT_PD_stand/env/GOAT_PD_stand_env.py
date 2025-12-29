@@ -38,14 +38,14 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.global_success_rate = 0.0
 
         # Noise curriculum (linear schedular)
-        self.base_acceleration_noise_per = torch.linspace(start=0, end=cfg.max_base_acceleration_noise_per, steps=cfg.total_DR_curriculum_level)
-        self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=cfg.total_DR_curriculum_level)
-        self.gravity_vector_noise_per = torch.linspace(start=0, end=cfg.max_gravity_vector_noise_per, steps=cfg.total_DR_curriculum_level)
-        self.base_quaternion_noise_per = torch.linspace(start=0, end=cfg.max_base_quaternion_noise_per, steps=cfg.total_DR_curriculum_level)
-        self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=cfg.total_DR_curriculum_level)
-        self.joint_vel_noise_per = torch.linspace(start=0, end=cfg.max_joint_vel_noise_per, steps=cfg.total_DR_curriculum_level)
-        self.terrain_friction_random_per = torch.linspace(start=0, end=cfg.max_terrain_friction_random_per, steps=cfg.total_DR_curriculum_level)
-        self.terrain_restitution_random_per = torch.linspace(start=0, end=cfg.max_terrain_restitution_random_per, steps=cfg.total_DR_curriculum_level)
+        self.base_acceleration_noise_per = torch.linspace(start=0, end=cfg.max_base_acceleration_noise_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.base_angular_vel_noise_per = torch.linspace(start=0, end=cfg.max_base_angular_vel_noise_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.gravity_vector_noise_per = torch.linspace(start=0, end=cfg.max_gravity_vector_noise_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.base_quaternion_noise_per = torch.linspace(start=0, end=cfg.max_base_quaternion_noise_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.joint_pos_noise_per = torch.linspace(start=0, end=cfg.max_joint_pos_noise_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.joint_vel_noise_per = torch.linspace(start=0, end=cfg.max_joint_vel_noise_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.terrain_friction_random_per = torch.linspace(start=0, end=cfg.max_terrain_friction_random_per, steps=cfg.total_DR_curriculum_level, device=self.device)
+        self.terrain_restitution_random_per = torch.linspace(start=0, end=cfg.max_terrain_restitution_random_per, steps=cfg.total_DR_curriculum_level, device=self.device)
 
         # Space initialization
         self.observation = torch.zeros((self.num_envs, self.cfg.observation_space), dtype=torch.float32, device=self.device)
@@ -68,7 +68,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.wheel_controller = PI_Controller(kp=self.cfg.wheel_kp,
                                               ki=self.cfg.wheel_ki,
                                               num_envs=self.num_envs,
-                                              num_dof=self.cfg.num_leg,         # One wheel per legs
+                                              num_dof=1,         # One wheel per legs
                                               num_leg=self.cfg.num_leg,
                                               device=self.device,
                                               dt=self.cfg.sim_dt)
@@ -182,8 +182,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # Refine command
         self.actions = actions.clone()
-        self.joint_pos_cmd = self.actions[:, :, :3]
-        self.wheel_cmd_vel = self.actions[:, :, 3:]
+        self.joint_pos_cmd = self.actions[:, :-2]
+        self.wheel_cmd_vel = self.actions[:, -2:]
         
     def _apply_action(self):                    # Since it's inside the decimation loop, the low-level controller has to be located here
         # Current state
@@ -228,19 +228,23 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.joint_pos = self._robot.data.joint_pos
         self.joint_vel = self._robot.data.joint_vel
         self.previous_action = self.actions.clone()
+        self.flat_previous_action = self.previous_action.view(self.num_envs, -1)
 
         # State(privileged) data
         self.base_vel = self._robot.root_physx_view.get_link_velocities()[:, 0, :3]
-        self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2]
+        self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2].unsqueeze(1)
+        # self.base_height = self.base_height.unsqueeze(1)
         self.contact_force = self._contact_sensor.data.net_forces_w.view(self.num_envs, -1)
-        material_property = self._robot.root_physx_view.get_material_properties()
-        self.friction_coefficient = torch.stack([material_property[:, 0, 0], material_property[:, 0, 1]], dim=-1)
+        material_property = self._robot.root_physx_view.get_material_properties()                   # device is "cpu" not "cuda" 
+        self.friction_coefficient = torch.stack([material_property[:, 0, 0], material_property[:, 0, 1]], dim=-1).to(self.device)
         
         # Domain randomization (sensor noise)
         self.base_acceleration_noissy = self._add_gaussian_noise(self.base_acceleration, self.base_acceleration_noise_per[self.env_DR_curriculum_level])
         self.base_angular_vel_noissy = self._add_gaussian_noise(self.base_angular_vel, self.base_angular_vel_noise_per[self.env_DR_curriculum_level])
         self.gravity_vector_noissy = self._add_gaussian_noise(self.gravity_vector, self.gravity_vector_noise_per[self.env_DR_curriculum_level])
         self.base_quaternion_noissy = self._add_gaussian_noise(self.base_quaternion, self.base_quaternion_noise_per[self.env_DR_curriculum_level])
+        self.joint_pos_noissy = self._add_gaussian_noise(self.joint_pos, self.joint_pos_noise_per[self.env_DR_curriculum_level])
+        self.joint_vel_noissy = self._add_gaussian_noise(self.joint_vel, self.joint_vel_noise_per[self.env_DR_curriculum_level])
 
         self.observation = torch.cat((self.base_acceleration_noissy,
                                       self.base_angular_vel_noissy,
@@ -248,7 +252,7 @@ class GOATPDStandEnv(GOATBaseEnv):
                                       self.base_quaternion_noissy,
                                       self.joint_pos_noissy,
                                       self.joint_vel_noissy,
-                                      self.previous_action),
+                                      self.flat_previous_action),
                                       dim=1)
         
         self.privileged_info = torch.cat((self.base_vel,
@@ -282,6 +286,9 @@ class GOATPDStandEnv(GOATBaseEnv):
         ang_vel_norm = torch.norm(self.base_angular_vel, dim=1)
         is_stable = (lin_vel_norm < 0.5) & (ang_vel_norm < 1.0)
 
+        is_upright = is_upright.view(-1)
+        is_height_reached = is_height_reached.view(-1)
+        is_stable = is_stable.view(-1)
         current_task_name = self.total_task_curriculum_level[self.task_curriculum_level]
 
         # Task-specific success definition
@@ -324,7 +331,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         r_orient = torch.exp(-torch.square(orient_error) / 0.25)                                    # exp(-error^2 / sigma)
 
         # Base Height Reward
-        r_height = torch.exp(-torch.square(self.base_height - self.cfg.target_height) / 0.04)
+        r_height = torch.exp(-torch.square(self.base_height - self.cfg.target_height) / 0.04).squeeze(1)
 
         # Joint Regularization (Keep nominal pose)
         # # Assuming self._robot.data.default_joint_pos contains the standing pose

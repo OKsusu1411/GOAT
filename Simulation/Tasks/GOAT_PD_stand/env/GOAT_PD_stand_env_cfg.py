@@ -19,15 +19,15 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     episode_length_s = 10.0
     sim_dt = 0.005                              # 200Hz torque controller
     decimation = 2                              # 100Hz policy
-    action_space = [2, 4]                       # [L + R, joint pos + wheel velocity]
-    observation_space = 35                      # Observation space
-    state_space = 47                            # Inclde privilege state information
+    action_space = 8                            # [L + R, joint pos + wheel velocity]
+    observation_space = 37                      # Observation space
+    state_space = 49                            # Inclde privilege state information
 
     ## ==================== Controller gain ==================== ##
-    joint_kp=torch.tensor([[1.0, 1.0, 1.0]])
-    joint_kd=torch.tensor([[0.1, 0.1, 0.1]])
-    wheel_kp=torch.tensor([[0.1, 0.1]])
-    wheel_ki=torch.tensor([[0.1, 0.1]])
+    joint_kp=torch.tensor([[0.33, 0.27, 1.4]])
+    joint_kd=torch.tensor([[0.01, 0.01, 0.001]])
+    wheel_kp=torch.tensor([[0.1]])
+    wheel_ki=torch.tensor([[0.1]])
     
     ## ==================== Robot configuration ==================== ##
     leg_dof = 3                                 # Hip, Thigh, Knee

@@ -45,7 +45,21 @@ class IsaacLabWrapper(Wrapper):
             return self._unwrapped.single_action_space
         except:
             return self._unwrapped.action_space
+        
+    def reset(self) -> Tuple[torch.Tensor, Any]:
+        """Reset the environment
 
+        :return: Observation, info
+        :rtype: torch.Tensor and any other info
+        """
+        if self._reset_once:
+            observations, self._info = self._env.reset()
+            self._observations = flatten_tensorized_space(
+                tensorize_space(self.observation_space, observations["policy"])
+            )
+            self._reset_once = False
+        return self._observations, self._info
+    
     def step(self, actions: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Any]:
         """Perform a step in the environment
 
@@ -60,20 +74,17 @@ class IsaacLabWrapper(Wrapper):
         self._observations = flatten_tensorized_space(tensorize_space(self.observation_space, observations["policy"]))
         return self._observations, reward.view(-1, 1), terminated.view(-1, 1), truncated.view(-1, 1), self._info
 
-    def reset(self) -> Tuple[torch.Tensor, Any]:
-        """Reset the environment
+    def state(self) -> torch.Tensor:
+        """Get the environment state
 
-        :return: Observation, info
-        :rtype: torch.Tensor and any other info
+        :return: State
+        :rtype: torch.Tensor
         """
-        if self._reset_once:
-            observations, self._info = self._env.reset()
-            self._observations = flatten_tensorized_space(
-                tensorize_space(self.observation_space, observations["policy"])
-            )
-            self._reset_once = False
-        return self._observations, self._info
+        data = self._env.unwrapped._get_observations()
+        state = data["value"]
 
+        return state
+    
     def render(self, *args, **kwargs) -> None:
         """Render the environment"""
         return None

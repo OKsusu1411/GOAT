@@ -215,8 +215,8 @@ class PPO(Agent):
 
         # sample stochastic actions
         with torch.autocast(device_type=self._device_type, enabled=self.cfg.mixed_precision):
-            actions, outputs = self.policy.act(inputs, role="policy")
-            self._current_log_prob = outputs["log_prob"]
+            actions, log_probs, outputs = self.policy.act(inputs, role="policy")
+            self._current_log_prob = log_probs
 
         return actions, outputs
 
@@ -277,7 +277,7 @@ class PPO(Agent):
                     "observations": self._observation_preprocessor(observations),
                     "states": self._state_preprocessor(states),
                 }
-                values, _ = self.value.act(inputs, role="value")
+                values, _, _ = self.value.act(inputs, role="value")
                 values = self._value_preprocessor(values, inverse=True)
 
             # time-limit (truncation) bootstrapping
@@ -321,7 +321,7 @@ class PPO(Agent):
         super().post_interaction(timestep=timestep, timesteps=timesteps)
     
     def compute_gae(
-        *,
+        self,
         rewards: torch.Tensor,
         terminated: torch.Tensor,
         values: torch.Tensor,
@@ -374,7 +374,7 @@ class PPO(Agent):
                 "states": self._state_preprocessor(self._current_next_states),
             }
             self.value.enable_training_mode(False)
-            last_values, _ = self.value.act(inputs, role="value")
+            last_values, _, _ = self.value.act(inputs, role="value")
             self.value.enable_training_mode(True)
             last_values = self._value_preprocessor(last_values, inverse=True)
 
@@ -420,8 +420,8 @@ class PPO(Agent):
                         "states": self._state_preprocessor(sampled_states, train=not epoch),
                     }
 
-                    _, outputs = self.policy.act({**inputs, "taken_actions": sampled_actions}, role="policy")
-                    next_log_prob = outputs["log_prob"]
+                    _, log_prob, _ = self.policy.act({**inputs, "taken_actions": sampled_actions}, role="policy")
+                    next_log_prob = log_prob
 
                     # compute approximate KL divergence
                     with torch.no_grad():
@@ -449,7 +449,7 @@ class PPO(Agent):
                     policy_loss = -torch.min(surrogate, surrogate_clipped).mean()
 
                     # compute value loss
-                    predicted_values, _ = self.value.act(inputs, role="value")
+                    predicted_values, _, _ = self.value.act(inputs, role="value")
 
                     if self.cfg.value_clip > 0:
                         predicted_values = sampled_values + torch.clip(

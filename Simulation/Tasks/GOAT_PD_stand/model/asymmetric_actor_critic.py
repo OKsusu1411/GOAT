@@ -19,8 +19,10 @@ class Asymmetric_Actor(GaussianMixin, Model):
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
     def act(self, inputs, role):
-        return GaussianMixin.act(self, inputs, role)
-
+        actions, log_prob, outputs = GaussianMixin.act(self, inputs, role)
+        
+        return actions, log_prob, outputs
+    
     def compute(self, inputs, role):
         x = self.net(inputs["observations"])
         return self.mean_layer(x), self.log_std_parameter, {}

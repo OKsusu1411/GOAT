@@ -14,7 +14,7 @@ import os
 
 from isaaclab.app import AppLauncher
 
-# add argparse arguments
+# Add argparse arguments
 parser = argparse.ArgumentParser(description="Play a checkpoint of an RL agent.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
@@ -24,7 +24,7 @@ parser.add_argument("--disable_fabric",
                     default=False, 
                     help="Disable fabric and use USD I/O operations.")
 
-parser.add_argument("--num_envs", type=int, default=4, help="Number of environments to simulate.")
+parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default="GOAT-stand-v0", help="Name of the task.")
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint.")
 
@@ -34,13 +34,16 @@ parser.add_argument("--algorithm",
                     choices=["PPO", "SAC", "TD3"],
                     help="The RL algorithm used for training the skrl agent.")
 
-# append AppLauncher cli args
+# Append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-# always enable cameras to record video
+
+# Always enable cameras to record video
 if args_cli.video:
     args_cli.enable_cameras = True
-args_cli.headless = True
+
+# Always headless
+# args_cli.headless = True
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -120,6 +123,7 @@ def main():
     agent = PPO(models=model,
                 memory=memory,
                 observation_space=env.observation_space,
+                state_space=env.state_space,
                 action_space=env.action_space,
                 device=env.device,
                 cfg=agent_cfg)

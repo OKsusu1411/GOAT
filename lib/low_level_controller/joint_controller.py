@@ -71,8 +71,8 @@ class PD_Controller():
 
         # Define joint indices for each leg
         # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
-        left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.int)
-        right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.int)
+        left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.long)
+        right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.long)
         torque_limits = torque_limits[:, :num_joint]    # Extract joint torque limits
         joint_pos_limits = joint_pos_limits[:, :num_joint]
 
@@ -180,35 +180,33 @@ class PI_Controller():
 
         # Define joint indices for each leg
         # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
-        left_leg_indices = torch.tensor([6], device=self.device, dtype=torch.int)
-        right_leg_indices = torch.tensor([7], device=self.device, dtype=torch.int)
+        left_leg_indices = torch.tensor([6], device=self.device, dtype=torch.long)
+        right_leg_indices = torch.tensor([7], device=self.device, dtype=torch.long)
         torque_limits = torque_limits[:, 6:]            # Extract wheel torque limits
-        joint_vel_limits = joint_vel_limits[:, 6:]
 
         # --- Left Leg slicing ---
         joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-        joint_vel_cmd_left = torch.index_select(joint_vel_cmd, 1, 0)
+        joint_vel_cmd_left = joint_vel_cmd[:, 0].unsqueeze(-1)
         joint_vel_limits_left = torch.index_select(joint_vel_limits, 1, left_leg_indices)
 
         # --- Right Leg slicing ---
         joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
-        joint_vel_cmd_right = torch.index_select(joint_vel_cmd, 1, right_leg_indices)
+        joint_vel_cmd_right = joint_vel_cmd[:, 1].unsqueeze(-1)
         joint_vel_limits_right = torch.index_select(joint_vel_limits, 1, right_leg_indices)
 
         # Left foot PI control
-        joint_vel_cmd_left = torch.clamp(joint_vel_cmd_left, joint_vel_limits_left[:, :, 0], joint_vel_limits_left[:, :, 1])            # Clipping joint position command
+        joint_vel_cmd_left = torch.clamp(joint_vel_cmd_left, - joint_vel_limits_left, joint_vel_limits_left)            # Clipping joint position command
         joint_vel_left_error = joint_vel_cmd_left - joint_vel_left
         torque_left = self.kp * joint_vel_left_error + self.ki * joint_vel_left_error * self.dt                                         # PI feedback
 
         # Right foot PI control
-        joint_vel_cmd_right = torch.clamp(joint_vel_cmd_right, joint_vel_limits_right[:, :, 0], joint_vel_limits_right[:, :, 1])        # Clipping joint position command
+        joint_vel_cmd_right = torch.clamp(joint_vel_cmd_right, - joint_vel_limits_right, joint_vel_limits_right)        # Clipping joint position command
         joint_vel_right_error = joint_vel_cmd_right - joint_vel_right
         torque_right = self.kp * joint_vel_right_error + self.ki * joint_vel_right_error * self.dt                                      # PI feedback
         
         # Combine torque inputs
         torque = torch.zeros(self.num_envs, num_joint, device=self.device)
-        torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
-        torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+        torque = torch.cat((torque_left, torque_right), dim=1)
         
         # LPF for torque
         torque = 0.951 * self.old_torque + (1 - 0.951) * torque
