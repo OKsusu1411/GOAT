@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from skrl.models.torch import Model, GaussianMixin, DeterministicMixin
+from lib.model import Model, GaussianMixin, DeterministicMixin
 
 class Asymmetric_Actor(GaussianMixin, Model):
     def __init__(self, observation_space, action_space, device, cfg):
