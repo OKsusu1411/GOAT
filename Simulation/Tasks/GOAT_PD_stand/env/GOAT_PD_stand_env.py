@@ -5,8 +5,9 @@ import os
 import numpy as np
 
 from isaaclab.utils.math import normalize, quat_from_angle_axis
-from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.terrains import TerrainImporter 
 from isaaclab.sensors import ContactSensor
+from isaaclab.assets import AssetBase
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
 from lib.low_level_controller.joint_controller import PD_Controller, PI_Controller
@@ -104,6 +105,9 @@ class GOATPDStandEnv(GOATBaseEnv):
     
     def _setup_scene(self):
         super()._setup_scene()
+
+        self.terrain = TerrainImporter(self.cfg.terrain_importer_cfg)
+        self.dome_light = AssetBase(cfg=self.cfg.dome_light_cfg)
 
         # Spawn contact sensor
         contact_sensor = ContactSensor(cfg=self.cfg.contact_sensor)

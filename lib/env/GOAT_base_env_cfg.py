@@ -176,7 +176,7 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
     )
 
     # Light
-    dome_light = AssetBaseCfg(
+    dome_light_cfg = AssetBaseCfg(
         prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
     )
 
