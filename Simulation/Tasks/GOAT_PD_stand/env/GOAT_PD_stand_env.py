@@ -107,7 +107,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         super()._setup_scene()
 
         self.terrain = TerrainImporter(self.cfg.terrain_importer_cfg)
-        self.dome_light = AssetBase(cfg=self.cfg.dome_light_cfg)
+        self.cfg.dome_light_cfg.spawn.func(self.cfg.dome_light_cfg.prim_path,
+                                           self.cfg.dome_light_cfg.spawn)
 
         # Spawn contact sensor
         contact_sensor = ContactSensor(cfg=self.cfg.contact_sensor)
@@ -148,6 +149,7 @@ class GOATPDStandEnv(GOATBaseEnv):
 
             # Base link state
             root_pos = self.init_root_pos[random_ids].clone()
+            root_pos += self.scene.env_origins[env_ids]                         # Change to global position
             root_quat = self.init_root_quat[random_ids].clone()
             root_vel = torch.zeros(len(env_ids), 6, device=self.device)
             root_state = torch.cat([root_pos, root_quat, root_vel], dim=-1)
