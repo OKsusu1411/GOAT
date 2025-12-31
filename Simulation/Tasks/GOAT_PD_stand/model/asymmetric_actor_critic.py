@@ -20,7 +20,6 @@ class Asymmetric_Actor(GaussianMixin, Model):
 
     def act(self, inputs, role):
         actions, log_prob, outputs = GaussianMixin.act(self, inputs, role)
-        
         return actions, log_prob, outputs
     
     def compute(self, inputs, role):

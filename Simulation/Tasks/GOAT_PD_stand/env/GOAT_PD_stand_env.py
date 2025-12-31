@@ -7,7 +7,6 @@ import numpy as np
 from isaaclab.utils.math import normalize, quat_from_angle_axis
 from isaaclab.terrains import TerrainImporter 
 from isaaclab.sensors import ContactSensor
-from isaaclab.assets import AssetBase
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
 from lib.low_level_controller.joint_controller import PD_Controller, PI_Controller
@@ -74,11 +73,11 @@ class GOATPDStandEnv(GOATBaseEnv):
                                               device=self.device,
                                               dt=self.cfg.sim_dt)
         
-        # TODO: HW limit이 제대로 안불러와지면 그냥 하드 코딩 ㄱㄱ
         # HW limits
         self.joint_pos_limits = self._robot.data.joint_pos_limits
         self.joint_vel_limits = self._robot.data.joint_vel_limits
-        self.torque_limits = self._robot.data.joint_effort_limits
+        self.joint_input_limits = self.cfg.joint_input_limits.unsqueeze(0).expand(self.num_envs, -1, -1).to(device=self.device)
+        self.torque_limits = self.cfg.torque_limits.unsqueeze(0).expand(self.num_envs, -1).to(device=self.device)              # Isaac sim cannot bring torque limits from urdf
 
         if os.path.exists(csv_path):
             print(f"[INFO] Loading initial poses from {csv_path}...")
@@ -88,16 +87,16 @@ class GOATPDStandEnv(GOATBaseEnv):
             full_data = torch.tensor(data_np, dtype=torch.float32, device=self.device)
             
             # Data Slicing
-            # [Column 0] Curriculum Level
+            # Curriculum Level
             self.initial_pose_curriculum_level = full_data[:, 0]
             
-            # [Column 1:4] Root Position (x, y, z)
+            # Root Position (x, y, z)
             self.init_root_pos = full_data[:, 1:4]
             
-            # [Column 4:8] Root Orientation (w, x, y, z)
+            # Root Orientation (w, x, y, z)
             self.init_root_quat = full_data[:, 4:8]
             
-            # [Column 8:] Joint Positions (joint_0 ~ joint_7)
+            # Joint Positions (joint_0 ~ joint_7)
             self.init_joint_pos = full_data[:, 8:]
             
             # Data length
@@ -115,8 +114,10 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.scene.sensors["contact_sensor"] = contact_sensor
 
     def _reset_idx(self, env_ids: torch.Tensor):
-        
+        super()._reset_idx(env_ids)
+
         if len(env_ids) > 0:
+
             # Update success rate for each environment
             episode_scores = torch.mean(self.success_rate_buffer[env_ids], dim=1)
             self.env_success_rate[env_ids] = episode_scores
@@ -149,7 +150,6 @@ class GOATPDStandEnv(GOATBaseEnv):
 
             # Base link state
             root_pos = self.init_root_pos[random_ids].clone()
-            root_pos += self.scene.env_origins[env_ids]                         # Change to global position
             root_quat = self.init_root_quat[random_ids].clone()
             root_vel = torch.zeros(len(env_ids), 6, device=self.device)
             root_state = torch.cat([root_pos, root_quat, root_vel], dim=-1)
@@ -157,6 +157,9 @@ class GOATPDStandEnv(GOATBaseEnv):
             # Joint state
             joint_pos = self.init_joint_pos[random_ids, :].clone()
             joint_vel = torch.zeros_like(joint_pos)
+
+        # Change to global position
+        root_state[:,:3] += self.scene.env_origins[env_ids]
 
         # DR_curriculum update for each environment
         self.env_DR_curriculum_level[env_ids] = self.DR_curriculum_level
@@ -188,33 +191,39 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # Refine command
         self.actions = actions.clone()
-        self.joint_pos_cmd = self.actions[:, :-2]
-        self.wheel_cmd_vel = self.actions[:, -2:]
+        self.joint_pos_delta_cmd = self.actions[:, :-2]
+        self.wheel_vel_cmd = self.actions[:, -2:]
         
     def _apply_action(self):                    # Since it's inside the decimation loop, the low-level controller has to be located here
         # Current state
         joint_pos = self._robot.data.joint_pos
         joint_vel = self._robot.data.joint_vel
-
+ 
         # Domain randomization (sensor noise)set_material_properties
         joint_pos_noise = self.joint_pos_noise_per[self.env_DR_curriculum_level]
         joint_vel_noise = self.joint_vel_noise_per[self.env_DR_curriculum_level]
         self.joint_pos_noissy = self._add_gaussian_noise(joint_pos, joint_pos_noise)
         self.joint_vel_noissy = self._add_gaussian_noise(joint_vel, joint_vel_noise)
 
+        # Made joint command
+        self.joint_pos_cmd = self.joint_pos_noissy[:, :-2] + self.joint_pos_delta_cmd
+
         self.joint_torque_cmd = self.leg_controller.compute_torque(joint_pos=self.joint_pos_noissy,
                                                                    joint_vel=self.joint_vel_noissy,
                                                                    joint_pos_cmd=self.joint_pos_cmd,
-                                                                   joint_pos_limits=self.joint_pos_limits,
+                                                                   joint_pos_limits=None,
                                                                    torque_limits=self.torque_limits)
         
         self.wheel_torque_cmd = self.wheel_controller.compute_torque(joint_vel=self.joint_vel_noissy,
-                                                                     joint_vel_cmd=self.wheel_cmd_vel,
+                                                                     joint_vel_cmd=self.wheel_vel_cmd,
                                                                      joint_vel_limits=self.joint_vel_limits,
                                                                      torque_limits=self.torque_limits)
         
         # Combine torque commands
         self.torque_cmd = torch.cat((self.joint_torque_cmd, self.wheel_torque_cmd), dim=1)
+        
+        # print(self.joint_pos_cmd[0,:])
+        # print(self.torque_cmd[0,:])
         
         # Load to sim buffer
         self._robot.set_joint_effort_target(self.torque_cmd)
@@ -239,7 +248,6 @@ class GOATPDStandEnv(GOATBaseEnv):
         # State(privileged) data
         self.base_vel = self._robot.root_physx_view.get_link_velocities()[:, 0, :3]
         self.base_height = self._robot.root_physx_view.get_root_transforms()[:, 2].unsqueeze(1)
-        # self.base_height = self.base_height.unsqueeze(1)
         self.contact_force = self._contact_sensor.data.net_forces_w.view(self.num_envs, -1)
         material_property = self._robot.root_physx_view.get_material_properties()                   # device is "cpu" not "cuda" 
         self.friction_coefficient = torch.stack([material_property[:, 0, 0], material_property[:, 0, 1]], dim=-1).to(self.device)
@@ -317,12 +325,14 @@ class GOATPDStandEnv(GOATBaseEnv):
         # Level adjustment by curriculum
         if self.global_success_rate > self.cfg.curriculum_level_up_threshold:
             self.DR_curriculum_level += 1
+            print("Level up!!")
             if self.DR_curriculum_level >= self.total_DR_curriculum_level:
                 self.task_curriculum_level += 1         # I'm on the next level
             self.global_success_rate = 0
 
         elif self.global_success_rate < self.cfg.curriculum_level_down_threshold:
             self.DR_curriculum_level -= 1
+            print("Level Down!!")
             if self.DR_curriculum_level < 0:
                 self.task_curriculum_level -= 1         # Downgrade
             self.global_success_rate = 0
@@ -330,7 +340,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         # Clipping
         self.task_curriculum_level = max(0, min(self.task_curriculum_level, len(self.total_task_curriculum_level) - 1))
         self.DR_curriculum_level = max(0, min(self.DR_curriculum_level, self.total_DR_curriculum_level - 1))
-        
+        print(f"DR: {self.DR_curriculum_level},     Task: {self.cfg.total_task_curriculum_level[self.task_curriculum_level]}")
         # ======================= Reward ======================= #
         # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
         orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
@@ -349,7 +359,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         # When lying down (upright_rate low), scale is 0.0 -> No penalty -> Free movement
         # When standing (upright_rate high), scale is 1.0 -> High penalty -> Stability
         
-        vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                      # Clamp the rate
+        vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
         vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
 
         r_vel_lin = -torch.sum(torch.square(self.base_vel), dim=1) * vel_penalty_scale              # Penalty
@@ -372,8 +382,9 @@ class GOATPDStandEnv(GOATBaseEnv):
         return total_reward
     
     def _get_dones(self): 
-        terminated = False          # No terminate condition
-        truncated = self.episode_length_buf >= self.cfg.max_episode_length - 1
+        terminated = False          # No terminal condition
+        truncated = self.episode_length_buf >= (self.cfg.max_episode_length - 1)
+
         return terminated, truncated
     
     ## ==================== Auxilliary functions ==================== ##

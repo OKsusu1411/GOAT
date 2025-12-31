@@ -69,11 +69,14 @@ class PD_Controller():
         leg_dof = self.num_dof                          # hip, thigh, knee joints
         num_joint = leg_dof * self.num_leg
 
+        if joint_pos_limits is None:
+            joint_pos_limits = torch.tensor([-1e9, 1e9], device=self.device).unsqueeze(0).unsqueeze(0).expand(self.num_envs, num_joint, -1)
+
         # Define joint indices for each leg
         # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
         left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.long)
         right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.long)
-        torque_limits = torque_limits[:, :num_joint]    # Extract joint torque limits
+        joint_torque_limits = torque_limits[:, :num_joint]    # Extract joint torque limits
         joint_pos_limits = joint_pos_limits[:, :num_joint]
 
         # --- Left Leg slicing ---
@@ -110,7 +113,7 @@ class PD_Controller():
         self.old_torque = torque.clone()
 
         # Clip torque based on torque_limits
-        torque = torch.clamp(torque, -torque_limits, torque_limits)
+        torque = torch.clamp(torque, -joint_torque_limits, joint_torque_limits)
         
         return torque
     

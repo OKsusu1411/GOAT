@@ -44,13 +44,13 @@ class GOATBaseEnv(DirectRLEnv):
     # Reset Env
     def _reset_idx(self, env_ids: torch.Tensor):
         super()._reset_idx(env_ids)
-        joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
-        joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
-        joint_vel = torch.zeros_like(joint_pos)
+        # joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
+        # joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
+        # joint_vel = torch.zeros_like(joint_pos)
 
-        # Publish to simulator
-        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        # # Publish to simulator
+        # self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
+        # self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
 
     ## =============== RL main abstract methods ================ ##

@@ -35,12 +35,13 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     n_leg_j = leg_dof * num_leg
     num_total_joints = n_leg_j + num_leg        # Whee per legs
     torque_limits = torch.tensor([4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 2.5, 2.5])
+    joint_input_limits = torch.tensor([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]])
     
 
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level
     total_task_curriculum_level = ["balancing", "recovery"]
-    success_rate_buffer_len = 10
+    success_rate_buffer_len = 100
 
     max_base_acceleration_noise_per = 10        # Noise percentage (%)
     max_base_angular_vel_noise_per = 20
@@ -55,7 +56,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     default_terrain_dynamic_friction = 0.5
     default_terrain_restitution = 0.4
 
-    max_episode_length = 5*60/sim_dt            # 5 minutes for truncated    
+    max_episode_length = 10/sim_dt #5*60/sim_dt            # 5 minutes for truncated    
 
     ## ==================== Reward Shaping ==================== ##
     target_height = 0.45                        # meter (m)
@@ -68,7 +69,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     r_height_weight = 3.0
     r_vel_lin_weight = 1.0
     r_vel_ang_weight = 1.0
-    r_vel_joint_weight = 1.0
+    r_vel_joint_weight = 0.01
     r_effort_weight = 0.05
 
     # Simulation
