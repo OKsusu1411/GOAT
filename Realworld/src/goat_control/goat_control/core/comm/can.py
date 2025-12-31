@@ -62,11 +62,11 @@ class CanInterface:
             msg = can.Message(arbitration_id=arbitration_id, data=data, is_extended_id=False)
             self.bus.send(msg)
             return msg
-        except can.CanError as e:
-            self._log.error(f"[CAN] send failed (id=0x{arbitration_id:X}): {e}")
+        except can.CanError as caneError:
+            self._log.error(f"[CAN] send failed (id=0x{arbitration_id:X}): {caneError}")
             return None
 
-    def recv(self, timeout: float = 0.05) -> Optional[can.Message]:
+    def receive(self, timeout: float = 0.05) -> Optional[can.Message]:
         if self.bus is None:
             raise RuntimeError("CAN bus is not opened. Call open() first.")
         return self.bus.recv(timeout=timeout)
@@ -98,16 +98,15 @@ class CanInterface:
 
             deadline = time.time() + timeout
             while time.time() < deadline:
-                m = self.recv(timeout=min(0.05, max(0.0, deadline - time.time())))
-                if not m:
+                message = self.receive(timeout=min(0.05, max(0.0, deadline - time.time())))
+                if not message:
                     continue
-                if len(m.data) != 8 or m.data[0] != cmd_byte:
+                if len(message.data) != 8 or message.data[0] != cmd_byte:
                     continue
 
-                if accept_rx_id and (m.arbitration_id == rx_id):
-                    return m
-
-                if accept_tx_echo_diff and (m.arbitration_id == tx_id) and (m.data != sent.data):
-                    return m
+                if accept_rx_id and (message.arbitration_id == rx_id):
+                    return message
+                if accept_tx_echo_diff and (message.arbitration_id == tx_id) and (message.data != sent.data):
+                    return message
 
             return None
