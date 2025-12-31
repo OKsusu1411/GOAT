@@ -81,7 +81,7 @@ class CanMixin:
         a = max(min(float(amps), 33.0), -33.0)
         iq = int(round(a * cls.MG_IQ_LSB_PER_A))  # signed
         if iq < -2048: iq = -2048
-        if iq >  2048: iq =  2048
+        if iq > 2048: iq = 2048
         return int(iq).to_bytes(2, byteorder='little', signed=True)
 
     # ------------------------------------------------------------------
@@ -89,6 +89,7 @@ class CanMixin:
     def cmd_read_state1(self, node_id: int, timeout=0.05):
         # 0x9B: 상태1 (전압, 전류, 위치)
         return self.can_txrx(node_id, 0x9A, self.E7, timeout)
+
     def cmd_read_state2(self, node_id: int, timeout=0.05):
         # 0x9C: temp, iq, speed, encoder
         return self.can_txrx(node_id, 0x9C, self.E7, timeout)

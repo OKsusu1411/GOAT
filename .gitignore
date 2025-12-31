@@ -62,3 +62,25 @@ _build
 **/Realworld/install/
 **/Realworld/build/
 **/Realworld/log/
+**/Realworld/.vscode/
+**/Realworld/src/goat_control/pd_logs/
+
+**/Realworld/src/goat_description/.vscode/
+**/Realworld/src/goat_description/log/
+
+**/Realworld/src/goat_sysid/.vscode/
+**/Realworld/src/goat_sysid/log/
+**/Realworld/test_log/
+
+
+<<<<<<< HEAD
+# VS Code
+.vscode/
+**/.vscode/
+
+# VS Code C/C++ database
+*.vc.db
+*.vc.db-shm
+*.vc.db-wal
+=======
+>>>>>>> 51fb41c074c58b14fcb3abaaacc1ceb7dfa8ebf3

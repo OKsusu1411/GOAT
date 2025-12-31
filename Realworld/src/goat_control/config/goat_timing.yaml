@@ -1,0 +1,27 @@
+pd_controller:
+  ros__parameters:
+    # PD 제어 루프 주기 (Hz 단위)
+    #실행할때 ros2 run goat_control ik_pd_controller --ros-args --params-file ./src/goat_control/config/goat_timing.yaml
+    control_frequency: 100.0
+
+imu_publisher:
+  ros__parameters:
+    # IMU publish 주기 (Hz 단위)
+    publish_frequency: 100.0
+
+policy:
+  ros__parameters:
+    # 행동 생성 루프 주기 (Hz 단위)
+    #실행할때 ros2 run goat_control policy --ros-args --params-file ./src/goat_control/config/goat_timing.yaml
+
+    action_frequency: 50.0
+
+motor_state_publisher:
+  ros__parameters:
+    # CAN에서 모터 상태 읽는 주기 (Hz)
+    poll_hz: 200.0
+
+torque_converter:
+  ros__parameters:
+    # 토크 명령 보내는 루프 주기 (Hz)
+    control_frequency: 200.0

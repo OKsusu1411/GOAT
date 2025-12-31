@@ -36,7 +36,9 @@ setup(
             'motor_states_echo = goat_control.motor_states_echo:main',
             'imu_publisher = goat_control.imu_publisher:main',
             'policy = goat_control.policy:main',
-            'ik_pd_controller = goat_control.ik_pd_controller:main',
+            'pd_controller = goat_control.pd_controller:main',
+            'joint_torque_controller = goat_control.joint_torque_controller:main',
+            'data_logger = goat_control.data_logger:main',
         ],
     },
 )

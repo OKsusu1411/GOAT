@@ -11,6 +11,14 @@ from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 class Policy(Node):
     def __init__(self):
         super().__init__('policy')
+        # Action loop period parameter (sec)
+        
+        self.action_frequency = float(
+            self.declare_parameter('action_frequency', 0.02).value
+        )
+        self.get_logger().info(f"Policy action frequency: {self.action_frequency} Hz "
+                               f"({1.0 / self.action_frequency:.3f} s)")
+        self.action_period = 1.0/self.action_frequency
         self.imu_data_subscriber = self.create_subscription(
             BaseStates,
             'imu_data',
@@ -25,9 +33,11 @@ class Policy(Node):
         )
 
         self.timer = self.create_timer(
-            0.02,
+            self.action_period,
             self.action_callback
         )
+
+
 
         self.latest_base_states = None
 

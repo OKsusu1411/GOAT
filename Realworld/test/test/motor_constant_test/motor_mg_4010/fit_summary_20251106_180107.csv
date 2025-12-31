@@ -1,2 +1,0 @@
-group,n_samples,K_tau_slope_Nm_per_A,intercept_Nm,R2,K_tau0_originfit_Nm_per_A,R2_uncentered,x_min_A,x_max_A,y_min_Nm,y_max_Nm
-ALL,175,0.25863291741176475,0.013864646117647214,0.9961709667870713,0.26156206800000004,0.9990615633021477,0.2,7.0,0.06427512,1.8417294
