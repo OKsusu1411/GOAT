@@ -5,93 +5,13 @@ from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float32MultiArray
 from motor_interfaces.msg import MotorStates
 import numpy as np
+#from __future__ import annotations
+from scipy.linalg import logm
 
-# Plot 
-import matplotlib
-matplotlib.use('Agg')  # 디스플레이 없는 환경에서도 PNG 저장 가능하게
-import matplotlib.pyplot as plt
-import os
-from datetime import datetime
+KP_GAiN = 0.0000005
+KD_GAIN = 0.00002
 
-
-# URDF 순서 기준 조인트 이름 (index 0~7)
-# 0:hip_L, 1:hip_R, 2:thigh_L, 3:thigh_R, 4:knee_L, 5:knee_R, 6:wheel_L, 7:wheel_R
-JOINT_NAME_LIST = [
-    "hip_L", "hip_R",
-    "thigh_L", "thigh_R",
-    "knee_L", "knee_R",
-    "wheel_L", "wheel_R",
-]
-
-# --- MG Motor scale ---
-ANGLE_LSB_TO_DEG = 0.001      # multi_turn_raw, single_turn_raw : 0.001 deg/LSB
-SPEED_LSB_TO_DPS = 0.001      # speed_dps : 0.001 deg/s per LSB (모터 매뉴얼 기준)
-
-# Controller frequency (Hz)
-DEFAULT_CONTROL_FREQUENCY = 200.0  # 200 Hz (기본 제어 주파수)
-
-# --- Robot size ---
-NUM_JOINTS = 8         # 전체 모터 개수
-MOTOR_INDEX = 1        # 테스트용으로 제어할 관절 index (0~7)
-
-# 테스트용 기본 목표각 (deg) – 지금은 여기만 수정해서 인가
-JOINT_DEGREE = 0       # degrees
-KI_KP_ratio = 0.76
-#KI_KP_ratio = 0.8
-# 휠 목표 속도 (deg/s)
-DEFAULT_WHEEL_KP = 1.8
-DEFAULT_WHEEL_KI = 0.55
-#DEFAULT_WHEEL_KI = 0.0
-L_WHEEL_TARGET = 0.0  # 왼쪽 휠 목표 속도 (deg/s)
-R_WHEEL_TARGET = 10.0  # 오른쪽 휠 목표 속도 (deg/s)
-INT_TORQUE_LIMIT = 3.0  # 토크 중 적분항으로 허용할 최대 기여
-# INT_LIMIT = INT_TORQUE_LIMIT / DEFAULT_WHEEL_KI
-
-# --- Default gains (scalar) ---
-DEFAULT_KP = 0.0061         # Proportional gain
-
-DEFAULT_KD = 0.055          # Derivative gain
-
-# LPF / Torque 기본값 (scalar)
-DEFAULT_LPF_ALPHA = 1       # Low-pass filter alpha
-DEFAULT_MAX_TORQUE = 4.5    # Maximum torque limit
-
-# # --- Per-joint default lists ---> degree ---
-# DEFAULT_KP_LIST           = [0.013, 0.015, 0.0061, 0.0061, 0.0161, 0.0161, 0.000061, 0.000061]
-# DEFAULT_KD_LIST           = [0.055,  0.055,  0.055,  0.055,  0.055,  0.055,  0.055,  0.055]
-# DEFAULT_LPF_ALPHA_LIST    = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
-# DEFAULT_MAX_TORQUE_LIST   = [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5]
-
-# --- Per-joint default lists ---> rad ---
-DEFAULT_KP_LIST           = [0.0, 0.70,  0.0,   0.516,  0.0,   2.2, 0.0,    0.0]
-DEFAULT_KD_LIST           = [0.05,  0.004,  0.01,  0.0002,  0.1,  0.0001,    0.0,    0.0]
-DEFAULT_LPF_ALPHA_LIST    = [0.951,  0.951,   0.951,   0.951,  0.951,   0.951,  0.951,  0.951]
-DEFAULT_MAX_TORQUE_LIST   = [  0.0,    4.5,     0.0,     4.5,    0.0,    4.5,     0.0,    4.5]
-
-# 기본 타겟 각도 [deg] 리스트: MOTOR_INDEX만 JOINuT_DEGREE, 나머지 0
-# DEFAULT_TARGET_ANGLES_DEG = [-20.0, 30.0, 30.0, -20.0, 30.0, -30.0, 0.0, 0.0]
-DEFAULT_TARGET_ANGLES_DEG = [0.0, 20.0, 0.0, -20.0, 0.0, -20.0, 0.0, 0.0]
-# DEFAULT_TARGET_ANGLES_DEG = [0.0 for _ in range(NUM_JOINTS)]
-#DEFAULT_TARGET_ANGLES_DEG[MOTOR_INDEX] = JOINT_DEGREE
-     
-# Topic names
-MOTOR_STATES_TOPIC = 'motor_states'
-TARGET_ANGLES_TOPIC = 'target_joint_angles'
-TORQUE_COMMANDS_TOPIC = 'torque_commands'
-
-
-
-class PDController(Node):
-    """
-    Multiple-joint PD controller.
-    MotorStates에서 0.001 deg/LSB 값을 받아서 rad로 변환하여 내부 계산을 수행하고,
-    플롯/로그 출력 시에는 degree/deg/s 단위로 변환해서 확인 가능하게 하는
-    여러 관절 동시 제어용 PD 컨트롤러.
-
-    - 모터별로 서로 다른 Kp, Kd, LPF alpha, Max torque를 사용할 수 있게
-      kp_gains, kd_gains, lpf_alpha_list, max_torque_list 파라미터 지원.
-    - target_angles_deg 파라미터 + target_joint_angles 토픽으로 목표 각도 설정.
-    """
+class IKPDcontroller(Node):
     def __init__(self):
         super().__init__('ik_pd_controller')
 
@@ -209,9 +129,10 @@ class PDController(Node):
         """
 
         matrix_T = np.transpose(matrix, (1, 0))                           # Matrix transpose
-        lambda_matrix = (damping_constant**2) * np.eye(matrix.shape[0])   
+        lambda_matrix = (damping_constant**2) * np.eye(matrix.shape[0])   # 
         inv_term = np.linalg.inv(matrix @ matrix_T + lambda_matrix)
-        matrix_pinv = matrix_T @ (inv_term)
+        matrix_pinv= matrix_T @ (inv_term)
+
         return matrix_pinv
     
     def multiarray_to_numpy(msg: Float32MultiArray) -> np.ndarray:
@@ -354,51 +275,51 @@ class PDController(Node):
     # ==================== Controller ==================== #
     def controller_callback(self):
         # Transform matrices for each joint
-        # J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix
-        # i = 0                                         # Joint index
-        # L_T_matrix = np.eye(4)                        # Left foot transformation matrix
-        # R_T_matrix = np.eye(4)                        # Right foot transformation matrix
-        # J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix
+        J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix
+        i = 0                                         # Joint index
+        L_T_matrix = np.eye(4)                        # Left foot transformation matrix
+        R_T_matrix = np.eye(4)                        # Right foot transformation matrix
+        J = np.zeros((6, len(self.joint_names)))      # Initialize Jacobian matrix
 
-        # for joint_frame in self.joint_frames:
-        #     try:
-        #         transform: TransformStamped = self.tf_buffer.lookup_transform(
-        #             self.base_frame, 
-        #             joint_frame, 
-        #             rclpy.time.Time()
-        #         )
-        #         T = self.transformation_matrix(transform)
+        for joint_frame in self.joint_frames:
+            try:
+                transform: TransformStamped = self.tf_buffer.lookup_transform(
+                    self.base_frame, 
+                    joint_frame, 
+                    rclpy.time.Time()
+                )
+                T = self.transformation_matrix(transform)
 
-        #         # Calculate Jacobian
-        #         R = T[:3, :3]                       # Rotation matrix
-        #         p = T[:3, 3]                        # Position vector
-        #         w = R @ self.rotation_axis[i]       # J_w
-        #         v = -np.cross(w, p)                 # J_v
-        #         J[:, i] = np.concatenate([w, v])
+                # Calculate Jacobian
+                R = T[:3, :3]                       # Rotation matrix
+                p = T[:3, 3]                        # Position vector
+                w = R @ self.rotation_axis[i]       # J_w
+                v = -np.cross(w, p)                 # J_v
+                J[:, i] = np.concatenate([w, v])
 
-        #         if joint_frame == 'wheel_L_Link':
-        #             L_T_matrix = T                  # Left foot T matrix
+                if joint_frame == 'wheel_L_Link':
+                    L_T_matrix = T                  # Left foot T matrix
                 
-        #         elif joint_frame == 'wheel_R_Link':
-        #             R_T_matrix = T                  # Right foot T matrix
+                elif joint_frame == 'wheel_R_Link':
+                    R_T_matrix = T                  # Right foot T matrix
 
-        #         i += 1
+                i += 1
 
-        #     except Exception as e:
-        #         self.get_logger().error(f'Error looking up transform for {joint_frame}: {e}')
+            except Exception as e:
+                self.get_logger().error(f'Error looking up transform for {joint_frame}: {e}')
 
         # Current state
         L_leg_indices = np.array([0, 2, 4])                 # Indices for left leg joints
         R_leg_indices = np.array([1, 3, 5])                 # Indices for right leg joints
-        # L_current_pos = L_T_matrix[:3, 3]                   # Left foot state 
-        # L_current_rot = L_T_matrix[:3, :3]
-        # R_current_pos = R_T_matrix[:3, 3]                   # Right foot state
-        # R_current_rot = R_T_matrix[:3, :3]
-        # foot_current_pos = np.array([L_current_pos, R_current_pos])
-        # L_J = J[:, L_leg_indices]                           # Jacobian for left leg
-        # R_J = J[:, R_leg_indices]                           # Jacobian for right leg 
+        L_current_pos = L_T_matrix[:3, 3]                   # Left foot state 
+        L_current_rot = L_T_matrix[:3, :3]
+        R_current_pos = R_T_matrix[:3, 3]                   # Right foot state
+        R_current_rot = R_T_matrix[:3, :3]
+        foot_current_pos = np.array([L_current_pos, R_current_pos])
+        L_J = J[:, L_leg_indices]                           # Jacobian for left leg
+        R_J = J[:, R_leg_indices]                           # Jacobian for right leg 
 
-        # Joint state from multi-turn motor angles (if available)
+       # Joint state from multi-turn motor angles (if available)
         n_joints = len(self.joint_names)
         joint_pos = np.zeros((n_joints, 1))
         joint_vel = np.zeros((n_joints, 1))
@@ -414,26 +335,26 @@ class PDController(Node):
             joint_vel = velocity
 
         # Target feet position
-        # target_pos = foot_current_pos + self.policy_action
-        # self.get_logger().info(f"Target position:\n{target_pos}")
+        target_pos = foot_current_pos + self.policy_action
+        self.get_logger().info(f"Target position:\n{target_pos}")
 
         # ======================= Left leg control ======================= #   
         # Target foot pose
-        #L_target_pose = np.zeros((7, 1))
-        #L_target_pose[4:, 0] = target_pos[0, :]
+        L_target_pose = np.zeros((7, 1))
+        L_target_pose[4:, 0] = target_pos[0, :]
 
         # Current joint state
         L_joint_pos = joint_pos[L_leg_indices, 0].reshape(3, 1)
         L_joint_vel = joint_vel[L_leg_indices, 0].reshape(3, 1)
 
         # Inverse kinematics
-        # L_joint_command = self.inverse_kinematics(target_pose=L_target_pose,
-        #                                           current_pos=L_current_pos,
-        #                                           current_rot=L_current_rot,
-        #                                           jacobian=L_J,
-        #                                           joint_pos=L_joint_pos,
-        #                                           mode="translation")
-        L_joint_command = np.array(L_J_C).reshape(3, 1)
+        L_joint_command = self.inverse_kinematics(target_pose=L_target_pose,
+                                                  current_pos=L_current_pos,
+                                                  current_rot=L_current_rot,
+                                                  jacobian=L_J,
+                                                  joint_pos=L_joint_pos,
+                                                  mode="translation")
+
         L_joint_pos_error = L_joint_command - L_joint_pos
         L_joint_vel_error = - L_joint_vel
         L_torque_command = self.kp * L_joint_pos_error + self.kd * L_joint_vel_error
@@ -441,31 +362,29 @@ class PDController(Node):
 
         # ======================= Right leg control ======================= #
         # Target foot pose
-        #R_target_pose = np.zeros((7, 1))
-        #R_target_pose[4:, 0] = target_pos[1, :]
+        R_target_pose = np.zeros((7, 1))
+        R_target_pose[4:, 0] = target_pos[1, :]
 
         # Current joint state
         R_joint_pos = joint_pos[R_leg_indices, 0].reshape(3, 1)
         R_joint_vel = joint_vel[R_leg_indices, 0].reshape(3, 1)
 
         # Inverse kinematics
-        # R_joint_command = self.inverse_kinematics(target_pose=R_target_pose,
-        #                                           current_pos=R_current_pos,
-        #                                           current_rot=R_current_rot,
-        #                                           jacobian=R_J,
-        #                                           joint_pos=R_joint_pos,
-        #                                           mode="translation")
-        R_joint_command = np.array(R_J_C).reshape(3, 1)
+        R_joint_command = self.inverse_kinematics(target_pose=R_target_pose,
+                                                  current_pos=R_current_pos,
+                                                  current_rot=R_current_rot,
+                                                  jacobian=R_J,
+                                                  joint_pos=R_joint_pos,
+                                                  mode="translation")
+        
         R_joint_pos_error = R_joint_command - R_joint_pos
         R_joint_vel_error = - R_joint_vel
         R_torque_command = self.kp * R_joint_pos_error + self.kd * R_joint_vel_error
 
         # Combine torque commands
         torque_command = np.zeros((len(self.joint_names), 1))
-        # Apply torque only to the third joint of the left leg (knee_L_Joint)
-        # L_leg_indices are [0, 2, 4], so L_leg_indices[2] is the global index for knee_L_Joint (which is 4)
-        # L_torque_command is a (3,1) array, where L_torque_command[2] corresponds to the knee_L_Joint torque
-        torque_command[L_leg_indices[2]] = L_torque_command[2]
+        torque_command[L_leg_indices] = L_torque_command
+        torque_command[R_leg_indices] = R_torque_command
 
         # Publish torque command to MotorTorqueController (Float32MultiArray)
         torque_msg = Float32MultiArray()
