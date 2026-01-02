@@ -47,7 +47,7 @@ class GoatModelConfig:
     # -----------------------------
     motor_current_amp_per_lsb: float = 66.0 / 4096.0
     angle_deg_per_lsb: float = 0.001
-    speed_deg_per_sec_per_lsb: float = 1.0
+    speed_deg_per_sec_per_lsb: float = 0.01
 
     # -----------------------------
     # PD gains (full-length vectors)
@@ -129,7 +129,7 @@ class GoatModel:
     # ---------------------------------------------------------------------
     # Builders
     # ---------------------------------------------------------------------
-    def build_state_manager_config(self, effort_output_mode: EffortOutputMode = "current_amp") -> StateManagerConfig:
+    def build_state_manager_config(self, effort_output_mode: EffortOutputMode = "torque_nm") -> StateManagerConfig:
         return StateManagerConfig(
             joint_names=self.joint_names,
             knee_indices=self.knee_indices,
