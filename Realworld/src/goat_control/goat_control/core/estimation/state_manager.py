@@ -37,7 +37,7 @@ class StateManagerConfig:
     joint_effort_like_lpf_alpha: Optional[float] = None
 
     # ---- NEW: torque conversion parameters (per-motor)
-    effort_output_mode: Literal["current_amp", "torque_nm"] = "current_amp"
+    effort_output_mode: Literal["current_amp", "torque_nm"] = "torque_nm"
 
     motor_torque_constant_nm_per_amp: Optional[List[float]] = None  # length = motor_count
     motor_gear_ratio: Optional[List[float]] = None                 # length = motor_count
