@@ -1,4 +1,4 @@
-# goat_control/core/comm/can.py
+23# goat_control/core/comm/can.py
 from __future__ import annotations
 
 import time
@@ -65,7 +65,7 @@ class CanInterface:
         self.bus = None
         self.logger.info("[CAN] closed")
 
-    def send(self, arbitration_id: int, data: bytes) -> Optional[can.Message]:
+    def send(self, arbitration_id: int, data: bytes) -> can.Message | None:
         """Send a raw CAN frame."""
         if self.bus is None:
             raise RuntimeError("CAN bus is not opened. Call open() first.")
@@ -82,7 +82,7 @@ class CanInterface:
             self.logger.error(f"[CAN] send failed (id=0x{arbitration_id:X}): {can_error}")
             return None
 
-    def receive(self, timeout: float = 0.05) -> Optional[can.Message]:
+    def receive(self, timeout: float = 0.05) -> can.Message | None:
         """Receive a raw CAN frame."""
         if self.bus is None:
             raise RuntimeError("CAN bus is not opened. Call open() first.")
@@ -97,7 +97,7 @@ class CanInterface:
         timeout: float = 0.5,
         accept_rx_id: bool = True,
         accept_tx_echo_diff: bool = True,
-    ) -> Optional[can.Message]:
+    ) -> can.Message | None:
         """Transmit one command frame and wait for a matching response.
 
         Filtering rules:
