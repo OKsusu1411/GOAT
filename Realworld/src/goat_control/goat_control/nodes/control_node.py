@@ -67,7 +67,7 @@ class GoatControlNode(Node):
 
         # topic names
         self.declare_parameter("imu_topic", "imu_data")
-        self.declare_parameter("action_topic", "goat/action")
+        self.declare_parameter("policy_action", "goat/action")
         self.declare_parameter("observation_topic", "goat/observation")
         self.declare_parameter("command_topic", "goat/command_safe")
 
@@ -82,7 +82,7 @@ class GoatControlNode(Node):
         self.debug_print_period_sec = float(self.get_parameter("debug_print_period_sec").value)
 
         imu_topic = str(self.get_parameter("imu_topic").value)
-        action_topic = str(self.get_parameter("action_topic").value)
+        action_topic = str(self.get_parameter("policy_action").value)
         observation_topic = str(self.get_parameter("observation_topic").value)
         command_topic = str(self.get_parameter("command_topic").value)
 
@@ -228,9 +228,9 @@ class GoatControlNode(Node):
 
         # pipeline output은 기본적으로 torque[Nm]라고 가정 (safe_torque_command)
         safe_command = np.asarray(pipeline_output.safe_torque_command, dtype=float).flatten()
-        if safe_command.size != self.num_joints:
-            self.get_logger().warn("safe_torque_command size mismatch. Force zero.")
-            safe_command = np.zeros(self.num_joints, dtype=float)
+        # if safe_command.size != self.num_joints:
+        #     self.get_logger().warn("safe_torque_command size mismatch. Force zero.")
+        #     safe_command = np.zeros(self.num_joints, dtype=float)
 
         # 4) Action watchdog 최종 강제 (가장 중요)
         # - 정책 명령이 일정 시간 이상 안 오면 토크 0으로 강제
