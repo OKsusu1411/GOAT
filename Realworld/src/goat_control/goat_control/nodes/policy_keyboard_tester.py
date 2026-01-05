@@ -19,7 +19,7 @@ class KeyboardConfig:
     num_joints: int = 8
     step_deg: float = 20.0
     publish_rate_hz: float = 30.0
-    topic_action: str = "policy_action"
+    action_topic: str = "policy_action"
 
 
 class _RawKeyboard:
@@ -76,16 +76,16 @@ class PolicyKeyboardTester(Node):
         self.declare_parameter("num_joints", 8)
         self.declare_parameter("step_deg", 20.0)
         self.declare_parameter("publish_rate_hz", 30.0)
-        self.declare_parameter("topic_action", "policy_action")
+        self.declare_parameter("action_topic", "policy_action")
 
         self.cfg = KeyboardConfig(
             num_joints=int(self.get_parameter("num_joints").value),
             step_deg=float(self.get_parameter("step_deg").value),
             publish_rate_hz=float(self.get_parameter("publish_rate_hz").value),
-            topic_action=str(self.get_parameter("policy_action").value),
+            action_topic=str(self.get_parameter("action_topic").value),
         )
 
-        self.publisher = self.create_publisher(Float32MultiArray, self.cfg.topic_action, 10)
+        self.publisher = self.create_publisher(Float32MultiArray, self.cfg.action_topic, 10)
 
         self.target_joint_id: int = 0
         self.mode: str = "arrows"  # "manual" or "arrows"
@@ -104,7 +104,7 @@ class PolicyKeyboardTester(Node):
     def _print_help(self):
         self.get_logger().info(
             "\n[PolicyKeyboardTester]\n"
-            f"- Publishing '{self.cfg.topic_action}' as desired joint positions [rad], length={self.cfg.num_joints}\n"
+            f"- Publishing '{self.cfg.action_topic}' as desired joint positions [rad], length={self.cfg.num_joints}\n"
             "- Keys:\n"
             "  Arrow keys: +/- step (in arrows mode)\n"
             "  s: select joint id\n"
