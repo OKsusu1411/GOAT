@@ -136,8 +136,13 @@ class GoatControlNode(Node):
         self.last_control_time = now_time
 
         # 1) policy_action -> targets
-        desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets()
-        #NOTE: debug logs
+        action_msg = self.buffers.action_msg
+        if action_msg is None:
+            desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
+            desired_wheel_speed_rad_per_sec = np.zeros(self.num_joints, dtype=float)
+        else:
+            desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg)
+            #NOTE: debug logs
         self.get_logger().info(f"Decoded desired_joint_position_rad: {desired_joint_position_rad}")
         self.get_logger().info(f"Decoded desired_wheel_speed_rad_per_sec: {desired_wheel_speed_rad_per_sec}")
         targets = ControlTargets(
