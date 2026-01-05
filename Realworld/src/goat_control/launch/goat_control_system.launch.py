@@ -69,15 +69,15 @@ def generate_launch_description():
         }],
     )
 
-    policy_node = Node(
-        package="goat_control",
-        executable="policy_node",
-        name="policy_node",
-        output="screen",
-        parameters=[{
-            "action_frequency": 50.0,
-        }],
-    )
+    # policy_node = Node(
+    #     package="goat_control",
+    #     executable="policy_node",
+    #     name="policy_node",
+    #     output="screen",
+    #     parameters=[{
+    #         "action_frequency": 50.0,
+    #     }],
+    # )
 
     log_viewer_node = Node(
         package="goat_control",
@@ -104,6 +104,6 @@ def generate_launch_description():
         launch_log_viewer_arg,
         print_rate_arg,
         control_node,
-        policy_node,
+        # policy_node,
         log_viewer_node,
     ])
