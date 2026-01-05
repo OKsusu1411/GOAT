@@ -59,6 +59,11 @@ class GoatControlNode(Node):
         # debug print rate limit
         # - 너무 많이 찍히면 보기 힘드니까 일정 주기마다만 출력
         self.declare_parameter("debug_print_period_sec", 0.2)
+        self.declare_parameter("log_topic", "motor_torque_log")
+
+        log_topic = str(self.get_parameter("log_topic").value)
+
+
 
         # topic names
         self.declare_parameter("imu_topic", "imu_data")
@@ -114,6 +119,10 @@ class GoatControlNode(Node):
         )
         self.joint_state_publisher = self.create_publisher(
             JointState, "joint_states", 10
+        )
+
+        self.motor_torque_log_publisher = self.create_publisher(
+            Float32MultiArray, log_topic, 10
         )
 
         # -------------------------
@@ -335,6 +344,28 @@ class GoatControlNode(Node):
         zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
         current_command_amp = np.where(zero_mask, 0.0, current_command_amp)
         return current_command_amp
+
+    def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray) -> None:
+        """Publish motor_torque_log as Float32MultiArray.
+        Layout expected by MotorTorqueLogViewer:
+        data = [q(rad) xN, dq(rad/s) xN, u(cmd) xN]
+        """
+        joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
+        joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+        command_vector = np.asarray(command_vector, dtype=float).flatten()
+
+        if joint_position_rad.size != self.num_joints or joint_velocity_rad_per_sec.size != self.num_joints:
+            self.get_logger().warn("motor_torque_log publish skipped: state size mismatch.")
+            return
+        if command_vector.size != self.num_joints:
+            self.get_logger().warn("motor_torque_log publish skipped: command size mismatch.")
+            return
+
+        log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector], axis=0)
+
+        msg = Float32MultiArray()
+        msg.data = log_vector.astype(np.float32).tolist()
+        self.motor_torque_log_publisher.publish(msg)
 
     # -------------------------
     # Publishers
