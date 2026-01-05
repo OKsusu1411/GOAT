@@ -10,8 +10,8 @@ import numpy as np
 @dataclass
 class PDControllerConfig:
     """Per-joint PD gains configuration (rad / rad/s domain)."""
-    p_gain: np.ndarray  # shape: (num_joints,)
-    d_gain: np.ndarray    # shape: (num_joints,)
+    proportional_gain: np.ndarray  # shape: (num_joints,)
+    derivative_gain: np.ndarray    # shape: (num_joints,)
     joint_indices: Sequence[int]   # indices where PD is applied (e.g., [0..5])
 
 

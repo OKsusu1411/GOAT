@@ -13,7 +13,7 @@ from motor_interfaces.msg import BaseStates  # IMU message
 
 from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
 from goat_control.core.control.control_pipeline import ControlTargets
-from goat_control.core import launch_core_control_system
+from goat_control.core.build_system import launch_core_control_system
 from goat_control.core.estimation.state_types import ImuState
 
 
@@ -155,7 +155,7 @@ class GoatControlNode(Node):
         )
 
         safe_command = np.asarray(pipeline_output.safe_torque_command, dtype=float).flatten()
-        
+
         # WATCHDOG: if policy_action is stale -> force zero command
         if self._is_action_timed_out(now_time):
             safe_command = np.zeros(self.num_joints, dtype=float)
