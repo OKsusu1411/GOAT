@@ -22,7 +22,7 @@ class PolicyNode(Node):
     def __init__(self):
         super().__init__("policy")
 
-        action_frequency_param = float(self.declare_parameter("action_frequency", 0.02).value)
+        action_frequency_param = float(self.declare_parameter("action_frequency", 50).value)
 
         # Compatibility: interpret <=1.0 as period(sec), >1.0 as frequency(Hz)
         if action_frequency_param <= 1.0:
