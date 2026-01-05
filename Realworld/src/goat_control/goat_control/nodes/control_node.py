@@ -230,6 +230,7 @@ class GoatControlNode(Node):
                 self._last_timeout_warn_time_sec = now_sec
 
         # 5) send to motors
+        self.get_logger().info(f"Safe command to motors: {safe_command.tolist()}")
         self._send_command_to_motors(safe_command)
 
         # 6) publish observation + debug
