@@ -15,7 +15,7 @@ from motor_interfaces.msg import BaseStates  # imu_publisher.py에서 쓰던 타
 
 from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
 from goat_control.core.control.control_pipeline import ControlTargets
-from goat_control.core.model import launch_core_control_system
+from goat_control.core import launch_core_control_system
 
 
 @dataclass
