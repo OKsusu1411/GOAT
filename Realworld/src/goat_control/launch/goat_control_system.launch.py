@@ -91,7 +91,7 @@ def generate_launch_description():
             "use_joint_state_names": True,
             "print_rate_hz": LaunchConfiguration("print_rate_hz"),
             "command_unit": LaunchConfiguration("command_unit"),
-            "print_degrees": False,
+            "print_degrees": True,
         }],
     )
 
