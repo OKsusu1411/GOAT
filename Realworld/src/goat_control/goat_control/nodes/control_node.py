@@ -137,6 +137,9 @@ class GoatControlNode(Node):
 
         # 1) policy_action -> targets
         desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets()
+        #NOTE: debug logs
+        self.get_logger().info(f"Decoded desired_joint_position_rad: {desired_joint_position_rad}")
+        self.get_logger().info(f"Decoded desired_wheel_speed_rad_per_sec: {desired_wheel_speed_rad_per_sec}")
         targets = ControlTargets(
             desired_joint_position_rad=desired_joint_position_rad,
             desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
@@ -155,7 +158,8 @@ class GoatControlNode(Node):
         )
 
         safe_command = np.asarray(pipeline_output.safe_torque_command, dtype=float).flatten()
-
+        #NOTE: debug logs
+        self.get_logger().info(f"Raw safe_command: {safe_command}")
         # WATCHDOG: if policy_action is stale -> force zero command
         if self._is_action_timed_out(now_time):
             safe_command = np.zeros(self.num_joints, dtype=float)

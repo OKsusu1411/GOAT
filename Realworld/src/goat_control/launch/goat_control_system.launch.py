@@ -50,7 +50,7 @@ def generate_launch_description():
     )
     print_rate_arg = DeclareLaunchArgument(
         "print_rate_hz",
-        default_value="50.0",
+        default_value="100.0",
         description="Print rate for log viewer.",
     )
 
@@ -72,17 +72,17 @@ def generate_launch_description():
     policy_node = Node(
         package="goat_control",
         executable="policy_node",
-        name="policy",
+        name="policy_node",
         output="screen",
         parameters=[{
-            "action_frequency": 0.02,
+            "action_frequency": 50.0,
         }],
     )
 
     log_viewer_node = Node(
         package="goat_control",
         executable="log_viewer_node",
-        name="motor_torque_log_viewer",
+        name="log_viewer_node",
         output="screen",
         condition=IfCondition(LaunchConfiguration("launch_log_viewer")),
         parameters=[{
