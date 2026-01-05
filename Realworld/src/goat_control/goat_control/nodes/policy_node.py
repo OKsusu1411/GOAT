@@ -64,7 +64,12 @@ class PolicyNode(Node):
             return
 
         observation = self._build_observation(self.latest_joint_state, self.latest_imu)
-        action_array = self._infer_action(observation)
+        # 1번 모터를 20도 위치로 이동시키기 위한 명령 생성
+        # 모든 관절은 기본적으로 0으로 설정
+        action_array = np.zeros(8, dtype=np.float32)
+        
+        # 1번 모터(인덱스 0)의 목표 위치를 20도 -> 라디안으로 변환하여 설정
+        action_array[0] = np.deg2rad(20.0)
 
         action_msg = self._numpy_to_multiarray(action_array)
         self.action_publisher.publish(action_msg)
