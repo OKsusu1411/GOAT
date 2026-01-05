@@ -10,8 +10,8 @@ import numpy as np
 @dataclass
 class WheelPIControllerConfig:
     """Wheel speed PI controller configuration (rad/s domain)."""
-    p_gain: np.ndarray  # shape: (num_joints,) or (num_wheels,)
-    i_gain: np.ndarray      # shape: (num_joints,) or (num_wheels,)
+    proportional_gain: np.ndarray  # shape: (num_joints,) or (num_wheels,)
+    integral_gain: np.ndarray      # shape: (num_joints,) or (num_wheels,)
     wheel_indices: Sequence[int]   # typically [6, 7]
 
     # Anti-windup: integrator state clamp (same logic as your previous INT_LIMIT) :contentReference[oaicite:1]{index=1}
@@ -37,8 +37,8 @@ class WheelPIController:
 
         self.wheel_indices = list(config.wheel_indices)
 
-        p_gain = np.asarray(config.p_gain, dtype=float).flatten()
-        i_gain = np.asarray(config.i_gain, dtype=float).flatten()
+        p_gain = np.asarray(config.proportional_gain, dtype=float).flatten()
+        i_gain = np.asarray(config.integral_gain, dtype=float).flatten()
 
         # Allow either full-length (num_joints) arrays or wheel-only arrays (len == num_wheels)
         if p_gain.size == self.num_joints:

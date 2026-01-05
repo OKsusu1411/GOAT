@@ -29,8 +29,8 @@ class PDJointController:
     def __init__(self, config: PDControllerConfig):
         self.config = config
 
-        self.p_gain = np.asarray(config.p_gain, dtype=float).flatten()
-        self.d_gain = np.asarray(config.d_gain, dtype=float).flatten()
+        self.p_gain = np.asarray(config.proportional_gain, dtype=float).flatten()
+        self.d_gain = np.asarray(config.derivative_gain, dtype=float).flatten()
         self.joint_indices = list(config.joint_indices)
 
         if self.p_gain.shape != self.d_gain.shape:
