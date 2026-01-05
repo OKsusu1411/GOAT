@@ -129,14 +129,14 @@ class ImuSerialReader:
         with self._lock:
             return self._latest_raw_vector.copy()
 
-    def get_latest_packet(self) -> Optional[ImuPacket]:
+    def get_latest_packet(self) -> ImuPacket | None:
         """Return the latest decoded packet. Returns None if vector is invalid."""
         raw_vector = self.get_latest_raw_vector()
         return self.decode_vector(raw_vector)
 
     # --------------------------
     # Decoding (ported from split_packet)
-    def decode_vector(self, data_list: List[float]) -> Optional[ImuPacket]:
+    def decode_vector(self, data_list: List[float]) -> ImuPacket | None:
         """Decode a raw float vector into an ImuPacket."""
         if len(data_list) != self.config.expected_length:
             self.logger.warning(f"[IMU] wrong packet size: {len(data_list)}")

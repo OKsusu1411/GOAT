@@ -23,7 +23,7 @@ class PDJointController:
         current_position_rad: [rad]
         current_velocity_rad_per_sec: [rad/s]
         desired_velocity_rad_per_sec: [rad/s] (optional, default 0)
-        output_torque_command: controller effort (your system interprets it as torque/current)
+        output_torque_command: controller effort (your system interprets it as torque)
     """
 
     def __init__(self, config: PDControllerConfig):

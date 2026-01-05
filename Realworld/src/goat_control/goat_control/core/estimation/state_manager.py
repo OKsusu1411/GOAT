@@ -20,7 +20,7 @@ DEFAULT_MOTOR_CURRENT_AMP_PER_LSB = 66.0 / 4096.0
 DEFAULT_ANGLE_DEG_PER_LSB = 0.001
 
 # Speed scaling: if already in deg/s, keep 1.0. If 0.01 deg/s per LSB, set 0.01.
-DEFAULT_SPEED_DEG_PER_SEC_PER_LSB = 1.0
+DEFAULT_SPEED_DEG_PER_SEC_PER_LSB = 0.01
 
 
 @dataclass
@@ -33,20 +33,20 @@ class StateManagerConfig:
     speed_deg_per_sec_per_lsb: float = DEFAULT_SPEED_DEG_PER_SEC_PER_LSB
 
     # Optional filtering for joint velocity / effort-like signals
-    joint_velocity_lpf_alpha: Optional[float] = None
-    joint_effort_like_lpf_alpha: Optional[float] = None
+    joint_velocity_lpf_alpha: float | None = None
+    joint_effort_like_lpf_alpha: float | None = None
 
     # ---- NEW: torque conversion parameters (per-motor)
     effort_output_mode: Literal["current_amp", "torque_nm"] = "torque_nm"
 
-    motor_torque_constant_nm_per_amp: Optional[List[float]] = None  # length = motor_count
-    motor_gear_ratio: Optional[List[float]] = None                 # length = motor_count
-    motor_direction: Optional[List[int]] = None                    # length = motor_count (+1/-1)
+    motor_torque_constant_nm_per_amp: List[float] | None = None  # length = motor_count
+    motor_gear_ratio: List[float] | None = None                 # length = motor_count
+    motor_direction: List[float] | None = None                    # length = motor_count (+1/-1)
 
 
 def format_motor_states(
     motor_states_data: MotorStatesData,
-    max_motor_count: Optional[int] = 8,
+    max_motor_count: int | None = 8,
     show_angles_in_degrees: bool = True,
     angle_deg_per_lsb: float = DEFAULT_ANGLE_DEG_PER_LSB,
 ) -> str:

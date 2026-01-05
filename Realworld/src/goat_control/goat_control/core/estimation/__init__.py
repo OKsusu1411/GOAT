@@ -1,6 +1,6 @@
 # goat_control/core/estimation/__init__.py
 from .imu import ImuSerialReader, ImuConfig, ImuPacket
-from .filters import FirstOrderLowPassFilter, MovingAverageFilter
+from .filters import FirstOrderLowPassFilter
 from .state_types import MotorStatesData, ImuState, RobotState
 from .state_manager import StateManager, StateManagerConfig, MotorStateCollector, format_motor_states
 
@@ -9,7 +9,6 @@ __all__ = [
     "ImuConfig",
     "ImuPacket",
     "FirstOrderLowPassFilter",
-    "MovingAverageFilter",
     "MotorStatesData",
     "ImuState",
     "RobotState",

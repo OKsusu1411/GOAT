@@ -72,22 +72,3 @@ class FirstOrderLowPassFilter:
         return self._y_vector
 
 
-@dataclass
-class MovingAverageFilter:
-    """Simple moving average filter for scalar streams."""
-    window_size: int
-
-    def __post_init__(self) -> None:
-        if self.window_size <= 0:
-            raise ValueError("window_size must be > 0.")
-        self._buffer: List[float] = []
-
-    def reset(self) -> None:
-        self._buffer.clear()
-
-    def apply(self, x: Number) -> float:
-        value = float(x)
-        self._buffer.append(value)
-        if len(self._buffer) > self.window_size:
-            self._buffer.pop(0)
-        return sum(self._buffer) / len(self._buffer)
