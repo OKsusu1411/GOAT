@@ -119,17 +119,28 @@ class MotorTorqueLogViewer(Node):
 
         command_unit = "Nm" if self.command_unit == "torque_nm" else "A"
 
-        # Print header periodically
+        # Print header periodically (with info line on the very top)
         if (self._print_count % max(self.header_every, 1)) == 0:
+            info_line = (
+                f"[topic='{self.log_topic}'] layout = "
+                f"[q({position_unit}) x{self.num_joints}, dq({velocity_unit}) x{self.num_joints}, "
+                f"u({command_unit}) x{self.num_joints}]  "
+                f"(print_rate={self.print_rate_hz:.1f}Hz, names_from_joint_state={self.use_joint_state_names})"
+            )
             header = (
                 f"{'idx':>3}  {'name':<12}  "
                 f"{('q['+position_unit+']'):>12}  {('dq['+velocity_unit+']'):>12}  {('u['+command_unit+']'):>12}"
             )
+
+            self.get_logger().info(info_line)
             self.get_logger().info(header)
             self.get_logger().info("-" * len(header))
 
-        # Print rows (batch: print all joints in one log message)
-        fmt = f"{{:>3}}  {{:<12}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+        # Print rows (batch: all joints in ONE log block)
+        fmt = (
+            f"{{:>3}}  {{:<12}}  "
+            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+        )
 
         lines = []
         for joint_index in range(self.num_joints):
@@ -146,8 +157,8 @@ class MotorTorqueLogViewer(Node):
 
         self.get_logger().info("\n" + "\n".join(lines))
 
-
         self._print_count += 1
+
 
 
 def main(args=None):
