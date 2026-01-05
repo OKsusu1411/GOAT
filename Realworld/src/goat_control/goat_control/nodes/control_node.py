@@ -122,10 +122,10 @@ class GoatControlNode(Node):
 
     def _on_imu_msg(self, msg: BaseStates) -> None:
         self.buffers.imu_msg = msg
-        self.last_action_time = self.get_clock().now()
 
     def _on_action_msg(self, msg: Float32MultiArray) -> None:
         self.buffers.action_msg = msg
+        self.last_action_time = self.get_clock().now()
 
     # Main loop
     def _control_loop(self) -> None:
@@ -197,6 +197,8 @@ class GoatControlNode(Node):
             )
 
         action_array = np.asarray(self.buffers.action_msg.data, dtype=float).flatten()
+        # NOTE: debug logs
+        self.get_logger().info(f"policy_action size={action_array.size}, expected={2*self.num_joints}")
         if action_array.size < (2 * self.num_joints):
             return (
                 self.default_desired_joint_position_rad.copy(),
