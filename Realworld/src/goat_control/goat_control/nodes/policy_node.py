@@ -17,7 +17,7 @@ class PolicyNode(Node):
           * imu_data (motor_interfaces/BaseStates)
           * joint_states (sensor_msgs/JointState)   <-- policy input requirement
       - Publishes:
-          * policy_action (std_msgs/Float32MultiArray) with layout populated
+          * goat/action (std_msgs/Float32MultiArray) with layout populated
     """
 
     def __init__(self):
@@ -50,7 +50,7 @@ class PolicyNode(Node):
         self.create_subscription(BaseStates, "imu_data", self._on_imu, 10)
         self.create_subscription(JointState, "joint_states", self._on_joint_state, 10)
 
-        self.action_publisher = self.create_publisher(Float32MultiArray, "policy_action", 10)
+        self.action_publisher = self.create_publisher(Float32MultiArray, "goat/action", 10)
         self.timer = self.create_timer(self.action_period_sec, self._tick)
 
     def _on_imu(self, msg: BaseStates) -> None:
