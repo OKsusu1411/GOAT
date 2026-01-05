@@ -82,7 +82,7 @@ class PolicyKeyboardTester(Node):
             num_joints=int(self.get_parameter("num_joints").value),
             step_deg=float(self.get_parameter("step_deg").value),
             publish_rate_hz=float(self.get_parameter("publish_rate_hz").value),
-            topic_action=str(self.get_parameter("topic_action").value),
+            topic_action=str(self.get_parameter("policy_action").value),
         )
 
         self.publisher = self.create_publisher(Float32MultiArray, self.cfg.topic_action, 10)
