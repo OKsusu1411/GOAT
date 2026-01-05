@@ -1,13 +1,12 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import sys
-import time
 import math
-import select
 import termios
 import tty
+import select
 from dataclasses import dataclass
-from typing import List, Optional
 
 import rclpy
 from rclpy.node import Node
@@ -17,222 +16,214 @@ from std_msgs.msg import Float32MultiArray
 @dataclass
 class KeyboardConfig:
     num_joints: int = 8
-    step_deg: float = 20.0
-    publish_rate_hz: float = 30.0
-    action_topic: str = "goat/action"
+    publish_hz: float = 50.0
+    action_topic: str = "goat/action"   # must match ControlNode default
+    step_deg: float = 20.0              # default step size in degrees
+    step_deg_min: float = 1.0
+    step_deg_delta: float = 5.0         # w/s to +/- this
+    max_abs_deg: float = 180.0          # clamp for safety (you can change)
 
 
-class _RawKeyboard:
-    """Non-blocking raw keyboard reader (Linux terminal)."""
+class RawKeyboard:
+    """Non-blocking raw keyboard reader for terminal."""
 
-    def __init__(self):
-        self._orig = termios.tcgetattr(sys.stdin)
+    def __init__(self) -> None:
+        self._fd = sys.stdin.fileno()
+        self._orig = termios.tcgetattr(self._fd)
 
-    def __enter__(self):
-        tty.setcbreak(sys.stdin.fileno())
+    def __enter__(self) -> "RawKeyboard":
+        tty.setcbreak(self._fd)  # raw-ish, but still lets ctrl+c work reasonably
         return self
 
-    def __exit__(self, exc_type, exc, tb):
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._orig)
+    def __exit__(self, exc_type, exc, tb) -> None:
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._orig)
 
-    @staticmethod
-    def read_key_nonblocking(timeout_sec: float = 0.0) -> Optional[str]:
-        rlist, _, _ = select.select([sys.stdin], [], [], timeout_sec)
-        if not rlist:
+    def read_key(self) -> str | None:
+        """Return a key string or None if no input.
+
+        Arrow keys come as escape sequences: '\x1b[A' etc.
+        """
+        readable, _, _ = select.select([sys.stdin], [], [], 0.0)
+        if not readable:
             return None
+
         ch1 = sys.stdin.read(1)
-        if ch1 != "\x1b":  # not ESC
+        if ch1 != "\x1b":
             return ch1
-        # ESC sequence (arrows): ESC [ A/B/C/D
+
+        # Escape sequence (arrow keys)
         if select.select([sys.stdin], [], [], 0.0)[0]:
             ch2 = sys.stdin.read(1)
-            if ch2 == "[" and select.select([sys.stdin], [], [], 0.0)[0]:
-                ch3 = sys.stdin.read(1)
-                return f"\x1b[{ch3}"
-        return ch1
+        else:
+            return ch1
+
+        if ch2 != "[":
+            return ch1 + ch2
+
+        if select.select([sys.stdin], [], [], 0.0)[0]:
+            ch3 = sys.stdin.read(1)
+        else:
+            return ch1 + ch2
+
+        return ch1 + ch2 + ch3  # e.g. '\x1b[A'
 
 
-class PolicyKeyboardTester(Node):
-    """
-    Publishes test policy action (desired joint positions) for ControlNode.
+class PolicyKeyboardTesterNode(Node):
+    """Keyboard-based policy action publisher for GoatControlNode.
 
-    Output:
-      topic: policy_action (Float32MultiArray)
-      data: q_desired [rad] length = num_joints
-
-    Interaction:
-      - At start: choose joint id, mode
-      - Mode 1 (manual): type number (deg) then Enter
-      - Mode 2 (arrows): Up/Right increase +step_deg, Down/Left decrease -step_deg
-      - 's' : select joint id again
-      - 'm' : change mode again
-      - 'r' : reset all targets to 0
-      - 'q' : quit
+    Publishes Float32MultiArray (len=16):
+      [q_des(rad) x8, dq_des(rad/s) x8]
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("policy_keyboard_tester")
 
-        self.declare_parameter("num_joints", 8)
+        # Parameters (safe names: no slashes)
+        self.declare_parameter("action_topic", "goat/action")
+        self.declare_parameter("publish_hz", 50.0)
         self.declare_parameter("step_deg", 20.0)
-        self.declare_parameter("publish_rate_hz", 30.0)
-        self.declare_parameter("goat/action")
+        self.declare_parameter("max_abs_deg", 180.0)
 
-        self.cfg = KeyboardConfig(
-            num_joints=int(self.get_parameter("num_joints").value),
+        self.config = KeyboardConfig(
+            action_topic=str(self.get_parameter("action_topic").value),
+            publish_hz=float(self.get_parameter("publish_hz").value),
             step_deg=float(self.get_parameter("step_deg").value),
-            publish_rate_hz=float(self.get_parameter("publish_rate_hz").value),
-            action_topic=str(self.get_parameter("goat/action").value),
+            max_abs_deg=float(self.get_parameter("max_abs_deg").value),
         )
 
-        self.publisher = self.create_publisher(Float32MultiArray, self.cfg.action_topic, 10)
+        self.publisher = self.create_publisher(Float32MultiArray, self.config.action_topic, 10)
 
-        self.target_joint_id: int = 0
-        self.mode: str = "arrows"  # "manual" or "arrows"
-        self.target_rad: List[float] = [0.0] * self.cfg.num_joints
+        self.selected_joint_index = 0
+        self.desired_position_deg = [0.0] * self.config.num_joints
+        self.desired_velocity_rad_per_sec = [0.0] * self.config.num_joints  # keep 0 by default
 
-        self._next_prompt_time = 0.0
+        period = 1.0 / max(1e-6, self.config.publish_hz)
+        self.timer = self.create_timer(period, self._tick)
+
         self._print_help()
 
-        # blocking prompts (outside timer)
-        self._select_joint_id()
-        self._select_mode()
-
-        period = 1.0 / max(self.cfg.publish_rate_hz, 1.0)
-        self.create_timer(period, self._tick)
-
-    def _print_help(self):
+    def _print_help(self) -> None:
         self.get_logger().info(
-            "\n[PolicyKeyboardTester]\n"
-            f"- Publishing '{self.cfg.action_topic}' as desired joint positions [rad], length={self.cfg.num_joints}\n"
-            "- Keys:\n"
-            "  Arrow keys: +/- step (in arrows mode)\n"
-            "  s: select joint id\n"
-            "  m: select mode (manual/arrows)\n"
-            "  r: reset all targets to 0\n"
-            "  q: quit\n"
+            "\n[Keyboard Tester]\n"
+            f"  Publishing to: /{self.config.action_topic} @ {self.config.publish_hz:.1f} Hz (len=16)\n"
+            "  Keys:\n"
+            "    0~7 : select joint\n"
+            "    [ / ] : prev/next joint\n"
+            "    ↑/→ : +step deg (selected joint)\n"
+            "    ↓/← : -step deg (selected joint)\n"
+            "    w/s : step +5 / -5 deg (min 1 deg)\n"
+            "    r   : reset all targets to 0\n"
+            "    q   : quit\n"
         )
 
-    def _select_joint_id(self):
-        while True:
-            try:
-                text = input(f"Select target joint id [0..{self.cfg.num_joints-1}]: ").strip()
-                joint_id = int(text)
-                if 0 <= joint_id < self.cfg.num_joints:
-                    self.target_joint_id = joint_id
-                    self.get_logger().info(f"Target joint id set to {self.target_joint_id}")
-                    return
-                print("Out of range.")
-            except (ValueError, EOFError):
-                print("Invalid input. Try again.")
+    def _clamp_deg(self, deg_value: float) -> float:
+        limit = abs(self.config.max_abs_deg)
+        if limit <= 0.0:
+            return deg_value
+        return max(-limit, min(limit, deg_value))
 
-    def _select_mode(self):
-        while True:
-            text = input("Select mode: (1) manual deg input, (2) arrow +/- step : ").strip()
-            if text == "1":
-                self.mode = "manual"
-                self.get_logger().info("Mode = manual (type degrees and press Enter)")
-                return
-            if text == "2":
-                self.mode = "arrows"
-                self.get_logger().info(f"Mode = arrows (step = {self.cfg.step_deg} deg)")
-                return
-            print("Please type 1 or 2.")
+    def _handle_key(self, key: str) -> bool:
+        """Handle key. Return False to quit."""
+        if key is None:
+            return True
 
-    def _manual_prompt_if_needed(self):
-        # rate-limit prompts to avoid spamming
-        now = time.time()
-        if now < self._next_prompt_time:
-            return
-        self._next_prompt_time = now + 0.1
+        # Quit
+        if key in ("q", "Q"):
+            self.get_logger().info("Quit requested.")
+            return False
 
-        # manual mode: only prompt when user presses Enter? -> we can't detect Enter cleanly here.
-        # Instead, we prompt occasionally and allow user to type a line.
-        try:
-            text = input(f"[manual] joint {self.target_joint_id} deg = ").strip()
-        except EOFError:
-            return
-        if text == "":
-            return
-        if text.lower() == "s":
-            self._select_joint_id()
-            return
-        if text.lower() == "m":
-            self._select_mode()
-            return
-        if text.lower() == "r":
-            self.target_rad = [0.0] * self.cfg.num_joints
-            self.get_logger().info("Reset all targets to 0.")
-            return
-        if text.lower() == "q":
-            raise KeyboardInterrupt
+        # Reset
+        if key in ("r", "R"):
+            self.desired_position_deg = [0.0] * self.config.num_joints
+            self.get_logger().info("Reset all desired positions to 0 deg.")
+            return True
 
-        try:
-            deg = float(text)
-            self.target_rad[self.target_joint_id] = math.radians(deg)
-            self.get_logger().info(
-                f"Set joint {self.target_joint_id} = {deg:.2f} deg ({self.target_rad[self.target_joint_id]:.3f} rad)"
-            )
-        except ValueError:
-            self.get_logger().warn("Invalid number.")
+        # Step size adjust
+        if key in ("w", "W"):
+            self.config.step_deg = max(self.config.step_deg_min, self.config.step_deg + self.config.step_deg_delta)
+            self.get_logger().info(f"Step size: {self.config.step_deg:.1f} deg")
+            return True
+        if key in ("s", "S"):
+            self.config.step_deg = max(self.config.step_deg_min, self.config.step_deg - self.config.step_deg_delta)
+            self.get_logger().info(f"Step size: {self.config.step_deg:.1f} deg")
+            return True
 
-    def _apply_arrow_key(self, key: str):
-        step_rad = math.radians(self.cfg.step_deg)
-        if key in ("\x1b[A", "\x1b[C"):  # Up or Right
-            self.target_rad[self.target_joint_id] += step_rad
-        elif key in ("\x1b[B", "\x1b[D"):  # Down or Left
-            self.target_rad[self.target_joint_id] -= step_rad
+        # Select joint by number
+        if key.isdigit():
+            idx = int(key)
+            if 0 <= idx < self.config.num_joints:
+                self.selected_joint_index = idx
+                self.get_logger().info(f"Selected joint: {self.selected_joint_index}")
+            return True
 
-    def _tick(self):
-        # Publish at fixed rate
+        # Select joint by bracket
+        if key == "[":
+            self.selected_joint_index = (self.selected_joint_index - 1) % self.config.num_joints
+            self.get_logger().info(f"Selected joint: {self.selected_joint_index}")
+            return True
+        if key == "]":
+            self.selected_joint_index = (self.selected_joint_index + 1) % self.config.num_joints
+            self.get_logger().info(f"Selected joint: {self.selected_joint_index}")
+            return True
+
+        # Arrows
+        if key in ("\x1b[A", "\x1b[C"):  # Up / Right
+            j = self.selected_joint_index
+            self.desired_position_deg[j] = self._clamp_deg(self.desired_position_deg[j] + self.config.step_deg)
+            self.get_logger().info(f"j{j} -> {self.desired_position_deg[j]:.1f} deg")
+            return True
+        if key in ("\x1b[B", "\x1b[D"):  # Down / Left
+            j = self.selected_joint_index
+            self.desired_position_deg[j] = self._clamp_deg(self.desired_position_deg[j] - self.config.step_deg)
+            self.get_logger().info(f"j{j} -> {self.desired_position_deg[j]:.1f} deg")
+            return True
+
+        return True
+
+    def _publish_action(self) -> None:
+        # Convert deg -> rad
+        desired_position_rad = [math.radians(self._clamp_deg(d)) for d in self.desired_position_deg]
+        desired_velocity_rad_per_sec = list(self.desired_velocity_rad_per_sec)
+
+        # Build action length 16
+        action_vector = desired_position_rad + desired_velocity_rad_per_sec
+
         msg = Float32MultiArray()
-        msg.data = [float(x) for x in self.target_rad]
+        msg.data = [float(x) for x in action_vector]
         self.publisher.publish(msg)
 
-        # Input handling
-        if self.mode == "manual":
-            # Manual uses blocking input, so do it in a controlled way
-            self._manual_prompt_if_needed()
-            return
+    def _tick(self) -> None:
+        # Read and handle at most a few keys per tick (avoid starving publish)
+        for _ in range(5):
+            key = self._keyboard.read_key()
+            if key is None:
+                break
+            keep_running = self._handle_key(key)
+            if not keep_running:
+                rclpy.shutdown()
+                return
 
-        # Arrows mode: non-blocking key read
-        key = _RawKeyboard.read_key_nonblocking(timeout_sec=0.0)
-        if key is None:
-            return
+        self._publish_action()
 
-        if key in ("\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"):
-            self._apply_arrow_key(key)
-            current_deg = math.degrees(self.target_rad[self.target_joint_id])
-            self.get_logger().info(f"[arrows] joint {self.target_joint_id} = {current_deg:.2f} deg")
-            return
-
-        if key == "s":
-            # temporarily restore cooked input for blocking prompt
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, termios.tcgetattr(sys.stdin))
-            self._select_joint_id()
-            return
-        if key == "m":
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, termios.tcgetattr(sys.stdin))
-            self._select_mode()
-            return
-        if key == "r":
-            self.target_rad = [0.0] * self.cfg.num_joints
-            self.get_logger().info("Reset all targets to 0.")
-            return
-        if key == "q":
-            raise KeyboardInterrupt
+    def attach_keyboard(self, keyboard: RawKeyboard) -> None:
+        self._keyboard = keyboard
 
 
-def main(args=None):
+def main(args=None) -> None:
     rclpy.init(args=args)
-    node = PolicyKeyboardTester()
+    node = PolicyKeyboardTesterNode()
 
-    # Raw keyboard context for arrows mode
     try:
-        with _RawKeyboard():
+        with RawKeyboard() as keyboard:
+            node.attach_keyboard(keyboard)
             rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        if rclpy.ok():
+            rclpy.shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
