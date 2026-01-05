@@ -19,7 +19,7 @@ class KeyboardConfig:
     num_joints: int = 8
     step_deg: float = 20.0
     publish_rate_hz: float = 30.0
-    action_topic: str = "policy_action"
+    action_topic: str = "goat/action"
 
 
 class _RawKeyboard:
@@ -76,13 +76,13 @@ class PolicyKeyboardTester(Node):
         self.declare_parameter("num_joints", 8)
         self.declare_parameter("step_deg", 20.0)
         self.declare_parameter("publish_rate_hz", 30.0)
-        self.declare_parameter("action_topic", "policy_action")
+        self.declare_parameter("goat/action")
 
         self.cfg = KeyboardConfig(
             num_joints=int(self.get_parameter("num_joints").value),
             step_deg=float(self.get_parameter("step_deg").value),
             publish_rate_hz=float(self.get_parameter("publish_rate_hz").value),
-            action_topic=str(self.get_parameter("action_topic").value),
+            action_topic=str(self.get_parameter("goat/action").value),
         )
 
         self.publisher = self.create_publisher(Float32MultiArray, self.cfg.action_topic, 10)
