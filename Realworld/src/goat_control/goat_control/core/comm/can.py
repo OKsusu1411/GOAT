@@ -1,4 +1,4 @@
-23# goat_control/core/comm/can.py
+# goat_control/core/comm/can.py
 from __future__ import annotations
 
 import time
