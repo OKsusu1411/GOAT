@@ -223,6 +223,6 @@ class ControlPipeline:
         raw_torque_command = pd_torque_command + pi_torque_command
 
         # 4) Safety limiter (LPF + clipping)
-        safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
+        safe_torque_command = raw_torque_command  # Temporarily disabled safety limiter
 
         return safe_torque_command, raw_torque_command

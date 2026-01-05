@@ -170,6 +170,7 @@ class GoatControlNode(Node):
         # policy action 수신 시각을 기록해 watchdog에 사용
         self.buffers.action_msg = msg
         self.last_action_time = self.get_clock().now()
+        self.get_logger().info(f"Received action message: {msg.data}")
 
     # -------------------------
     # Watchdog helper
@@ -220,7 +221,8 @@ class GoatControlNode(Node):
             imu_state=imu_state,
         )
         self.get_logger().info(
-            f"[DEBUG] Pipeline torque: raw={np.round(pipeline_output.raw_torque_command, 4).tolist()}, "
+            f"[DEBUG] desired_pos_rad: {np.round(targets.desired_joint_position_rad, 4).tolist()}, "
+            f"Pipeline torque: raw={np.round(pipeline_output.raw_torque_command, 4).tolist()}, "
             f"safe={np.round(pipeline_output.safe_torque_command, 4).tolist()}"
         )
 
