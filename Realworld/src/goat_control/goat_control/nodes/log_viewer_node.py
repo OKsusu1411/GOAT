@@ -127,12 +127,14 @@ class MotorTorqueLogViewer(Node):
             )
             self.get_logger().info(header)
             self.get_logger().info("-" * len(header))
-
-        # Print rows
+            
+        # Print rows (batch: print all joints in one log message)
         fmt = f"{{:>3}}  {{:<12}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+
+        lines = []
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
-            self.get_logger().info(
+            lines.append(
                 fmt.format(
                     joint_index,
                     name[:12],
@@ -141,6 +143,9 @@ class MotorTorqueLogViewer(Node):
                     float(command_value[joint_index]),
                 )
             )
+
+        self.get_logger().info("\n" + "\n".join(lines))
+
 
         self._print_count += 1
 
