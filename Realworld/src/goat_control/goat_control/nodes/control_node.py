@@ -43,6 +43,13 @@ class GoatControlNode(Node):
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("motor_node_ids", [1, 2, 3, 4, 5, 6, 7, 8])
         self.declare_parameter("command_unit", "torque_nm")  # "amp" or "torque_nm"
+        
+        # watchdog: if policy_action is stale -> force zero torque
+        self.declare_parameter("action_timeout_sec", 0.05)  # 50 ms
+        self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
+
+        self.last_action_time = None  # rclpy.time.Time | None
+        self._last_timeout_warn_time_sec = 0.0  # rate-limit warning log
 
         # Topic names (legacy-friendly)
         self.declare_parameter("imu_topic", "imu_data")
@@ -107,8 +114,15 @@ class GoatControlNode(Node):
         self.get_logger().info("GoatControlNode started (JointState->Policy, single log topic).")
 
     # Callbacks
+    def _is_action_timed_out(self, now_time) -> bool:
+        if self.last_action_time is None:
+            return True
+        age_sec = (now_time - self.last_action_time).nanoseconds * 1e-9
+        return age_sec > self.action_timeout_sec
+
     def _on_imu_msg(self, msg: BaseStates) -> None:
         self.buffers.imu_msg = msg
+        self.last_action_time = self.get_clock().now()
 
     def _on_action_msg(self, msg: Float32MultiArray) -> None:
         self.buffers.action_msg = msg
@@ -141,6 +155,18 @@ class GoatControlNode(Node):
         )
 
         safe_command = np.asarray(pipeline_output.safe_torque_command, dtype=float).flatten()
+        
+        # WATCHDOG: if policy_action is stale -> force zero command
+        if self._is_action_timed_out(now_time):
+            safe_command = np.zeros(self.num_joints, dtype=float)
+
+            # rate-limited warning (1 Hz)
+            now_sec = now_time.nanoseconds * 1e-9
+            if now_sec - self._last_timeout_warn_time_sec > 1.0:
+                self.get_logger().warn(
+                    f"policy_action timeout (> {self.action_timeout_sec:.3f}s). Forcing ZERO torque/current."
+                )
+                self._last_timeout_warn_time_sec = now_sec
 
         # 4) send to motors
         self._send_command_to_motors(safe_command)
@@ -153,7 +179,7 @@ class GoatControlNode(Node):
 
     # Action -> Targets
     def _decode_action_to_targets(self) -> tuple[np.ndarray, np.ndarray]:
-        """
+        """pipeline
         policy_action format (Float32MultiArray):
           - length >= 2*num_joints:
               [0:num_joints]             -> desired joint positions [rad]
