@@ -182,32 +182,28 @@ class GoatControlNode(Node):
         self._publish_motor_torque_log(pipeline_output.robot_state, safe_command)
 
     # Action -> Targets
-    def _decode_action_to_targets(self) -> tuple[np.ndarray, np.ndarray]:
-        """pipeline
-        policy_action format (Float32MultiArray):
-          - length >= 2*num_joints:
-              [0:num_joints]             -> desired joint positions [rad]
-              [num_joints:2*num_joints]  -> desired wheel speeds [rad/s] (use 6~7, others can be 0)
-          - otherwise: hold default
+    def _decode_action_to_targets(self, action_msg: Float32MultiArray):
+        """Decode policy action message into desired joint positions and wheel speeds.
+
+        Supported formats:
+        - size == num_joints (8): desired_joint_position_rad only, wheel speeds = 0
+        - size >= 2*num_joints (16): [q_des(8), wheel_speed(8)]
+        (you can still set only wheel indices [6,7] meaningful)
         """
-        if self.buffers.action_msg is None:
-            return (
-                self.default_desired_joint_position_rad.copy(),
-                self.default_desired_wheel_speed_rad_per_sec.copy(),
-            )
+        action_array = np.asarray(action_msg.data, dtype=float).flatten()
 
-        action_array = np.asarray(self.buffers.action_msg.data, dtype=float).flatten()
-        # NOTE: debug logs
-        self.get_logger().info(f"policy_action size={action_array.size}, expected={2*self.num_joints}")
-        if action_array.size < (2 * self.num_joints):
-            return (
-                self.default_desired_joint_position_rad.copy(),
-                self.default_desired_wheel_speed_rad_per_sec.copy(),
-            )
+        # Defaults
+        desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
+        desired_wheel_speed_rad_per_sec = np.zeros(self.num_joints, dtype=float)
 
-        desired_joint_position_rad = action_array[: self.num_joints].copy()
-        desired_wheel_speed_rad_per_sec = action_array[self.num_joints : 2 * self.num_joints].copy()
+        if action_array.size >= self.num_joints:
+            desired_joint_position_rad = action_array[: self.num_joints].copy()
+
+        if action_array.size >= 2 * self.num_joints:
+            desired_wheel_speed_rad_per_sec = action_array[self.num_joints : 2 * self.num_joints].copy()
+
         return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
+
 
     # IMU conversion
     def _convert_base_states_to_core_imu(self, msg: BaseStates):
