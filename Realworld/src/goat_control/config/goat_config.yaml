@@ -9,14 +9,14 @@ robot:
   motor_direction: [1,1,1,1,1,1,1,-1]
 
 pd:
-  proportional_gain: [0.300,0.300,0.270,0.270,1.4000,1.4000,0,0]
-  derivative_gain:   [0.015,0.015,0.010,0.010,0.0001,0.0001,0,0]
+  proportional_gain: [0.300,0.300,0.270,0.270,1.4000,1.4000,0.0,0.0]
+  derivative_gain:   [0.015,0.015,0.010,0.010,0.0001,0.0001,0.0,0.0]
 
 wheel_pi:
-  proportional_gain: [0,0,0,0,0,0,0.02600,0.02600]
-  integral_gain:     [0,0,0,0,0,0,0.01183,0.01183]
+  proportional_gain: [0.0,0.0,0.0,0.0,0.0,0.0,0.02600,0.02600]
+  integral_gain:     [0.0,0.0,0.0,0.0,0.0,0.0,0.01183,0.01183]
   integrator_state_limit: 3.0
-  output_limit_per_joint: [0.0,0.0,0.0,0.0,0.0,0.0,4.5,4.5]
+  output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,4.5,4.5]
 
 safety:
   torque_lpf_alpha_per_joint: [0.951,0.951,0.951,0.951,0.951,0.951,0.951,0.951]
