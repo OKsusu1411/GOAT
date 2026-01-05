@@ -219,6 +219,10 @@ class GoatControlNode(Node):
             dt_sec=dt_sec,
             imu_state=imu_state,
         )
+        self.get_logger().info(
+            f"[DEBUG] Pipeline torque: raw={np.round(pipeline_output.raw_torque_command, 4).tolist()}, "
+            f"safe={np.round(pipeline_output.safe_torque_command, 4).tolist()}"
+        )
 
         # pipeline output은 기본적으로 torque[Nm]라고 가정 (safe_torque_command)
         safe_command = np.asarray(pipeline_output.safe_torque_command, dtype=float).flatten()
@@ -246,6 +250,7 @@ class GoatControlNode(Node):
         self._publish_observation(pipeline_output.robot_state)
         self._publish_joint_state(pipeline_output.robot_state)
         self._publish_command(safe_command)
+        self._publish_motor_torque_log(pipeline_output.robot_state, safe_command)
 
         # 7) rate-limited debug print (너가 보던 decode 출력이 0인지 확인하기 좋게)
         now_sec = now_time.nanoseconds * 1e-9

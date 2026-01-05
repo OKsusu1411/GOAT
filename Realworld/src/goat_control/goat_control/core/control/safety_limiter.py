@@ -77,6 +77,18 @@ class TorqueSafetyLimiter:
 
         # Per-joint clipping
         clipped = np.clip(filtered, -self.max_torque_per_joint, self.max_torque_per_joint)
+
+        # TODO: REMOVE THIS DEBUG PRINT
+        print(
+            f"[TorqueSafetyLimiter DEBUG]\n"
+            f"  raw    : {np.round(raw, 4).tolist()}\n"
+            f"  alpha  : {np.round(self.lpf_alpha_per_joint, 4).tolist()}\n"
+            f"  prev   : {np.round(self.previous_torque_command, 4).tolist()}\n"
+            f"  filtered: {np.round(filtered, 4).tolist()}\n"
+            f"  max    : {np.round(self.max_torque_per_joint, 4).tolist()}\n"
+            f"  clipped: {np.round(clipped, 4).tolist()}"
+        )
+
         return clipped
 
 

@@ -314,7 +314,11 @@ class StateManager:
                 joint_position_rad[motor_index] = angle_deg * math.pi / 180.0
 
             # Velocity: deg/s -> rad/s
-            joint_velocity_rad_per_sec[motor_index] = motor_states_data.motor_speed_deg_per_sec[motor_index] * math.pi / 180.0
+            speed_deg_s = motor_states_data.motor_speed_deg_per_sec[motor_index]
+            if motor_index in self.knee_indices:
+                joint_velocity_rad_per_sec[motor_index] = speed_deg_s * math.pi / 90.0
+            else:
+                joint_velocity_rad_per_sec[motor_index] = speed_deg_s * math.pi / 180.0
 
             # Effort-like: current or torque
             motor_current_amp = motor_states_data.motor_phase_current_amp[motor_index]

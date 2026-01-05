@@ -3,4 +3,9 @@
 Core package (ROS-independent).
 Keep this lightweight to avoid importing hardware-dependent modules at import time.
 """
-__all__ = []
+from .build_system import launch_core_control_system
+
+
+__all__ = [
+    "launch_core_control_system",
+]
