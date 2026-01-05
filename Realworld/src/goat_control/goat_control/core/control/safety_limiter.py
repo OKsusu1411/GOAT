@@ -108,13 +108,34 @@ class ConditionalIntegratorAntiWindup:
         self.integrator_state_limit = float(config.integrator_state_limit)
 
         if config.output_limit_per_joint is None:
+            # Default: practically no saturation
             self.output_limit_per_joint = np.full(self.num_joints, 1e9, dtype=float)
         else:
-            self.output_limit_per_joint = np.asarray(config.output_limit_per_joint, dtype=float).flatten()
-            if self.output_limit_per_joint.size != self.num_joints:
-                raise ValueError("output_limit_per_joint length must match num_joints.")
-            if np.any(self.output_limit_per_joint <= 0.0):
-                raise ValueError("output_limit_per_joint must be positive.")
+            raw_limits = np.asarray(config.output_limit_per_joint, dtype=float).flatten()
+            wheel_count = len(self.controlled_indices)
+
+            # Accept either:
+            #  - full length vector (num_joints)
+            #  - wheel-only vector (len(controlled_indices))
+            if raw_limits.size == self.num_joints:
+                full_limits = raw_limits.copy()
+            elif raw_limits.size == wheel_count:
+                # Expand wheel-only limits to full length
+                full_limits = np.full(self.num_joints, 1e9, dtype=float)
+                for joint_index, limit_value in zip(self.controlled_indices, raw_limits):
+                    full_limits[int(joint_index)] = float(limit_value)
+            else:
+                raise ValueError(
+                    f"output_limit_per_joint length must match num_joints({self.num_joints}) "
+                    f"or wheel_count({wheel_count})."
+                )
+
+            # Validate only controlled joints (wheels)
+            controlled_limits = full_limits[np.asarray(self.controlled_indices, dtype=int)]
+            if np.any(controlled_limits <= 0.0):
+                raise ValueError("output_limit_per_joint must be positive for controlled_indices.")
+
+            self.output_limit_per_joint = full_limits
 
         self.integrator_state = np.zeros(self.num_joints, dtype=float)
 
