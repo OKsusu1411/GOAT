@@ -39,8 +39,8 @@ class MotorTorqueLogViewer(Node):
             ["hip_L", "hip_R", "thigh_L", "thigh_R", "knee_L", "knee_R", "wheel_L", "wheel_R"]
         )
 
-        self.declare_parameter("print_rate_hz", 200.0)
-        self.declare_parameter("print_degrees", False)
+        self.declare_parameter("print_rate_hz", 100.0)
+        self.declare_parameter("print_degrees", True)
         self.declare_parameter("command_unit", "torque_nm")  # torque_nm or amp
         self.declare_parameter("precision", 3)
         self.declare_parameter("header_every", 20)
@@ -127,7 +127,7 @@ class MotorTorqueLogViewer(Node):
             )
             self.get_logger().info(header)
             self.get_logger().info("-" * len(header))
-            
+
         # Print rows (batch: print all joints in one log message)
         fmt = f"{{:>3}}  {{:<12}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
 
