@@ -28,6 +28,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     joint_kd=torch.tensor([[0.01, 0.01, 0.001]])
     wheel_kp=torch.tensor([[0.1]])
     wheel_ki=torch.tensor([[0.1]])
+    joint_action_weight = 10
+    wheel_action_weight = 35
     
     ## ==================== Robot configuration ==================== ##
     leg_dof = 3                                 # Hip, Thigh, Knee
@@ -41,7 +43,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     ## ==================== Curriculum parameters ==================== ##
     total_DR_curriculum_level = 5               # Domain Randomization curriculum level
     total_task_curriculum_level = ["balancing", "recovery"]
-    success_rate_buffer_len = 100
+    success_rate_buffer_len = 500
 
     max_base_acceleration_noise_per = 10        # Noise percentage (%)
     max_base_angular_vel_noise_per = 20
@@ -65,11 +67,11 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     curriculum_level_up_threshold = 0.8         # success rate
     curriculum_level_down_threshold = 0.2
 
-    r_orient_weight = 3.0
-    r_height_weight = 3.0
-    r_vel_lin_weight = 1.0
-    r_vel_ang_weight = 1.0
-    r_vel_joint_weight = 0.01
+    r_orient_weight = 1.0
+    r_height_weight = 1.0
+    r_vel_lin_weight = 0.2
+    r_vel_ang_weight = 0.2
+    r_vel_joint_weight = 0.05
     r_effort_weight = 0.05
 
     # Simulation

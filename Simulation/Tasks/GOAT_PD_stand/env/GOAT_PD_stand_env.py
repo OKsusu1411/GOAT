@@ -7,6 +7,8 @@ import numpy as np
 from isaaclab.utils.math import normalize, quat_from_angle_axis
 from isaaclab.terrains import TerrainImporter 
 from isaaclab.sensors import ContactSensor
+from isaacsim.core.utils import bounds
+from isaacsim.core.utils import prims
 from .GOAT_PD_stand_env_cfg import GOATPDStandEnvCfg
 from lib.env.GOAT_base_env import GOATBaseEnv
 from lib.low_level_controller.joint_controller import PD_Controller, PI_Controller
@@ -108,6 +110,14 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.terrain = TerrainImporter(self.cfg.terrain_importer_cfg)
         self.cfg.dome_light_cfg.spawn.func(self.cfg.dome_light_cfg.prim_path,
                                            self.cfg.dome_light_cfg.spawn)
+        
+        # Compute collision box info
+        robot_prim_path = "/World/envs/env_0/Robot"
+        robot_bbox_cache = bounds.create_bbox_cache()
+        robot_aabb = bounds.compute_aabb(bbox_cache=robot_bbox_cache,
+                                         prim_path=robot_prim_path,
+                                         include_children=True)
+        self.robot_collision_min_z = - robot_aabb[2]
 
         # Spawn contact sensor
         contact_sensor = ContactSensor(cfg=self.cfg.contact_sensor)
@@ -116,26 +126,27 @@ class GOATPDStandEnv(GOATBaseEnv):
     def _reset_idx(self, env_ids: torch.Tensor):
         super()._reset_idx(env_ids)
 
-        if len(env_ids) > 0:
+        
 
-            # Update success rate for each environment
-            episode_scores = torch.mean(self.success_rate_buffer[env_ids], dim=1)
-            self.env_success_rate[env_ids] = episode_scores
+        # Update success rate for each environment
+        episode_scores = torch.mean(self.success_rate_buffer[env_ids], dim=1)
+        self.env_success_rate[env_ids] = episode_scores
 
-            # Reset success rate buffer
-            self.success_rate_buffer[env_ids] = 0.0
-            self.buffer_ids[env_ids] = 0
+        # Reset success rate buffer
+        self.success_rate_buffer[env_ids] = 0.0
+        self.buffer_ids[env_ids] = 0
 
         if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
             # Domain randomization (initial pose)
             # Base link state
             root_state = self._robot.data.default_root_state[env_ids].clone()
-            root_state[:, 2] = 0.7 + torch.rand(len(env_ids), device=self.device) * 0.1
+            root_state[:, 2] += self.robot_collision_min_z
+            print(self.robot_collision_min_z)
 
             # Joint state
             limits = self.joint_pos_limits[env_ids]
-            joint_pos = limits[:, :, 0] + torch.rand_like(limits[:, :, 0]) * (limits[:, :, 1] - limits[:, :, 0]) * 0.5
-            joint_vel = torch.randn_like(joint_pos) * 0.1
+            joint_pos = torch.zeros_like(limits[:, :, 0]) * (limits[:, :, 1] - limits[:, :, 0])
+            joint_vel = torch.zeros_like(joint_pos)
 
         elif self.total_task_curriculum_level[self.task_curriculum_level] == "recovery":
             # Domain randomization (initial pose)
@@ -191,8 +202,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # Refine command
         self.actions = actions.clone()
-        self.joint_pos_delta_cmd = self.actions[:, :-2]
-        self.wheel_vel_cmd = self.actions[:, -2:]
+        self.joint_pos_delta_cmd = self.actions[:, :-2] * self.cfg.joint_action_weight
+        self.wheel_vel_cmd = self.actions[:, -2:] * self.cfg.wheel_action_weight
         
     def _apply_action(self):                    # Since it's inside the decimation loop, the low-level controller has to be located here
         # Current state
@@ -296,7 +307,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         is_height_reached = torch.abs(self.base_height - self.cfg.target_height) < self.cfg.height_threshold
         
         # Velocity criteria (Only strict for balancing)
-        lin_vel_norm = torch.norm(self.base_vel, dim=1)
+        lin_vel_norm = torch.norm(self.base_vel, dim=1)                         # L2 norm 
         ang_vel_norm = torch.norm(self.base_angular_vel, dim=1)
         is_stable = (lin_vel_norm < 0.5) & (ang_vel_norm < 1.0)
 
@@ -323,51 +334,52 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.global_success_rate = num_successful_envs / self.num_envs
 
         # Level adjustment by curriculum
-        if self.global_success_rate > self.cfg.curriculum_level_up_threshold:
-            self.DR_curriculum_level += 1
-            print("Level up!!")
-            if self.DR_curriculum_level >= self.total_DR_curriculum_level:
-                self.task_curriculum_level += 1         # I'm on the next level
-            self.global_success_rate = 0
+        # if self.global_success_rate > self.cfg.curriculum_level_up_threshold:
+        #     self.DR_curriculum_level += 1
+        #     print("Level up!!")
+        #     if self.DR_curriculum_level >= self.total_DR_curriculum_level:
+        #         self.task_curriculum_level += 1         # I'm on the next level
+        #     self.global_success_rate = 0
 
-        elif self.global_success_rate < self.cfg.curriculum_level_down_threshold:
-            self.DR_curriculum_level -= 1
-            print("Level Down!!")
-            if self.DR_curriculum_level < 0:
-                self.task_curriculum_level -= 1         # Downgrade
-            self.global_success_rate = 0
+        # elif self.global_success_rate < self.cfg.curriculum_level_down_threshold:
+        #     self.DR_curriculum_level -= 1
+        #     print("Level Down!!")
+        #     if self.DR_curriculum_level < 0:
+        #         self.task_curriculum_level -= 1         # Downgrade
+        #     self.global_success_rate = 0
 
         # Clipping
         self.task_curriculum_level = max(0, min(self.task_curriculum_level, len(self.total_task_curriculum_level) - 1))
         self.DR_curriculum_level = max(0, min(self.DR_curriculum_level, self.total_DR_curriculum_level - 1))
-        print(f"DR: {self.DR_curriculum_level},     Task: {self.cfg.total_task_curriculum_level[self.task_curriculum_level]}")
+        # print(f"DR: {self.DR_curriculum_level},     Task: {self.cfg.total_task_curriculum_level[self.task_curriculum_level]}")
+        
         # ======================= Reward ======================= #
         # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
         orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
-        r_orient = torch.exp(-torch.square(orient_error) / 0.25)                                    # exp(-error^2 / sigma)
+        r_orient = torch.exp(-torch.square(orient_error) / 1)                                    # Raidial Basis FUnction (RBF)
 
         # Base Height Reward
-        r_height = torch.exp(-torch.square(self.base_height - self.cfg.target_height) / 0.04).squeeze(1)
-
-        # Joint Regularization (Keep nominal pose)
-        # # Assuming self._robot.data.default_joint_pos contains the standing pose
-        # joint_error = torch.norm(self.joint_pos - self._robot.data.default_joint_pos, dim=1)
-        # r_joint = torch.exp(-torch.square(joint_error) / 0.5)
-
-        # Phase-Dependent Velocity Penalty (Adaptive)
-        # Logic: Penalize velocity ONLY when the robot is nearly upright.
-        # When lying down (upright_rate low), scale is 0.0 -> No penalty -> Free movement
-        # When standing (upright_rate high), scale is 1.0 -> High penalty -> Stability
+        height_error = torch.norm(self.base_height - self.cfg.target_height, dim=1)
+        r_height = torch.exp(-torch.square(height_error) / 1)
         
-        vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
-        vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
+        # vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
+        # vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
 
-        r_vel_lin = -torch.sum(torch.square(self.base_vel), dim=1) * vel_penalty_scale              # Penalty
-        r_vel_ang = -torch.sum(torch.square(self.base_angular_vel), dim=1) * vel_penalty_scale      # Penalty
-        r_vel_joint = -torch.sum(torch.square(self.joint_vel), dim=1) * vel_penalty_scale           # Penalty
+        # r_vel_lin = -torch.sum(torch.abs(self.base_vel), dim=1) * vel_penalty_scale                 # Penalty
+        # r_vel_ang = -torch.sum(torch.abs(self.base_angular_vel), dim=1) * vel_penalty_scale         # Penalty
+        # r_vel_joint = -torch.sum(torch.abs(self.joint_vel[:, :-2]), dim=1) * vel_penalty_scale      # Penalty
 
+        vel_lin_error = torch.norm(-self.base_vel, dim=1)
+        r_vel_lin = torch.exp(-torch.square(vel_lin_error) / 1)
+
+        vel_ang_error = torch.norm(-self.base_angular_vel, dim=1)
+        r_vel_ang = torch.exp(-torch.square(vel_ang_error) / 1)
+
+        vel_joint_error = torch.norm(-self.joint_vel, dim=1)
+        r_vel_joint = torch.exp(-torch.square(vel_joint_error) / 1)
+        
         # Energy / Action Smoothness
-        r_effort = -torch.sum(torch.square(self.torque_cmd), dim=1)                                 # Penalty
+        r_effort = -torch.sum(torch.abs(self.torque_cmd), dim=1)                                 # Penalty
         
         # Total Reward Summation
         total_reward = (
