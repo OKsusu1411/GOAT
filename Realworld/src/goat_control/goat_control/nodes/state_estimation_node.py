@@ -8,14 +8,15 @@ from motor_interfaces.msg import BaseStates
 
 from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
 from goat_control.core.estimation.imu import ImuSerialReader, ImuConfig
-from goat_control.core.estimation.state_manager import MotorStateCollector
+from goat_control.core.estimation.state_manager import MotorStateCollector, StateManager
+from goat_control.core import launch_core_control_system
 
 
 class StateEstimationNode(Node):
     """
     This node is responsible for estimating the state of the robot.
     It reads the motor states from the CAN bus and the IMU data from the serial port.
-    It then publishes the robot's state as ROS2 messages.
+    It converts raw data into physical units (rad, rad/s, Nm) and publishes ROS2 messages.
     """
     def __init__(self):
         super().__init__("state_estimation_node")
@@ -27,6 +28,7 @@ class StateEstimationNode(Node):
         self.declare_parameter("estimation_rate_hz", 200.0)
         self.declare_parameter("imu_port", "/dev/ttyUSB0")
         self.declare_parameter("imu_baudrate", 115200)
+        self.declare_parameter("yaml_path", "goat_config.yaml")  
 
         can_channel = str(self.get_parameter("can_channel").value)
         can_interface = str(self.get_parameter("can_interface").value)
@@ -34,6 +36,7 @@ class StateEstimationNode(Node):
         estimation_rate_hz = float(self.get_parameter("estimation_rate_hz").value)
         imu_port = str(self.get_parameter("imu_port").value)
         imu_baudrate = int(self.get_parameter("imu_baudrate").value)
+        yaml_path = str(self.get_parameter("yaml_path").value)
 
         # Publishers
         self.joint_state_publisher = self.create_publisher(JointState, "joint_states", 10)
@@ -49,6 +52,14 @@ class StateEstimationNode(Node):
             params = MotorParams(node_id=int(node_id))
             self.motor_drivers.append(MotorDriver(self.can_interface, params))
 
+        self.goat_model, _ = launch_core_control_system(
+            yaml_path=yaml_path,
+            motor_drivers=self.motor_drivers,
+            effort_output_mode="torque_nm",  # 토크 단위 출력을 위해 설정
+        )
+        
+        # StateManager 
+        self.state_manager = StateManager(self.goat_model.build_state_manager_config())
         self.motor_state_collector = MotorStateCollector(self.motor_drivers)
 
         # IMU Reader
@@ -65,22 +76,31 @@ class StateEstimationNode(Node):
     def _estimation_loop(self):
         now_time = self.get_clock().now().to_msg()
 
-        # 1. Poll motor states
+        # 1. Poll motor states (Raw Data)
         motor_states_data = self.motor_state_collector.poll_all()
 
-        # 2. Publish joint states
+        # 2. Convert Raw Data -> RobotState (Physical Units)
+        # StateManager를 사용하여 raw 데이터를 rad, rad/s, Nm 단위로 변환합니다.
+        robot_state = self.state_manager.build_robot_state(motor_states_data)
+
+        # 3. Publish joint states
         joint_state_msg = JointState()
         joint_state_msg.header.stamp = now_time
-        joint_state_msg.name = [f"joint_{i}" for i in range(len(motor_states_data.motor_multi_turn_angle_raw_0p001deg))]
-        joint_state_msg.position = motor_states_data.motor_multi_turn_angle_raw_0p001deg.tolist()
-        joint_state_msg.velocity = motor_states_data.velocities_rad_per_sec.tolist()
-        joint_state_msg.effort = motor_states_data.torques_nm.tolist()
+        
+        # 모델에 정의된 관절 이름 사용
+        joint_state_msg.name = self.goat_model.joint_names 
+        
+        # RobotState에서 변환된 값 사용
+        joint_state_msg.position = robot_state.joint_position_rad
+        joint_state_msg.velocity = robot_state.joint_velocity_rad_per_sec
+        joint_state_msg.effort = robot_state.joint_effort_like
+        
         self.joint_state_publisher.publish(joint_state_msg)
 
-        # 3. Poll IMU data
+        # 4. Poll IMU data
         imu_packet = self.imu_reader.get_latest_packet()
 
-        # 4. Publish IMU data
+        # 5. Publish IMU data
         if imu_packet:
             imu_msg = BaseStates()
             imu_msg.header.stamp = now_time
