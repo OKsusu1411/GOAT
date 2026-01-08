@@ -8,7 +8,7 @@ from motor_interfaces.msg import BaseStates
 
 from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
 from goat_control.core.estimation.imu import ImuSerialReader, ImuConfig
-from goat_control.core.estimation.state_manager import MotorStateCollector, StateManager
+from goat_control.core.estimation.state_manager import MotorStateCollector
 from goat_control.core import launch_core_control_system
 
 
@@ -28,7 +28,7 @@ class StateEstimationNode(Node):
         self.declare_parameter("estimation_rate_hz", 200.0)
         self.declare_parameter("imu_port", "/dev/ttyUSB0")
         self.declare_parameter("imu_baudrate", 115200)
-        self.declare_parameter("yaml_path", "goat_config.yaml")  
+        self.declare_parameter("yaml_path", "goat_config.yaml")
 
         can_channel = str(self.get_parameter("can_channel").value)
         can_interface = str(self.get_parameter("can_interface").value)
@@ -52,14 +52,16 @@ class StateEstimationNode(Node):
             params = MotorParams(node_id=int(node_id))
             self.motor_drivers.append(MotorDriver(self.can_interface, params))
 
-        self.goat_model, _ = launch_core_control_system(
+        # [수정] ControlNode와 동일한 방식으로 Core 시스템 로드
+        # pipeline을 받아와서 내부의 state_manager를 공유 사용 (중복 생성 방지)
+        self.goat_model, self.control_pipeline = launch_core_control_system(
             yaml_path=yaml_path,
             motor_drivers=self.motor_drivers,
-            effort_output_mode="torque_nm",  # 토크 단위 출력을 위해 설정
+            effort_output_mode="torque_nm",
         )
         
-        # StateManager 
-        self.state_manager = StateManager(self.goat_model.build_state_manager_config())
+        # Pipeline 내부의 manager 사용
+        self.state_manager = self.control_pipeline.state_manager
         self.motor_state_collector = MotorStateCollector(self.motor_drivers)
 
         # IMU Reader
