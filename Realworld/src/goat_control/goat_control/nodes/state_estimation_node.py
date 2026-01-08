@@ -76,7 +76,6 @@ class StateEstimationNode(Node):
         self.get_logger().info("StateEstimationNode started.")
 
     def _estimation_loop(self):
-        self.get_logger().info("Estimation loop called.")
         now_time = self.get_clock().now().to_msg()
 
         # 1. Poll motor states (Raw Data)
@@ -91,7 +90,6 @@ class StateEstimationNode(Node):
         joint_state_msg.header.stamp = now_time
         
         # 모델에 정의된 관절 이름 사용
-        self.get_logger().info(f"Joint names: {self.goat_model.joint_names}")
         joint_state_msg.name = self.goat_model.joint_names 
         
         # RobotState에서 변환된 값 사용
