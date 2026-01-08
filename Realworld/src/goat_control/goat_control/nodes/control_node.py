@@ -227,26 +227,13 @@ class GoatControlNode(Node):
 
     def _send_command_to_motors(self, safe_command: np.ndarray):
         if self.command_unit == "torque_nm":
-            current_command_amp = self._convert_torque_to_current_amp(safe_command)
+            current_command_amp = self.goat_model.convert_joint_torque_to_motor_current(safe_command)
         else:
             current_command_amp = safe_command
 
         for motor_index, motor_driver in enumerate(self.motor_drivers):
             command_amp = float(current_command_amp[motor_index])
             motor_driver.torque_mode_amp(command_amp, timeout=0.02)
-
-    def _convert_torque_to_current_amp(self, joint_torque_command_nm: np.ndarray) -> np.ndarray:
-        torque_constant = np.asarray(self.goat_model.config.motor_torque_constant_nm_per_amp, dtype=float)
-        gear_ratio = np.asarray(self.goat_model.config.motor_gear_ratio, dtype=float)
-        direction = np.asarray(self.goat_model.config.motor_direction, dtype=float)
-
-        denominator = direction * gear_ratio * torque_constant
-        denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
-        current_command_amp = joint_torque_command_nm / denominator
-
-        zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
-        current_command_amp = np.where(zero_mask, 0.0, current_command_amp)
-        return current_command_amp
 
     def _publish_observation(self, robot_state):
         q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()

@@ -180,3 +180,17 @@ class GoatModel:
             integrator_state_limit=float(self.config.wheel_integrator_state_limit),
             output_limit_per_joint=self.config.wheel_output_limit_per_joint,
         )
+
+    def convert_joint_torque_to_motor_current(self, joint_torque_nm: np.ndarray) -> np.ndarray:
+        torque_constant = np.asarray(self.config.motor_torque_constant_nm_per_amp, dtype=float)
+        gear_ratio = np.asarray(self.config.motor_gear_ratio, dtype=float)
+        direction = np.asarray(self.config.motor_direction, dtype=float)
+
+        denominator = direction * gear_ratio * torque_constant
+        denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
+        current_command_amp = joint_torque_nm / denominator
+
+        zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
+        current_command_amp = np.where(zero_mask, 0.0, current_command_amp)
+        
+        return current_command_amp
