@@ -163,10 +163,20 @@ class GoatControlNode(Node):
         imu_state = None
         if imu_msg:
             imu_state = ImuState(
-                roll=float(imu_msg.rpy.x), pitch=float(imu_msg.rpy.y), yaw=float(imu_msg.rpy.z),
-                gyro_x=float(imu_msg.gyro.x), gyro_y=float(imu_msg.gyro.y), gyro_z=float(imu_msg.gyro.z),
-                acc_x=float(imu_msg.acc.x), acc_y=float(imu_msg.acc.y), acc_z=float(imu_msg.acc.z),
-                time_ms=float(imu_msg.time_ms)
+                orientation_quat_w=float(imu_msg.quat.w),
+                orientation_quat_x=float(imu_msg.quat.x),
+                orientation_quat_y=float(imu_msg.quat.y),
+                orientation_quat_z=float(imu_msg.quat.z),
+                angular_velocity_x=float(imu_msg.gyro.x),
+                angular_velocity_y=float(imu_msg.gyro.y),
+                angular_velocity_z=float(imu_msg.gyro.z),
+                linear_acceleration_x=float(imu_msg.acc.x),
+                linear_acceleration_y=float(imu_msg.acc.y),
+                linear_acceleration_z=float(imu_msg.acc.z),
+                magnetic_field_x=float(imu_msg.mag.x),
+                magnetic_field_y=float(imu_msg.mag.y),
+                magnetic_field_z=float(imu_msg.mag.z),
+                sensor_time_ms=float(imu_msg.time_ms)
             )
 
         robot_state = RobotState(
