@@ -8,39 +8,40 @@ import tty
 import select
 from dataclasses import dataclass
 
+import numpy as np
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 
 
 @dataclass
 class KeyboardConfig:
-    # GOAT has 8 actuators total:
-    #   0~5: joints (position control)
-    #   6~7: wheels (velocity control)
+    # GOAT: 8 actuators total
+    #  - 0~5: joints (position target, rad)
+    #  - 6~7: wheels (speed target, rad/s)
     num_actuators: int = 8
     joint_count: int = 6
     wheel_count: int = 2
 
-    # Publish fast enough to avoid ControlNode action watchdog (default 0.05s)
+    # Publish fast enough to avoid ControlNode action watchdog (e.g., 0.05s)
     publish_hz: float = 50.0
 
-    # Must match ControlNode "policy_action" topic (default: goat/action)
+    # Default action topic (must match ControlNode subscription)
     action_topic: str = "goat/action"
 
-    # Joint step size in degrees (converted to rad before publishing)
-    joint_step_deg: float = 0.0
-    joint_step_deg_min: float = -50.0
-    joint_step_deg_delta: float = 5.0  # W/S to +/- this
+    # Joint position step (deg)
+    joint_step_deg: float = 20.0
+    joint_step_deg_min: float = 1.0
+    joint_step_deg_delta: float = 5.0  # W/S
 
-    # Wheel speed step in deg/s (converted to rad/s before publishing)
-    wheel_step_deg_per_sec: float = 0.0
-    wheel_step_deg_per_sec_min: float = -50.0
-    wheel_step_deg_per_sec_delta: float = 10.0  # E/D to +/- this
+    # Wheel speed step (deg/s)
+    wheel_step_deg_per_sec: float = 60.0
+    wheel_step_deg_per_sec_min: float = 1.0
+    wheel_step_deg_per_sec_delta: float = 10.0  # E/D
 
     # Simple clamps for safer testing
     max_abs_joint_deg: float = 180.0
-    max_abs_wheel_deg_per_sec: float = 720.0  # 2 rev/s = 720 deg/s
+    max_abs_wheel_deg_per_sec: float = 720.0
 
 
 class RawKeyboard:
@@ -51,7 +52,6 @@ class RawKeyboard:
         self._original_terminal_settings = termios.tcgetattr(self._file_descriptor)
 
     def __enter__(self) -> "RawKeyboard":
-        # cbreak: immediate key read without waiting for Enter
         tty.setcbreak(self._file_descriptor)
         return self
 
@@ -63,7 +63,7 @@ class RawKeyboard:
     def read_key(self) -> str | None:
         """Return a key string or None if no input.
 
-        Arrow keys come as escape sequences:
+        Arrow keys are escape sequences:
           - Up:    '\\x1b[A'
           - Down:  '\\x1b[B'
           - Right: '\\x1b[C'
@@ -77,7 +77,7 @@ class RawKeyboard:
         if first_char != "\x1b":
             return first_char
 
-        # Escape sequence handling
+        # Escape sequence
         if not select.select([sys.stdin], [], [], 0.0)[0]:
             return first_char
         second_char = sys.stdin.read(1)
@@ -93,21 +93,20 @@ class RawKeyboard:
 
 
 class PolicyKeyboardTesterNode(Node):
-    """Keyboard-based action publisher for GoatControlNode.
+    """Keyboard-based action publisher (replaces policy node for testing).
 
-    Action format (Float32MultiArray, len=8):
-      - action[0:6] : desired joint position [rad]   (j0~j5)
-      - action[6:8] : desired wheel speed [rad/s]    (wheel_l, wheel_r)
+    Publishes Float32MultiArray on goat/action with layout(dim/stride) filled.
 
-    Note:
-      GoatControlNode has an action timeout (default 0.05s).
-      Therefore this node publishes continuously at publish_hz (default 50Hz).
+    Action format (len=8):
+      - data[0:6] : desired joint position [rad]   (j0~j5)
+      - data[6:8] : desired wheel speed [rad/s]    (wheel_l, wheel_r)
     """
 
     def __init__(self) -> None:
-        super().__init__("policy_keyboard_tester")
+        # Name it "policy" to be drop-in compatible with your legacy policy node
+        super().__init__("policy")
 
-        # Parameters (use safe parameter names without '/')
+        # Keep parameters but default to goat/action like your policy_node.py
         self.declare_parameter("action_topic", "goat/action")
         self.declare_parameter("publish_hz", 50.0)
         self.declare_parameter("joint_step_deg", 20.0)
@@ -120,26 +119,26 @@ class PolicyKeyboardTesterNode(Node):
             wheel_step_deg_per_sec=float(self.get_parameter("wheel_step_deg_per_sec").value),
         )
 
-        # Publisher
         self.action_publisher = self.create_publisher(
             Float32MultiArray, self.config.action_topic, 10
         )
 
-        # Selected actuator index:
-        #   0~5 => joint selection
-        #   6   => wheel_l
-        #   7   => wheel_r
+        # Selected actuator index: 0~7
         self.selected_index = 0
 
-        # Desired targets in "human-friendly units" for editing
-        self.desired_joint_deg = [0.0] * self.config.joint_count           # 0~5
-        self.desired_wheel_deg_per_sec = [0.0] * self.config.wheel_count   # [wheel_l, wheel_r]
+        # Editable targets (human units)
+        self.desired_joint_deg = [0.0] * self.config.joint_count              # j0~j5
+        self.desired_wheel_deg_per_sec = [0.0] * self.config.wheel_count      # wheel_l, wheel_r
 
-        # Periodic publish timer (non-blocking keyboard handled inside tick)
         period_sec = 1.0 / max(1e-6, self.config.publish_hz)
         self.timer = self.create_timer(period_sec, self._tick)
 
+        self._keyboard: RawKeyboard | None = None
         self._print_help()
+
+        self.get_logger().info(
+            f"Keyboard tester started: publishing '{self.config.action_topic}' @ {self.config.publish_hz:.1f} Hz (len=8)"
+        )
 
     def attach_keyboard(self, keyboard: RawKeyboard) -> None:
         self._keyboard = keyboard
@@ -147,24 +146,20 @@ class PolicyKeyboardTesterNode(Node):
     def _print_help(self) -> None:
         self.get_logger().info(
             "\n[Policy Keyboard Tester]\n"
-            f"  Publishing: /{self.config.action_topic} @ {self.config.publish_hz:.1f} Hz\n"
-            "  Action format len=8: [j0..j5 position(rad), wheel_l/wheel_r speed(rad/s)]\n"
-            "\n  Selection:\n"
-            "    0~5 : select joint\n"
-            "    6   : select wheel_l\n"
-            "    7   : select wheel_r\n"
-            "    [ / ] : prev/next selection (0~7)\n"
-            "\n  Joint control (selected 0~5):\n"
-            "    ↑/→ : +joint_step_deg\n"
-            "    ↓/← : -joint_step_deg\n"
-            "    W/S : joint_step_deg +5 / -5 (min 1)\n"
-            "\n  Wheel control (selected 6~7):\n"
-            "    ↑/→ : +wheel_step_deg_per_sec\n"
-            "    ↓/← : -wheel_step_deg_per_sec\n"
-            "    E/D : wheel_step_deg_per_sec +10 / -10 (min 1)\n"
-            "\n  Common:\n"
-            "    r : reset all targets\n"
-            "    q : quit\n"
+            "Action(len=8): [j0..j5 position(rad), wheel_l/wheel_r speed(rad/s)]\n"
+            "\nSelection:\n"
+            "  0~5 : select joint\n"
+            "  6   : select wheel_l\n"
+            "  7   : select wheel_r\n"
+            "  [ / ] : prev/next selection\n"
+            "\nControl:\n"
+            "  ↑/→ : +step\n"
+            "  ↓/← : -step\n"
+            "  W/S : joint step + / -\n"
+            "  E/D : wheel step + / -\n"
+            "\nOther:\n"
+            "  r : reset all targets\n"
+            "  q : quit\n"
         )
 
     # ---------------------------
@@ -186,27 +181,16 @@ class PolicyKeyboardTesterNode(Node):
         if key is None:
             return True
 
-        # Quit
         if key in ("q", "Q"):
             self.get_logger().info("Quit requested.")
             return False
 
-        # Reset
         if key in ("r", "R"):
             self.desired_joint_deg = [0.0] * self.config.joint_count
             self.desired_wheel_deg_per_sec = [0.0] * self.config.wheel_count
-            self.get_logger().info("Reset: all joint positions=0 deg, wheel speeds=0 deg/s.")
+            self.get_logger().info("Reset: joints=0 deg, wheels=0 deg/s.")
             return True
 
-        # Select index directly (0~7)
-        if key.isdigit():
-            idx = int(key)
-            if 0 <= idx < self.config.num_actuators:
-                self.selected_index = idx
-                self.get_logger().info(f"Selected index: {self.selected_index}")
-            return True
-
-        # Select index by brackets
         if key == "[":
             self.selected_index = (self.selected_index - 1) % self.config.num_actuators
             self.get_logger().info(f"Selected index: {self.selected_index}")
@@ -216,7 +200,14 @@ class PolicyKeyboardTesterNode(Node):
             self.get_logger().info(f"Selected index: {self.selected_index}")
             return True
 
-        # Adjust joint step size
+        if key.isdigit():
+            idx = int(key)
+            if 0 <= idx < self.config.num_actuators:
+                self.selected_index = idx
+                self.get_logger().info(f"Selected index: {self.selected_index}")
+            return True
+
+        # step size tuning
         if key in ("w", "W"):
             self.config.joint_step_deg = max(
                 self.config.joint_step_deg_min,
@@ -232,7 +223,6 @@ class PolicyKeyboardTesterNode(Node):
             self.get_logger().info(f"Joint step: {self.config.joint_step_deg:.1f} deg")
             return True
 
-        # Adjust wheel step size
         if key in ("e", "E"):
             self.config.wheel_step_deg_per_sec = max(
                 self.config.wheel_step_deg_per_sec_min,
@@ -248,7 +238,7 @@ class PolicyKeyboardTesterNode(Node):
             self.get_logger().info(f"Wheel step: {self.config.wheel_step_deg_per_sec:.1f} deg/s")
             return True
 
-        # Apply arrows to selected target
+        # arrows
         if key in ("\x1b[A", "\x1b[C"):  # Up / Right
             self._apply_delta(+1.0)
             return True
@@ -259,37 +249,59 @@ class PolicyKeyboardTesterNode(Node):
         return True
 
     def _apply_delta(self, direction_sign: float) -> None:
-        """Apply +/- step to either joint position (deg) or wheel speed (deg/s)."""
         idx = int(self.selected_index)
 
-        # Joint indices 0~5
         if 0 <= idx < self.config.joint_count:
-            new_value_deg = self.desired_joint_deg[idx] + direction_sign * self.config.joint_step_deg
-            new_value_deg = self._clamp_joint_deg(new_value_deg)
-            self.desired_joint_deg[idx] = new_value_deg
-            self.get_logger().info(f"Joint j{idx}: {new_value_deg:.1f} deg")
+            new_deg = self.desired_joint_deg[idx] + direction_sign * self.config.joint_step_deg
+            new_deg = self._clamp_joint_deg(new_deg)
+            self.desired_joint_deg[idx] = new_deg
+            self.get_logger().info(f"Joint j{idx}: {new_deg:.1f} deg")
             return
 
-        # Wheel indices 6~7 -> map to wheel array [0,1]
         if idx in (6, 7):
             wheel_array_index = idx - 6
-            new_speed_deg_per_sec = (
+            new_deg_per_sec = (
                 self.desired_wheel_deg_per_sec[wheel_array_index]
                 + direction_sign * self.config.wheel_step_deg_per_sec
             )
-            new_speed_deg_per_sec = self._clamp_wheel_deg_per_sec(new_speed_deg_per_sec)
-            self.desired_wheel_deg_per_sec[wheel_array_index] = new_speed_deg_per_sec
+            new_deg_per_sec = self._clamp_wheel_deg_per_sec(new_deg_per_sec)
+            self.desired_wheel_deg_per_sec[wheel_array_index] = new_deg_per_sec
             wheel_name = "wheel_l" if idx == 6 else "wheel_r"
-            self.get_logger().info(f"{wheel_name}: {new_speed_deg_per_sec:.1f} deg/s")
+            self.get_logger().info(f"{wheel_name}: {new_deg_per_sec:.1f} deg/s")
             return
 
     # ---------------------------
     # Publish
     # ---------------------------
+    @staticmethod
+    def _numpy_to_multiarray(array_value: np.ndarray) -> Float32MultiArray:
+        """Same layout style as your policy_node.py."""
+        array_value = np.asarray(array_value, dtype=np.float32)
+
+        msg = Float32MultiArray()
+        msg.layout.data_offset = 0
+        msg.layout.dim = []
+
+        shape = array_value.shape
+        current_stride = 1
+        strides = []
+        for size in reversed(shape):
+            strides.insert(0, current_stride)
+            current_stride *= int(size)
+
+        for dim_index, dim_size in enumerate(shape):
+            dim = MultiArrayDimension()
+            dim.label = f"dim_{dim_index}"
+            dim.size = int(dim_size)
+            dim.stride = int(strides[dim_index])
+            msg.layout.dim.append(dim)
+
+        msg.data = array_value.flatten().tolist()
+        return msg
+
     def _publish_action(self) -> None:
-        # Build action len=8:
-        # - [0:6] joint positions in rad
-        # - [6:8] wheel speeds in rad/s
+        # Build len=8 vector:
+        #   [0:6] joint position (rad), [6:8] wheel speed (rad/s)
         joint_position_rad = [
             float(math.radians(self._clamp_joint_deg(deg_value)))
             for deg_value in self.desired_joint_deg
@@ -299,28 +311,26 @@ class PolicyKeyboardTesterNode(Node):
             for deg_per_sec_value in self.desired_wheel_deg_per_sec
         ]
 
-        action_vector = joint_position_rad + wheel_speed_rad_per_sec
-        if len(action_vector) != 8:
-            # Should never happen, but keep safe.
-            self.get_logger().error(f"Internal error: action length is {len(action_vector)} (expected 8).")
+        action_vector = np.asarray(joint_position_rad + wheel_speed_rad_per_sec, dtype=np.float32)
+        if action_vector.size != 8:
+            self.get_logger().error(f"Internal error: action len={action_vector.size} (expected 8)")
             return
 
-        msg = Float32MultiArray()
-        msg.data = action_vector
-        self.action_publisher.publish(msg)
+        action_msg = self._numpy_to_multiarray(action_vector)
+        self.action_publisher.publish(action_msg)
 
     def _tick(self) -> None:
-        # Process multiple keys per tick, but keep publishing no matter what.
-        for _ in range(8):
-            key = self._keyboard.read_key()
-            if key is None:
-                break
-            keep_running = self._handle_key(key)
-            if not keep_running:
-                rclpy.shutdown()
-                return
+        # process keys (non-blocking), but publish continuously for watchdog safety
+        if self._keyboard is not None:
+            for _ in range(8):
+                key = self._keyboard.read_key()
+                if key is None:
+                    break
+                keep_running = self._handle_key(key)
+                if not keep_running:
+                    rclpy.shutdown()
+                    return
 
-        # Continuous publish for watchdog safety
         self._publish_action()
 
 

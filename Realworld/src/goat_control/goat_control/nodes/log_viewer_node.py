@@ -39,7 +39,7 @@ class MotorTorqueLogViewer(Node):
             ["hip_L", "hip_R", "thigh_L", "thigh_R", "knee_L", "knee_R", "wheel_L", "wheel_R"]
         )
 
-        self.declare_parameter("print_rate_hz", 100.0)
+        self.declare_parameter("print_rate_hz", 50.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("command_unit", "torque_nm")  # torque_nm or amp
         self.declare_parameter("precision", 3)
@@ -97,7 +97,7 @@ class MotorTorqueLogViewer(Node):
             return
 
         vector = self.latest.vector
-        expected = 3 * self.num_joints
+        expected = 4 * self.num_joints
         if vector.size != expected:
             self.get_logger().warn(f"log length mismatch: got {vector.size}, expected {expected}")
             return
@@ -105,6 +105,7 @@ class MotorTorqueLogViewer(Node):
         joint_position_rad = vector[0 : self.num_joints]
         joint_velocity_rad_per_sec = vector[self.num_joints : 2 * self.num_joints]
         command_value = vector[2 * self.num_joints : 3 * self.num_joints]
+        desired_joint_position_rad = vector[3 * self.num_joints : 4 * self.num_joints]
 
         if self.print_degrees:
             joint_position = np.rad2deg(joint_position_rad)
@@ -139,7 +140,7 @@ class MotorTorqueLogViewer(Node):
         # Print rows (batch: all joints in ONE log block)
         fmt = (
             f"{{:>3}}  {{:<12}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
         )
 
         lines = []
@@ -152,6 +153,7 @@ class MotorTorqueLogViewer(Node):
                     float(joint_position[joint_index]),
                     float(joint_velocity[joint_index]),
                     float(command_value[joint_index]),
+                    float(desired_joint_position_rad[joint_index]),
                 )
             )
 

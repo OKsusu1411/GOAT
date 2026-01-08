@@ -38,6 +38,11 @@ def generate_launch_description():
         default_value="200.0",
         description="Control loop rate for GoatControlNode.",
     )
+    estimation_rate_arg = DeclareLaunchArgument(
+        "estimation_rate_hz",
+        default_value="200.0",
+        description="Estimation loop rate for StateEstimationNode.",
+    )
     command_unit_arg = DeclareLaunchArgument(
         "command_unit",
         default_value="torque_nm",
@@ -53,8 +58,33 @@ def generate_launch_description():
         default_value="100.0",
         description="Print rate for log viewer.",
     )
+    imu_port_arg = DeclareLaunchArgument(
+        "imu_port",
+        default_value="/dev/ttyUSB0",
+        description="Serial port for the IMU.",
+    )
+    imu_baudrate_arg = DeclareLaunchArgument(
+        "imu_baudrate",
+        default_value="115200",
+        description="Baudrate for the IMU.",
+    )
+
 
     # Nodes
+    state_estimation_node = Node(
+        package="goat_control",
+        executable="state_estimation_node",
+        name="state_estimation_node",
+        output="screen",
+        parameters=[{
+            "can_channel": LaunchConfiguration("can_channel"),
+            "can_interface": LaunchConfiguration("can_interface"),
+            "estimation_rate_hz": LaunchConfiguration("estimation_rate_hz"),
+            "imu_port": LaunchConfiguration("imu_port"),
+            "imu_baudrate": LaunchConfiguration("imu_baudrate"),
+        }],
+    )
+
     control_node = Node(
         package="goat_control",
         executable="goat_control_node",
@@ -62,8 +92,6 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "yaml_path": LaunchConfiguration("yaml_path"),
-            "can_channel": LaunchConfiguration("can_channel"),
-            "can_interface": LaunchConfiguration("can_interface"),
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
             "command_unit": LaunchConfiguration("command_unit"),
         }],
@@ -94,15 +122,19 @@ def generate_launch_description():
             "print_degrees": True,
         }],
     )
-
+    
     return LaunchDescription([
         yaml_path_arg,
         can_channel_arg,
         can_interface_arg,
         control_rate_arg,
+        estimation_rate_arg,
         command_unit_arg,
         launch_log_viewer_arg,
         print_rate_arg,
+        imu_port_arg,
+        imu_baudrate_arg,
+        state_estimation_node,
         control_node,
         # policy_node,
         log_viewer_node,

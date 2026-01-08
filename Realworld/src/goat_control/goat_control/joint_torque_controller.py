@@ -22,7 +22,7 @@ def getch():
 class JointTorqueController(Node):
     def __init__(self):
         super().__init__('joint_torque_controller')
-        self.publisher_ = self.create_publisher(Float32MultiArray, 'torque_commands', 10)
+        self.publisher_ = self.create_publisher(Float32MultiArray, 'goat/action', 10)
         self.num_motors = self.declare_parameter('num_motors', 8).value
         self.joint_to_control = self.declare_parameter('joint_to_control', JOINT_NUM).value
         self.torque_step = self.declare_parameter('torque_step', 0.1).value

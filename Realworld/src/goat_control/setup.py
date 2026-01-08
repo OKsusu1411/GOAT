@@ -48,7 +48,6 @@ setup(
             'torque_converter = goat_control.torque_converter:main',
             'torque_test_publisher = goat_control.torque_test_publisher:main',
             'motor_states_echo = goat_control.motor_states_echo:main',
-            'imu_publisher = goat_control.imu_publisher:main',
             'policy = goat_control.policy:main',
             'pd_controller = goat_control.pd_controller:main',
             'joint_torque_controller = goat_control.joint_torque_controller:main',
@@ -56,6 +55,7 @@ setup(
 
             # --- NEW refactored ROS2 nodes ---
             'goat_control_node = goat_control.nodes.control_node:main',
+            'state_estimation_node = goat_control.nodes.state_estimation_node:main',
             'policy_node = goat_control.nodes.policy_node:main',
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',
