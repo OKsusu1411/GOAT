@@ -13,7 +13,7 @@ from sensor_msgs.msg import JointState
 from motor_interfaces.msg import BaseStates
 from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
 from goat_control.core.control.control_pipeline import ControlTargets
-from goat_control.core.estimation.state_types import RobotState, MotorStatesData, ImuState
+from goat_control.core.estimation.state_types import RobotState, ImuState
 from goat_control.core import launch_core_control_system
 
 
@@ -159,21 +159,6 @@ class GoatControlNode(Node):
         # 2. Construct RobotState from subscribed messages
         joint_state_msg = self.buffers.joint_state_msg
         imu_msg = self.buffers.imu_msg
-
-        motor_states_data = MotorStatesData(
-            positions_rad=np.array(joint_state_msg.position),
-            velocities_rad_per_sec=np.array(joint_state_msg.velocity),
-            torques_nm=np.array(joint_state_msg.effort),
-            motor_temperature_c=np.zeros(self.num_joints),
-            motor_phase_current_amp=np.zeros(self.num_joints),
-            motor_speed_deg_per_sec=np.zeros(self.num_joints),
-            motor_encoder_count=np.zeros(self.num_joints),
-            motor_single_turn_angle_raw_0p001deg=np.zeros(self.num_joints),
-            motor_multi_turn_angle_raw_0p001deg=np.zeros(self.num_joints),
-            motor_error_flags=np.zeros(self.num_joints),
-            motor_operating_state=np.zeros(self.num_joints),
-            timestamp_sec=now_time.nanoseconds * 1e-9,
-        )
         
         imu_state = None
         if imu_msg:
@@ -184,11 +169,18 @@ class GoatControlNode(Node):
                 time_ms=float(imu_msg.time_ms)
             )
 
-        robot_state = self.control_pipeline.state_manager.build_robot_state(
-            motor_states_data=motor_states_data,
-            imu_state=imu_state
+        robot_state = RobotState(
+            joint_names=joint_state_msg.name,
+            joint_position_rad=np.array(joint_state_msg.position),
+            joint_velocity_rad_per_sec=np.array(joint_state_msg.velocity),
+            joint_effort_like=np.array(joint_state_msg.effort),
+            motor_temperature_c=[],
+            motor_error_flags=[],
+            motor_operating_state=[],
+            imu_state=imu_state,
+            timestamp_sec=now_time.nanoseconds * 1e-9
         )
-
+        
         # 3. Compute control command
         safe_command, _ = self.control_pipeline.compute_control(
             robot_state=robot_state,
