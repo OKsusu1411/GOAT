@@ -71,8 +71,8 @@ class StateEstimationNode(Node):
         # 2. Publish joint states
         joint_state_msg = JointState()
         joint_state_msg.header.stamp = now_time
-        joint_state_msg.name = [f"joint_{i}" for i in range(len(motor_states_data.positions_rad))]
-        joint_state_msg.position = motor_states_data.positions_rad.tolist()
+        joint_state_msg.name = [f"joint_{i}" for i in range(len(motor_states_data.motor_multi_turn_angle_raw_0p001deg))]
+        joint_state_msg.position = motor_states_data.motor_multi_turn_angle_raw_0p001deg.tolist()
         joint_state_msg.velocity = motor_states_data.velocities_rad_per_sec.tolist()
         joint_state_msg.effort = motor_states_data.torques_nm.tolist()
         self.joint_state_publisher.publish(joint_state_msg)
