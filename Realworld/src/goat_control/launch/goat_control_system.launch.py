@@ -82,6 +82,7 @@ def generate_launch_description():
             "estimation_rate_hz": LaunchConfiguration("estimation_rate_hz"),
             "imu_port": LaunchConfiguration("imu_port"),
             "imu_baudrate": LaunchConfiguration("imu_baudrate"),
+            "yaml_path": LaunchConfiguration("yaml_path"),
         }],
     )
 
