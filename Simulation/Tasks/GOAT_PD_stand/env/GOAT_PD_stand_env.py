@@ -126,8 +126,6 @@ class GOATPDStandEnv(GOATBaseEnv):
     def _reset_idx(self, env_ids: torch.Tensor):
         super()._reset_idx(env_ids)
 
-        
-
         # Update success rate for each environment
         episode_scores = torch.mean(self.success_rate_buffer[env_ids], dim=1)
         self.env_success_rate[env_ids] = episode_scores
@@ -141,7 +139,6 @@ class GOATPDStandEnv(GOATBaseEnv):
             # Base link state
             root_state = self._robot.data.default_root_state[env_ids].clone()
             root_state[:, 2] += self.robot_collision_min_z
-            print(self.robot_collision_min_z)
 
             # Joint state
             limits = self.joint_pos_limits[env_ids]
@@ -356,11 +353,11 @@ class GOATPDStandEnv(GOATBaseEnv):
         # ======================= Reward ======================= #
         # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
         orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
-        r_orient = torch.exp(-torch.square(orient_error) / 1)                                    # Raidial Basis FUnction (RBF)
+        r_orient = torch.exp(-torch.square(orient_error) / 0.5)                                    # Raidial Basis FUnction (RBF)
 
         # Base Height Reward
         height_error = torch.norm(self.base_height - self.cfg.target_height, dim=1)
-        r_height = torch.exp(-torch.square(height_error) / 1)
+        r_height = torch.exp(-torch.square(height_error) / 0.5)
         
         # vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
         # vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
@@ -377,10 +374,12 @@ class GOATPDStandEnv(GOATBaseEnv):
 
         vel_joint_error = torch.norm(-self.joint_vel, dim=1)
         r_vel_joint = torch.exp(-torch.square(vel_joint_error) / 1)
-        
+
         # Energy / Action Smoothness
         r_effort = -torch.sum(torch.abs(self.torque_cmd), dim=1)                                 # Penalty
         
+        r_terminated = - self.reset_terminated.float()
+
         # Total Reward Summation
         total_reward = (
             self.cfg.r_orient_weight * r_orient +
@@ -388,13 +387,16 @@ class GOATPDStandEnv(GOATBaseEnv):
             self.cfg.r_vel_lin_weight * r_vel_lin +
             self.cfg.r_vel_ang_weight * r_vel_ang +
             self.cfg.r_vel_joint_weight * r_vel_joint +
-            self.cfg.r_effort_weight * r_effort
+            self.cfg.r_effort_weight * r_effort +
+            self.cfg.r_terminated_weight * r_terminated 
         )
 
         return total_reward
     
     def _get_dones(self): 
-        terminated = False          # No terminal condition
+        terminated = self.base_height < self.cfg.height_reset_condition
+        terminated = terminated.squeeze(-1)
+
         truncated = self.episode_length_buf >= (self.cfg.max_episode_length - 1)
 
         return terminated, truncated
