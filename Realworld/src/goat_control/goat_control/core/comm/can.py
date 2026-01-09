@@ -29,7 +29,7 @@ class CanInterface:
         channel: str = "can0",
         interface: str = "socketcan",
         bitrate: int | None = None,  
-        receive_own_messages: bool = True,
+        receive_own_messages: bool = False,
         logger: logging.Logger | None = None,
     ):
         self.channel = channel
