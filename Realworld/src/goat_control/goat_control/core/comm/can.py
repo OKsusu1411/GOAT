@@ -129,16 +129,16 @@ class CanInterface:
 
         transmitted_data = bytes([cmd_byte]) + payload7
 
-        with self.txrx_lock:
-            # Drain any pending frames to avoid matching a stale response.
-            drained = self._drain_rx(max_frames=200)
-            if drained > 0:
-                self.logger.debug(f"[CAN] drained {drained} stale RX frames before txrx")
-
-            sent_message = self.send(tx_id, transmitted_data)
-
         # with self.txrx_lock:
-            # sent_message = self.send(tx_id, transmitted_data)
+        #     # Drain any pending frames to avoid matching a stale response.
+        #     drained = self._drain_rx(max_frames=200)
+        #     if drained > 0:
+        #         self.logger.debug(f"[CAN] drained {drained} stale RX frames before txrx")
+
+        #     sent_message = self.send(tx_id, transmitted_data)
+
+        with self.txrx_lock:
+            sent_message = self.send(tx_id, transmitted_data)
             if sent_message is None:
                 return None
 
