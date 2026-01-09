@@ -84,9 +84,6 @@ class MotorIONode(Node):
 
         self.motor_state_collector = MotorStateCollector(
             self.motor_drivers,
-            motor_current_amp_per_lsb=float(self.goat_model.config.motor_current_amp_per_lsb),
-            angle_deg_per_lsb=float(self.goat_model.config.angle_deg_per_lsb),
-            speed_deg_per_sec_per_lsb=float(self.goat_model.config.speed_deg_per_sec_per_lsb),
         )
 
         # ROS pubs/subs
