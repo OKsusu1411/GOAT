@@ -179,7 +179,7 @@ class GoatModel:
 
         denominator = direction * gear_ratio * torque_constant
         denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
-        current_command_amp = joint_torque_nm / denominator
+        current_command_amp = joint_torque_nm / torque_constant
 
         zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
         current_command_amp = np.where(zero_mask, 0.0, current_command_amp)

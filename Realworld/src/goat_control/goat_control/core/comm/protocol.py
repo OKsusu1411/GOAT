@@ -153,9 +153,9 @@ def pack_iq_from_amp(current_amp: float) -> bytes:
     Uses YAML scale:
       motor_current_amp_per_lsb
 
-    For MG-series typical range: +/-2048 LSB.
+    For MG-series typical range: +/-4096 LSB.
     """
-    max_current_lsb = 2048
+    max_current_lsb = 4096
     max_current_amp = float(max_current_lsb) * _current_mg_unit_scales.motor_current_amp_per_lsb
 
     clamped_current_amp = max(min(float(current_amp), max_current_amp), -max_current_amp)
