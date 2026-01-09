@@ -154,6 +154,7 @@ class MotorIONode(Node):
 
         # 3) Send torque command if fresh
         torque_cmd = self._latest_torque_cmd
+        self.get_logger().debug(f"Latest torque command: {torque_cmd}")
         if torque_cmd is None:
             return
 

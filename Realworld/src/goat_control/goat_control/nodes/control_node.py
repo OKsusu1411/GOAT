@@ -143,7 +143,7 @@ class GoatControlNode(Node):
 
         targets = ControlTargets(
             desired_joint_position_rad=desired_joint_position_rad,
-            desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
+            desired_wheel_speed_rad_per_sec=desired_printwheel_speed_rad_per_sec,
         )
 
         # 2. Construct RobotState from subscribed messages
@@ -187,7 +187,6 @@ class GoatControlNode(Node):
             targets=targets,
             dt_sec=dt_sec
         )
-        self.get_logger().debug(f"Computed safe command: {safe_command}")
         # 4. Apply action watchdog
         if action_timed_out:
             safe_command[:] = 0.0
