@@ -36,6 +36,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         self.buffer_ids = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.env_success_rate = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         
+        self.previous_actioin = torch.zeros([self.num_envs, self.cfg.action_space], device=self.device)
         self.env_indices = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
         self.global_success_rate = 0.0
 
@@ -133,6 +134,9 @@ class GOATPDStandEnv(GOATBaseEnv):
         # Reset success rate buffer
         self.success_rate_buffer[env_ids] = 0.0
         self.buffer_ids[env_ids] = 0
+
+        # Reset previous action observation
+        self.actions[env_ids] = torch.zeros_like(self.actions[env_ids], device=self.device)
 
         if self.total_task_curriculum_level[self.task_curriculum_level] == "balancing":
             # Domain randomization (initial pose)
