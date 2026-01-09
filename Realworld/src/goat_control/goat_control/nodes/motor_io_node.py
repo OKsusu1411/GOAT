@@ -146,10 +146,10 @@ class MotorIONode(Node):
         js.velocity = list(robot_state.joint_velocity_rad_per_sec)
         js.effort = list(robot_state.joint_effort_like)
 
-        self.get_logger().info(
-            f"Publishing JointState: pos={js.position}",
-            throttle_duration_sec=1.0,
-        )
+        # self.get_logger().info(
+        #     f"Publishing JointState: pos={js.position}",
+        #     throttle_duration_sec=1.0,
+        # )
         self.joint_state_pub.publish(js)
 
         # 3) Send torque command if fresh
@@ -167,7 +167,7 @@ class MotorIONode(Node):
 
         for motor_index, motor_driver in enumerate(self.motor_drivers):
             command_amp = float(current_cmd_amp[motor_index])
-            # motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
+            motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
 
     def destroy_node(self):
         try:
