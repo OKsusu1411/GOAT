@@ -123,16 +123,16 @@ class MotorIONode(Node):
 
         # 1) Read motors
         motor_states_data = self.motor_state_collector.poll_all()
-        self.get_logger().info(
-            f"Raw motor data:\n{format_motor_states(motor_states_data)}",
-            throttle_duration_sec=1.0,
-        )
+        # self.get_logger().info(
+        #     f"Raw motor data:\n{format_motor_states(motor_states_data)}",
+        #     throttle_duration_sec=1.0,
+        # )
 
         robot_state = self.state_manager.build_robot_state(motor_states_data)
-        self.get_logger().info(
-            f"Built robot state: pos={robot_state.joint_position_rad}",
-            throttle_duration_sec=1.0,
-        )
+        # self.get_logger().info(
+        #     f"Built robot state: pos={robot_state.joint_position_rad}",
+        #     throttle_duration_sec=1.0,
+        # )
 
         # 2) Publish JointState
         js = JointState()
