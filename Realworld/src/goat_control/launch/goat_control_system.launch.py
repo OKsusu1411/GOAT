@@ -124,17 +124,17 @@ def generate_launch_description():
         }],
     )
 
-    motor_command_node = Node(
-        package="goat_control",
-        executable="motor_command_node",
-        name="motor_command_node",
-        output="screen",
-        parameters=[{
-            "can_channel": LaunchConfiguration("can_channel"),
-            "can_interface": LaunchConfiguration("can_interface"),
-            "yaml_path": LaunchConfiguration("yaml_path"),
-        }],
-    )
+    # motor_command_node = Node(
+    #     package="goat_control",
+    #     executable="motor_command_node",
+    #     name="motor_command_node",
+    #     output="screen",
+    #     parameters=[{
+    #         "can_channel": LaunchConfiguration("can_channel"),
+    #         "can_interface": LaunchConfiguration("can_interface"),
+    #         "yaml_path": LaunchConfiguration("yaml_path"),
+    #     }],
+    # )
     
     return LaunchDescription([
         yaml_path_arg,
@@ -151,5 +151,5 @@ def generate_launch_description():
         control_node,
         # policy_node,
         log_viewer_node,
-        motor_command_node,
+        # motor_command_node,
     ])
