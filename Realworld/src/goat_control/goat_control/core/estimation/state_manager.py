@@ -26,22 +26,26 @@ DEFAULT_SPEED_DEG_PER_SEC_PER_LSB = 0.01
 @dataclass
 class StateManagerConfig:
     joint_names: List[str]
+
+    # NEW: joint order <-> motor index mapping from YAML
+    joint_indices: List[int] | None = None   # e.g. [0,1,2,3,4,5]
+    wheel_indices: List[int] | None = None   # e.g. [6,7]
+
+    # (기존 유지)
     knee_indices: List[int] = None
 
     motor_current_amp_per_lsb: float = DEFAULT_MOTOR_CURRENT_AMP_PER_LSB
     angle_deg_per_lsb: float = DEFAULT_ANGLE_DEG_PER_LSB
     speed_deg_per_sec_per_lsb: float = DEFAULT_SPEED_DEG_PER_SEC_PER_LSB
 
-    # Optional filtering for joint velocity / effort-like signals
     joint_velocity_lpf_alpha: float | None = None
     joint_effort_like_lpf_alpha: float | None = None
 
-    # ---- NEW: torque conversion parameters (per-motor)
     effort_output_mode: Literal["current_amp", "torque_nm"] = "torque_nm"
 
-    motor_torque_constant_nm_per_amp: List[float] | None = None  # length = motor_count
-    motor_gear_ratio: List[float] | None = None                 # length = motor_count
-    motor_direction: List[float] | None = None                    # length = motor_count (+1/-1)
+    motor_torque_constant_nm_per_amp: List[float] | None = None
+    motor_gear_ratio: List[float] | None = None
+    motor_direction: List[float] | None = None
 
 
 def format_motor_states(
@@ -249,7 +253,16 @@ class StateManager:
 
     def __init__(self, config: StateManagerConfig):
         self.config = config
-        self.knee_indices = list(config.knee_indices or [])
+
+        # --- (2) joint_names 순서대로 motor_states_data의 몇 번 모터를 쓸지 "YAML 기반"으로 결정
+        # joint_indices + wheel_indices를 이어 붙여서 joint_names 길이와 맞춰줌
+        mapped: List[int] = []
+        if config.joint_indices:
+            mapped.extend(list(config.joint_indices))
+        if config.wheel_indices:
+            mapped.extend(list(config.wheel_indices))
+
+        self.motor_index_for_joint: List[int] | None = mapped if mapped else None
 
         self.joint_velocity_low_pass_filter = (
             FirstOrderLowPassFilter(alpha=config.joint_velocity_lpf_alpha)
@@ -273,7 +286,7 @@ class StateManager:
 
         torque_constant_nm_per_amp = float(self.config.motor_torque_constant_nm_per_amp[motor_index])
         gear_ratio = float(self.config.motor_gear_ratio[motor_index])
-        direction = int(self.config.motor_direction[motor_index])  # +1 or -1
+        direction = float(self.config.motor_direction[motor_index])  # +1/-1
 
         motor_shaft_torque_nm = motor_current_amp * torque_constant_nm_per_amp
         joint_torque_nm = motor_shaft_torque_nm * gear_ratio * direction
@@ -285,47 +298,73 @@ class StateManager:
         imu_state: Optional[ImuState] = None,
     ) -> RobotState:
         motor_count = len(motor_states_data.motor_temperature_c)
+        joint_count = len(self.config.joint_names)
 
-        # Validate torque lists length if torque mode
+        # --- (3) 매핑 검증 (joint_indices+wheel_indices 사용 시)
+        if self.motor_index_for_joint is not None:
+            if len(self.motor_index_for_joint) != joint_count:
+                raise ValueError(
+                    f"joint_indices+wheel_indices length({len(self.motor_index_for_joint)}) "
+                    f"must match joint_names length({joint_count})."
+                )
+        else:
+            # 매핑이 없으면 joint_count==motor_count라고 가정하고 0..joint_count-1 사용
+            if joint_count != motor_count:
+                raise ValueError(
+                    f"joint_names length({joint_count}) != motor_count({motor_count}). "
+                    "Provide joint_indices/wheel_indices in YAML."
+                )
+
+        # --- (4) gear/direction list 길이 검증
+        if self.config.motor_gear_ratio is None or len(self.config.motor_gear_ratio) != motor_count:
+            raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
+        if self.config.motor_direction is None or len(self.config.motor_direction) != motor_count:
+            raise ValueError("motor_direction must be a list with length == motor_count.")
+
         if self.config.effort_output_mode == "torque_nm":
             if self.config.motor_torque_constant_nm_per_amp is None or len(self.config.motor_torque_constant_nm_per_amp) != motor_count:
                 raise ValueError("motor_torque_constant_nm_per_amp must be a list with length == motor_count.")
-            if self.config.motor_gear_ratio is None or len(self.config.motor_gear_ratio) != motor_count:
-                raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
-            if self.config.motor_direction is None or len(self.config.motor_direction) != motor_count:
-                raise ValueError("motor_direction must be a list with length == motor_count.")
 
-        joint_position_rad: List[float] = [0.0] * motor_count
-        joint_velocity_rad_per_sec: List[float] = [0.0] * motor_count
-        joint_effort_like: List[float] = [0.0] * motor_count  # current[A] or torque[Nm]
+        joint_position_rad: List[float] = [0.0] * joint_count
+        joint_velocity_rad_per_sec: List[float] = [0.0] * joint_count
+        joint_effort_like: List[float] = [0.0] * joint_count  # current[A] or torque[Nm]
 
-        for motor_index in range(motor_count):
-            # Position: prefer multi-turn, then single-turn
-            angle_deg = 0.0
-            if motor_states_data.motor_multi_turn_angle_raw_0p001deg[motor_index] != 0:
-                angle_deg = motor_states_data.motor_multi_turn_angle_raw_0p001deg[motor_index] * self.config.angle_deg_per_lsb
-            elif motor_states_data.motor_single_turn_angle_raw_0p001deg[motor_index] != 0:
-                angle_deg = motor_states_data.motor_single_turn_angle_raw_0p001deg[motor_index] * self.config.angle_deg_per_lsb
+        # --- (5) 핵심 변경:
+        # "knee만 따로" 같은 하드코딩 제거
+        # 모든 관절에 대해: (motor angle/speed) * motor_gear_ratio * motor_direction 적용
+        for joint_i in range(joint_count):
+            motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
 
-            # Knee mapping
-            if motor_index in self.knee_indices:
-                joint_position_rad[motor_index] = angle_deg * math.pi / 90.0
+            gear = float(self.config.motor_gear_ratio[motor_i])
+            direction = float(self.config.motor_direction[motor_i])
+
+            # Position: multi-turn 우선, (필요하면 single-turn로 fallback)
+            # NOTE: 0도도 정상값일 수 있어서 "!=0" 센티넬은 위험함.
+            # 일단은 multi-turn을 기본으로 쓰고, 둘 다 0이면 0으로 둠.
+            raw_multi = motor_states_data.motor_multi_turn_angle_raw_0p001deg[motor_i]
+            raw_single = motor_states_data.motor_single_turn_angle_raw_0p001deg[motor_i]
+
+            if raw_multi != 0:
+                motor_angle_deg = raw_multi * self.config.angle_deg_per_lsb
+            elif raw_single != 0:
+                motor_angle_deg = raw_single * self.config.angle_deg_per_lsb
             else:
-                joint_position_rad[motor_index] = angle_deg * math.pi / 180.0
+                motor_angle_deg = 0.0
 
-            # Velocity: deg/s -> rad/s
-            speed_deg_s = motor_states_data.motor_speed_deg_per_sec[motor_index]
-            if motor_index in self.knee_indices:
-                joint_velocity_rad_per_sec[motor_index] = speed_deg_s * math.pi / 90.0
-            else:
-                joint_velocity_rad_per_sec[motor_index] = speed_deg_s * math.pi / 180.0
+            joint_angle_deg = motor_angle_deg * gear * direction
+            joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
 
-            # Effort-like: current or torque
-            motor_current_amp = motor_states_data.motor_phase_current_amp[motor_index]
+            # Velocity: deg/s -> rad/s, gear+direction 적용
+            motor_speed_deg_s = motor_states_data.motor_speed_deg_per_sec[motor_i]
+            joint_speed_deg_s = motor_speed_deg_s * gear * direction
+            joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
+
+            # Effort-like
+            motor_current_amp = motor_states_data.motor_phase_current_amp[motor_i]
             if self.config.effort_output_mode == "torque_nm":
-                joint_effort_like[motor_index] = self._get_joint_torque_nm(motor_current_amp, motor_index)
+                joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
             else:
-                joint_effort_like[motor_index] = motor_current_amp
+                joint_effort_like[joint_i] = motor_current_amp
 
         # Optional filtering
         if self.joint_velocity_low_pass_filter is not None:
