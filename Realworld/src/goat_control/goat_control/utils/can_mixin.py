@@ -6,7 +6,7 @@ import can
 class CanMixin:
     """LingKong(MG 시리즈) CAN 공용 루틴: TX/RX, 에코 필터, 유틸리티."""
     E7 = b'\x00' * 7
-    MG_IQ_LSB_PER_A = 2048.0 / 33.0  # ≈ 62.0606 LSB/A (MG: ±33A ↔ ±2048)
+    MG_IQ_LSB_PER_A = 4096.0 / 66.0  # ≈ 62.0606 LSB/A (MG: ±66A ↔ ±4096)
 
     # ------------------------------------------------------------------
     # 내부 헬퍼
@@ -77,11 +77,11 @@ class CanMixin:
     # 유틸(토크전류 iq packing) — MG 전용
     @classmethod
     def pack_iq_from_amp(cls, amps: float) -> bytes:
-        """MG: ±33A ↔ ±2048 LSB. 포화 및 little-endian 2바이트."""
-        a = max(min(float(amps), 33.0), -33.0)
+        """MG: ±66A ↔ ±4096 LSB. 포화 및 little-endian 2바이트."""
+        a = max(min(float(amps),66.0), -66.0)
         iq = int(round(a * cls.MG_IQ_LSB_PER_A))  # signed
-        if iq < -2048: iq = -2048
-        if iq > 2048: iq = 2048
+        if iq < -4096: iq = -4096
+        if iq > 4096: iq = 4096
         return int(iq).to_bytes(2, byteorder='little', signed=True)
 
     # ------------------------------------------------------------------

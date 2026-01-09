@@ -46,7 +46,7 @@ class MGUnitScales:
 
 # Default values = your YAML values
 _DEFAULT_MG_UNIT_SCALES = MGUnitScales(
-    motor_current_amp_per_lsb=0.01611328125,  # 33/2048
+    motor_current_amp_per_lsb=0.01611328125,  # 66.0 / 4096.0
     angle_deg_per_lsb=0.001,
     speed_deg_per_sec_per_lsb=0.01,
 )
