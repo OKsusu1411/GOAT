@@ -152,7 +152,7 @@ class MotorIONode(Node):
 
         for motor_index, motor_driver in enumerate(self.motor_drivers):
             command_amp = float(current_cmd_amp[motor_index])
-            motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
+            # motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
 
     def destroy_node(self):
         try:
