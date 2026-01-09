@@ -90,7 +90,7 @@ class GoatControlNode(Node):
 
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
-        self.default_desired_joint_position_rad[2] = np.deg2rad(-20.0)
+        # self.default_desired_joint_position_rad[2] = np.deg2rad(-20.0)
         self.default_desired_wheel_speed_rad_per_sec = np.zeros(self.num_joints, dtype=float)
 
         # Timers
