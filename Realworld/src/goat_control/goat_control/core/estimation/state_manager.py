@@ -285,11 +285,11 @@ class StateManager:
             raise ValueError("motor_direction is required for torque_nm output mode.")
 
         torque_constant_nm_per_amp = float(self.config.motor_torque_constant_nm_per_amp[motor_index])
-        gear_ratio = float(self.config.motor_gear_ratio[motor_index])
-        direction = float(self.config.motor_direction[motor_index])  # +1/-1
+        # gear_ratio = float(self.config.motor_gear_ratio[motor_index])
+        # direction = float(self.config.motor_direction[motor_index])  # +1/-1
 
         motor_shaft_torque_nm = motor_current_amp * torque_constant_nm_per_amp
-        joint_torque_nm = motor_shaft_torque_nm * gear_ratio * direction
+        joint_torque_nm = motor_shaft_torque_nm
         return joint_torque_nm
 
     def build_robot_state(
