@@ -11,7 +11,11 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float32MultiArray
 
 from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
-from goat_control.core.estimation.state_manager import MotorStateCollector, StateManager
+from goat_control.core.estimation.state_manager import (
+    MotorStateCollector,
+    StateManager,
+    format_motor_states,
+)
 from goat_control.core.model import build_goat_model_from_yaml
 
 
@@ -119,7 +123,16 @@ class MotorIONode(Node):
 
         # 1) Read motors
         motor_states_data = self.motor_state_collector.poll_all()
+        self.get_logger().info(
+            f"Raw motor data:\n{format_motor_states(motor_states_data)}",
+            throttle_duration_sec=1.0,
+        )
+
         robot_state = self.state_manager.build_robot_state(motor_states_data)
+        self.get_logger().info(
+            f"Built robot state: pos={robot_state.joint_position_rad}",
+            throttle_duration_sec=1.0,
+        )
 
         # 2) Publish JointState
         js = JointState()
@@ -132,6 +145,11 @@ class MotorIONode(Node):
         js.position = list(robot_state.joint_position_rad)
         js.velocity = list(robot_state.joint_velocity_rad_per_sec)
         js.effort = list(robot_state.joint_effort_like)
+
+        self.get_logger().info(
+            f"Publishing JointState: pos={js.position}",
+            throttle_duration_sec=1.0,
+        )
         self.joint_state_pub.publish(js)
 
         # 3) Send torque command if fresh
