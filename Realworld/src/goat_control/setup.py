@@ -56,6 +56,7 @@ setup(
             # --- NEW refactored ROS2 nodes ---
             'goat_control_node = goat_control.nodes.control_node:main',
             'state_estimation_node = goat_control.nodes.state_estimation_node:main',
+            'motor_command_node = goat_control.nodes.motor_command_node:main',
             'policy_node = goat_control.nodes.policy_node:main',
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',

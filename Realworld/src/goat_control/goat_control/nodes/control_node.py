@@ -11,10 +11,9 @@ from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
 
 from motor_interfaces.msg import BaseStates
-from goat_control.core.comm import CanInterface, MotorDriver, MotorParams
 from goat_control.core.control.control_pipeline import ControlTargets
 from goat_control.core.estimation.state_types import RobotState, ImuState
-from goat_control.core import launch_core_control_system
+from goat_control.core.model import build_control_pipeline_from_yaml
 
 
 @dataclass
@@ -30,7 +29,7 @@ class GoatControlNode(Node):
     Main control loop node.
     - Subscribes to robot state (joint_states, imu_data) and policy actions.
     - Computes control commands using the core control pipeline.
-    - Sends commands to the motors.
+    - Publishes the final torque command.
     - Publishes observation and debug topics.
     """
 
@@ -38,39 +37,25 @@ class GoatControlNode(Node):
         super().__init__("goat_control_node")
 
         # Parameters
-        self.declare_parameter("can_channel", "can0")
-        self.declare_parameter("can_interface", "socketcan")
-        self.declare_parameter("motor_node_ids", [1, 2, 3, 4, 5, 6, 7, 8])
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
-        self.declare_parameter("command_unit", "torque_nm")
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("debug_print_period_sec", 0.2)
         self.declare_parameter("log_topic", "motor_torque_log")
         self.declare_parameter("policy_action", "goat/action")
         self.declare_parameter("observation_topic", "goat/observation")
+        self.declare_parameter("torque_command_topic", "torque_commands")
 
-        can_channel = str(self.get_parameter("can_channel").value)
-        can_interface = str(self.get_parameter("can_interface").value)
-        motor_node_ids = list(self.get_parameter("motor_node_ids").value)
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
-        self.command_unit = str(self.get_parameter("command_unit").value)
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
         self.debug_print_period_sec = float(self.get_parameter("debug_print_period_sec").value)
         log_topic = str(self.get_parameter("log_topic").value)
         action_topic = str(self.get_parameter("policy_action").value)
         observation_topic = str(self.get_parameter("observation_topic").value)
+        torque_command_topic = str(self.get_parameter("torque_command_topic").value)
 
         self.buffers = LatestBuffers()
-
-        # CAN Interface and Motor Drivers
-        self.can_interface = CanInterface(channel=can_channel, interface=can_interface)
-        self.can_interface.open()
-        self.motor_drivers: list[MotorDriver] = []
-        for node_id in motor_node_ids:
-            params = MotorParams(node_id=int(node_id))
-            self.motor_drivers.append(MotorDriver(self.can_interface, params))
 
         # Pub/Sub
         self.action_subscriber = self.create_subscription(
@@ -88,11 +73,16 @@ class GoatControlNode(Node):
         self.motor_torque_log_publisher = self.create_publisher(
             Float32MultiArray, log_topic, 10
         )
+        self.torque_command_publisher = self.create_publisher(
+            Float32MultiArray, torque_command_topic, 10
+        )
         
         # Build core system (Model + Pipeline)
-        self.goat_model, self.control_pipeline = launch_core_control_system(
+        # NOTE: ControlNode does not talk to hardware. We still build the pipeline
+        # to reuse the exact same StateManager + controllers as real hardware.
+        self.goat_model, self.control_pipeline = build_control_pipeline_from_yaml(
             yaml_path=yaml_path,
-            motor_drivers=self.motor_drivers,
+            motor_drivers=[],
             effort_output_mode="torque_nm",
         )
         self.control_pipeline.reset()
@@ -100,7 +90,7 @@ class GoatControlNode(Node):
 
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
-        self.default_desired_joint_position_rad[2] = np.deg2rad(-20.0)  # Front left knee
+        self.default_desired_joint_position_rad[2] = np.deg2rad(-20.0)
         self.default_desired_wheel_speed_rad_per_sec = np.zeros(self.num_joints, dtype=float)
 
         # Timers
@@ -208,12 +198,12 @@ class GoatControlNode(Node):
                 )
                 self._last_timeout_warn_time_sec = now_sec
 
-        # 5. Send command to motors
-        self._send_command_to_motors(safe_command)
+        # 5. Publish torque command
+        self._publish_torque_command(safe_command)
 
         # 6. Publish observation and debug topics
         self._publish_observation(robot_state)
-        self._publish_motor_torque_log(robot_state, safe_command)
+        self._publish_motor_torque_log(robot_state, safe_command, targets)
         
     def _decode_action_to_targets(self, action_msg: Float32MultiArray) -> Tuple[np.ndarray, np.ndarray]:
         action_array = np.asarray(action_msg.data, dtype=float).flatten()
@@ -227,15 +217,10 @@ class GoatControlNode(Node):
         
         return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
 
-    def _send_command_to_motors(self, safe_command: np.ndarray):
-        if self.command_unit == "torque_nm":
-            current_command_amp = self.goat_model.convert_joint_torque_to_motor_current(safe_command)
-        else:
-            current_command_amp = safe_command
-
-        for motor_index, motor_driver in enumerate(self.motor_drivers):
-            command_amp = float(current_command_amp[motor_index])
-            motor_driver.torque_mode_amp(command_amp, timeout=0.02)
+    def _publish_torque_command(self, safe_command: np.ndarray):
+        msg = Float32MultiArray()
+        msg.data = safe_command.tolist()
+        self.torque_command_publisher.publish(msg)
 
     def _publish_observation(self, robot_state):
         q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
@@ -247,12 +232,22 @@ class GoatControlNode(Node):
         msg.data = obs.astype(np.float32).tolist()
         self.observation_publisher.publish(msg)
 
-    def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray):
+    def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, targets: ControlTargets):
         joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         command_vector = np.asarray(command_vector, dtype=float).flatten()
 
-        log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector], axis=0)
+        # Ref vector convention:
+        #   - joints: position reference [rad]
+        #   - wheels: speed reference [rad/s]
+        ref_vector = np.asarray(targets.desired_joint_position_rad, dtype=float).flatten().copy()
+        wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
+        for wi in getattr(self.goat_model, "wheel_indices", []):
+            wi = int(wi)
+            if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
+                ref_vector[wi] = float(wheel_ref[wi])
+
+        log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, ref_vector], axis=0)
         msg = Float32MultiArray()
         msg.data = log_vector.astype(np.float32).tolist()
         self.motor_torque_log_publisher.publish(msg)

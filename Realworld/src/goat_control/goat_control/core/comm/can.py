@@ -88,6 +88,24 @@ class CanInterface:
             raise RuntimeError("CAN bus is not opened. Call open() first.")
         return self.bus.recv(timeout=timeout)
 
+    def _drain_rx(self, max_frames: int = 200) -> int:
+        """Drain pending RX frames.
+
+        Motivation:
+          - If old response frames remain in RX queue,
+            a new txrx() call could accidentally pick up a stale frame.
+        """
+        if self.bus is None:
+            raise RuntimeError("CAN bus is not opened. Call open() first.")
+
+        drained = 0
+        for _ in range(int(max_frames)):
+            msg = self.bus.recv(timeout=0.0)
+            if msg is None:
+                break
+            drained += 1
+        return drained
+
     def txrx(
         self,
         tx_id: int,
@@ -112,7 +130,15 @@ class CanInterface:
         transmitted_data = bytes([cmd_byte]) + payload7
 
         with self.txrx_lock:
+            # Drain any pending frames to avoid matching a stale response.
+            drained = self._drain_rx(max_frames=200)
+            if drained > 0:
+                self.logger.debug(f"[CAN] drained {drained} stale RX frames before txrx")
+
             sent_message = self.send(tx_id, transmitted_data)
+
+        # with self.txrx_lock:
+            # sent_message = self.send(tx_id, transmitted_data)
             if sent_message is None:
                 return None
 

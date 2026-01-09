@@ -9,10 +9,8 @@ import yaml
 
 from ..control.control_pipeline import ControlPipeline
 from ..control.pd_controller import PDJointController
-from ..control.safety_limiter import (
-    ConditionalIntegratorAntiWindup,
-    TorqueSafetyLimiter,
-)
+from ..control.pi_controller import WheelPIController
+from ..control.safety_limiter import TorqueSafetyLimiter
 from ..estimation.state_manager import MotorStateCollector, StateManager
 from .goat_model import GoatModel, GoatModelConfig, EffortOutputMode
 
@@ -143,29 +141,22 @@ def build_control_pipeline_from_yaml(
     pd_controller_config = goat_model.build_pd_controller_config()
     pd_joint_controller = PDJointController(pd_controller_config)
 
-    # Wheel PI: Use conditional integration helper (anti-windup)
-    antiwindup_config = goat_model.build_conditional_integrator_config()
-    wheel_antiwindup_controller = ConditionalIntegratorAntiWindup(antiwindup_config)
-
+    # Wheel PI (includes conditional integration anti-windup inside)
     wheel_pi_controller_config = goat_model.build_wheel_pi_controller_config()
-    # These can be full-length or wheel-only vectors; pipeline builder will expand.
-    wheel_proportional_gain = np.asarray(wheel_pi_controller_config.proportional_gain, dtype=float)
-    wheel_integral_gain = np.asarray(wheel_pi_controller_config.integral_gain, dtype=float)
+    wheel_pi_controller = WheelPIController(wheel_pi_controller_config, num_joints=goat_model.num_joints)
 
     # 3) Safety limiter
     safety_limiter_config = goat_model.build_torque_safety_limiter_config()
     torque_safety_limiter = TorqueSafetyLimiter(safety_limiter_config)
 
-    # 4) Pipeline (expands wheel gains to full length internally)
+    # 4) Pipeline
     control_pipeline = ControlPipeline.build_from_goat_model(
         goat_model=goat_model,
         motor_state_collector=motor_state_collector,
         state_manager=state_manager,
         pd_joint_controller=pd_joint_controller,
-        wheel_antiwindup_controller=wheel_antiwindup_controller,
         torque_safety_limiter=torque_safety_limiter,
-        wheel_proportional_gain=wheel_proportional_gain,
-        wheel_integral_gain=wheel_integral_gain,
+        wheel_pi_controller=wheel_pi_controller,
     )
 
     return goat_model, control_pipeline

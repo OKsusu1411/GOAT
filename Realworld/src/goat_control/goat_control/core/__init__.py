@@ -1,11 +1,14 @@
 # goat_control/core/__init__.py
-"""
-Core package (ROS-independent).
-Keep this lightweight to avoid importing hardware-dependent modules at import time.
-"""
-from .build_system import launch_core_control_system
+"""goat_control.core
 
+ROS-independent core modules.
 
-__all__ = [
-    "launch_core_control_system",
-]
+This package intentionally avoids importing hardware-heavy builders at import
+time (e.g., YAML loading, CAN/serial helpers). Import what you need directly
+from submodules, e.g.:
+
+  - goat_control.core.model.build_goat_model_from_yaml
+  - goat_control.core.model.build_control_pipeline_from_yaml
+"""
+
+__all__ = []

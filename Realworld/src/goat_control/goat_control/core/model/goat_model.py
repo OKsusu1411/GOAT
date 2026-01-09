@@ -8,10 +8,7 @@ import numpy as np
 
 from ..control.pd_controller import PDControllerConfig
 from ..control.pi_controller import WheelPIControllerConfig
-from ..control.safety_limiter import (
-    ConditionalIntegratorConfig,
-    TorqueSafetyLimiterConfig,
-)
+from ..control.safety_limiter import TorqueSafetyLimiterConfig
 from ..estimation.state_manager import StateManagerConfig
 
 
@@ -163,7 +160,7 @@ class GoatModel:
             integral_gain=np.asarray(self.config.wheel_pi_integral_gain, dtype=float),
             wheel_indices=self.wheel_indices,
             integrator_state_limit=float(self.config.wheel_integrator_state_limit),
-            output_limit=None,  # use ConditionalIntegratorAntiWindup for conditional integration
+            output_limit_per_joint=self.config.wheel_output_limit_per_joint,
         )
 
     def build_torque_safety_limiter_config(self) -> TorqueSafetyLimiterConfig:
@@ -173,13 +170,7 @@ class GoatModel:
             max_torque_per_joint=self.config.max_torque_per_joint,
         )
 
-    def build_conditional_integrator_config(self) -> ConditionalIntegratorConfig:
-        return ConditionalIntegratorConfig(
-            num_joints=self.num_joints,
-            controlled_indices=self.wheel_indices,
-            integrator_state_limit=float(self.config.wheel_integrator_state_limit),
-            output_limit_per_joint=self.config.wheel_output_limit_per_joint,
-        )
+
 
     def convert_joint_torque_to_motor_current(self, joint_torque_nm: np.ndarray) -> np.ndarray:
         torque_constant = np.asarray(self.config.motor_torque_constant_nm_per_amp, dtype=float)

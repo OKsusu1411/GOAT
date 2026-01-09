@@ -19,8 +19,15 @@ class LatestLog:
 class MotorTorqueLogViewer(Node):
     """
     Subscribe:  motor_torque_log (Float32MultiArray)
-      - data = [q(rad) ... , dq(rad/s) ... , u(cmd) ...]
-      - length = 3 * num_joints
+      - data (supported layouts):
+          (A) [q(rad) xN, dq(rad/s) xN, u(cmd) xN]                       => length = 3 * N
+          (B) [q(rad) xN, dq(rad/s) xN, u(cmd) xN, ref xN]               => length = 4 * N
+
+        where:
+          - q: measured joint angle
+          - dq: measured joint velocity
+          - u: command value (usually torque [Nm] unless you log current)
+          - ref: reference (by convention: position ref for joints, speed ref for wheels)
 
     Optional Subscribe: joint_states (JointState) to get joint names automatically.
     """
@@ -39,6 +46,9 @@ class MotorTorqueLogViewer(Node):
             ["hip_L", "hip_R", "thigh_L", "thigh_R", "knee_L", "knee_R", "wheel_L", "wheel_R"]
         )
 
+        # For nicer ref printing (ref is position for joints, speed for wheels)
+        self.declare_parameter("wheel_indices", [6, 7])
+
         self.declare_parameter("print_rate_hz", 50.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("command_unit", "torque_nm")  # torque_nm or amp
@@ -51,6 +61,7 @@ class MotorTorqueLogViewer(Node):
 
         self.num_joints = int(self.get_parameter("num_joints").value)
         self.joint_names: List[str] = [str(x) for x in self.get_parameter("joint_names").value]
+        self.wheel_indices = [int(x) for x in self.get_parameter("wheel_indices").value]
 
         self.print_rate_hz = float(self.get_parameter("print_rate_hz").value)
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
@@ -97,15 +108,22 @@ class MotorTorqueLogViewer(Node):
             return
 
         vector = self.latest.vector
-        expected = 4 * self.num_joints
-        if vector.size != expected:
-            self.get_logger().warn(f"log length mismatch: got {vector.size}, expected {expected}")
+
+        # Layout parsing (accept both 3N and 4N)
+        expected_3n = 3 * self.num_joints
+        expected_4n = 4 * self.num_joints
+        if vector.size not in (expected_3n, expected_4n):
+            self.get_logger().warn(
+                f"log length mismatch: got {vector.size}, expected {expected_3n} (3N) or {expected_4n} (4N)"
+            )
             return
 
         joint_position_rad = vector[0 : self.num_joints]
         joint_velocity_rad_per_sec = vector[self.num_joints : 2 * self.num_joints]
         command_value = vector[2 * self.num_joints : 3 * self.num_joints]
-        desired_joint_position_rad = vector[3 * self.num_joints : 4 * self.num_joints]
+        ref_vector = None
+        if vector.size == expected_4n:
+            ref_vector = vector[3 * self.num_joints : 4 * self.num_joints]
 
         if self.print_degrees:
             joint_position = np.rad2deg(joint_position_rad)
@@ -125,27 +143,64 @@ class MotorTorqueLogViewer(Node):
             info_line = (
                 f"[topic='{self.log_topic}'] layout = "
                 f"[q({position_unit}) x{self.num_joints}, dq({velocity_unit}) x{self.num_joints}, "
-                f"u({command_unit}) x{self.num_joints}]  "
+                f"u({command_unit}) x{self.num_joints}"
+                f"{', ref x'+str(self.num_joints) if ref_vector is not None else ''}]  "
                 f"(print_rate={self.print_rate_hz:.1f}Hz, names_from_joint_state={self.use_joint_state_names})"
             )
-            header = (
-                f"{'idx':>3}  {'name':<12}  "
-                f"{('q['+position_unit+']'):>12}  {('dq['+velocity_unit+']'):>12}  {('u['+command_unit+']'):>12}"
-            )
+            header_cols = [
+                f"{'idx':>3}",
+                f"{'name':<12}",
+                f"{('q[' + position_unit + ']'):>12}",
+                f"{('dq[' + velocity_unit + ']'):>12}",
+                f"{('u[' + command_unit + ']'):>12}",
+            ]
+            if ref_vector is not None:
+                # ref is mixed semantics (position ref for joints, speed ref for wheels)
+                header_cols.append(f"{'ref':>12}")
+
+            header = "  ".join(header_cols)
 
             self.get_logger().info(info_line)
             self.get_logger().info(header)
             self.get_logger().info("-" * len(header))
 
         # Print rows (batch: all joints in ONE log block)
-        fmt = (
-            f"{{:>3}}  {{:<12}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
-        )
+        if ref_vector is None:
+            fmt = (
+                f"{{:>3}}  {{:<12}}  "
+                f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+            )
+        else:
+            fmt = (
+                f"{{:>3}}  {{:<12}}  "
+                f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+            )
 
         lines = []
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
+
+            if ref_vector is None:
+                lines.append(
+                    fmt.format(
+                        joint_index,
+                        name[:12],
+                        float(joint_position[joint_index]),
+                        float(joint_velocity[joint_index]),
+                        float(command_value[joint_index]),
+                    )
+                )
+                continue
+
+            # ref: position ref for joints, speed ref for wheels
+            ref_value = float(ref_vector[joint_index])
+            if joint_index in self.wheel_indices:
+                # wheel ref is speed
+                ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
+            else:
+                # joint ref is position
+                ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
+
             lines.append(
                 fmt.format(
                     joint_index,
@@ -153,7 +208,7 @@ class MotorTorqueLogViewer(Node):
                     float(joint_position[joint_index]),
                     float(joint_velocity[joint_index]),
                     float(command_value[joint_index]),
-                    float(desired_joint_position_rad[joint_index]),
+                    float(ref_print),
                 )
             )
 

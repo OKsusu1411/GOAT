@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
 from ..estimation.state_manager import MotorStateCollector, StateManager
 from ..estimation.state_types import ImuState, MotorStatesData, RobotState
 from .pd_controller import PDJointController
-from .safety_limiter import ConditionalIntegratorAntiWindup, TorqueSafetyLimiter
+from .pi_controller import WheelPIController
+from .safety_limiter import TorqueSafetyLimiter
 
 
 @dataclass
@@ -35,32 +36,6 @@ class ControlPipelineOutput:
     safe_torque_command: np.ndarray
 
 
-def _expand_gains_to_full_length(
-    num_joints: int,
-    controlled_indices: Sequence[int],
-    gain_vector: np.ndarray,
-) -> np.ndarray:
-    """Expand gain vector to full length.
-
-    - If gain_vector is length == num_joints: return as-is.
-    - If gain_vector is length == len(controlled_indices): expand into full vector with zeros elsewhere.
-    """
-    gain_vector = np.asarray(gain_vector, dtype=float).flatten()
-
-    if gain_vector.size == num_joints:
-        return gain_vector
-
-    if gain_vector.size == len(controlled_indices):
-        full_gain_vector = np.zeros(num_joints, dtype=float)
-        for local_index, global_index in enumerate(controlled_indices):
-            full_gain_vector[int(global_index)] = float(gain_vector[local_index])
-        return full_gain_vector
-
-    raise ValueError(
-        f"gain_vector length must be num_joints ({num_joints}) or len(controlled_indices) ({len(controlled_indices)})."
-    )
-
-
 class ControlPipeline:
     """Core-only control pipeline (no ROS2 dependency).
 
@@ -81,9 +56,7 @@ class ControlPipeline:
         motor_state_collector: MotorStateCollector,
         state_manager: StateManager,
         pd_joint_controller: PDJointController,
-        wheel_antiwindup_controller: ConditionalIntegratorAntiWindup,
-        wheel_proportional_gain_full: np.ndarray,
-        wheel_integral_gain_full: np.ndarray,
+        wheel_pi_controller: WheelPIController,
         torque_safety_limiter: TorqueSafetyLimiter,
         num_joints: int,
         wheel_indices: Sequence[int],
@@ -92,19 +65,12 @@ class ControlPipeline:
         self.state_manager = state_manager
         self.pd_joint_controller = pd_joint_controller
 
-        self.wheel_antiwindup_controller = wheel_antiwindup_controller
-        self.wheel_proportional_gain_full = np.asarray(wheel_proportional_gain_full, dtype=float).flatten()
-        self.wheel_integral_gain_full = np.asarray(wheel_integral_gain_full, dtype=float).flatten()
+        self.wheel_pi_controller = wheel_pi_controller
 
         self.torque_safety_limiter = torque_safety_limiter
 
         self.num_joints = int(num_joints)
         self.wheel_indices = [int(index) for index in wheel_indices]
-
-        if self.wheel_proportional_gain_full.size != self.num_joints:
-            raise ValueError("wheel_proportional_gain_full must have length == num_joints.")
-        if self.wheel_integral_gain_full.size != self.num_joints:
-            raise ValueError("wheel_integral_gain_full must have length == num_joints.")
 
     # ---------------------------------------------------------------------
     # Factory helper: build pipeline from GoatModel + already-built objects
@@ -116,33 +82,18 @@ class ControlPipeline:
         motor_state_collector: MotorStateCollector,
         state_manager: StateManager,
         pd_joint_controller: PDJointController,
-        wheel_antiwindup_controller: ConditionalIntegratorAntiWindup,
         torque_safety_limiter: TorqueSafetyLimiter,
-        wheel_proportional_gain: np.ndarray,
-        wheel_integral_gain: np.ndarray,
+        wheel_pi_controller: WheelPIController,
     ) -> "ControlPipeline":
-        """Create ControlPipeline with gain expansion using GoatModel indices."""
+        """Create ControlPipeline using GoatModel indices."""
         num_joints = int(goat_model.num_joints)
         wheel_indices = list(goat_model.wheel_indices)
-
-        wheel_proportional_gain_full = _expand_gains_to_full_length(
-            num_joints=num_joints,
-            controlled_indices=wheel_indices,
-            gain_vector=wheel_proportional_gain,
-        )
-        wheel_integral_gain_full = _expand_gains_to_full_length(
-            num_joints=num_joints,
-            controlled_indices=wheel_indices,
-            gain_vector=wheel_integral_gain,
-        )
 
         return cls(
             motor_state_collector=motor_state_collector,
             state_manager=state_manager,
             pd_joint_controller=pd_joint_controller,
-            wheel_antiwindup_controller=wheel_antiwindup_controller,
-            wheel_proportional_gain_full=wheel_proportional_gain_full,
-            wheel_integral_gain_full=wheel_integral_gain_full,
+            wheel_pi_controller=wheel_pi_controller,
             torque_safety_limiter=torque_safety_limiter,
             num_joints=num_joints,
             wheel_indices=wheel_indices,
@@ -153,7 +104,7 @@ class ControlPipeline:
     # ---------------------------------------------------------------------
     def reset(self) -> None:
         """Reset internal states (integrator + safety limiter memory)."""
-        self.wheel_antiwindup_controller.reset()
+        self.wheel_pi_controller.reset()
         self.torque_safety_limiter.reset()
 
     def step(
@@ -209,13 +160,10 @@ class ControlPipeline:
             desired_velocity_rad_per_sec=None,
         )
 
-        # 2) Wheel PI with conditional integration (anti-windup)
-        wheel_speed_error = desired_wheel_speed_rad_per_sec - current_joint_velocity_rad_per_sec
-
-        pi_torque_command = self.wheel_antiwindup_controller.step(
-            error=wheel_speed_error,
-            proportional_gain_full=self.wheel_proportional_gain_full,
-            integral_gain_full=self.wheel_integral_gain_full,
+        # 2) Wheel PI (conditional integration anti-windup is implemented inside WheelPIController)
+        pi_torque_command = self.wheel_pi_controller.compute(
+            wheel_speed_reference_rad_per_sec=desired_wheel_speed_rad_per_sec,
+            wheel_speed_measured_rad_per_sec=current_joint_velocity_rad_per_sec,
             dt_sec=dt_sec,
         )
 
