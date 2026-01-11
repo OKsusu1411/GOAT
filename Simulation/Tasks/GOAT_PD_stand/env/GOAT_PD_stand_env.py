@@ -298,6 +298,7 @@ class GOATPDStandEnv(GOATBaseEnv):
     
     def _get_rewards(self) -> torch.Tensor:
         # ======================= Scheduler ======================= #
+        current_time = self.episode_length_buf.float()
         # Target gravity in base frame (Upright state = [0, 0, -1])
         target_gravity = torch.tensor([0.0, 0.0, -1.0], device=self.device).repeat(self.num_envs, 1)
         
@@ -358,11 +359,11 @@ class GOATPDStandEnv(GOATBaseEnv):
         # ======================= Reward ======================= #
         # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
         orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
-        r_orient = torch.exp(-torch.square(orient_error) / 0.5)                                    # Raidial Basis FUnction (RBF)
+        r_orient = torch.exp(-torch.square(orient_error) / 0.3)                                    # Raidial Basis FUnction (RBF)
 
         # Base Height Reward
         height_error = torch.norm(self.base_height - self.cfg.target_height, dim=1)
-        r_height = torch.exp(-torch.square(height_error) / 0.5)
+        r_height = torch.exp(-torch.square(height_error) / 0.4)
         
         # vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
         # vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
@@ -385,6 +386,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         r_terminated = - self.reset_terminated.float()
 
+        r_alive = self.cfg.r_alive_weight * current_time/1000
+
         # Total Reward Summation
         total_reward = (
             self.cfg.r_orient_weight * r_orient +
@@ -393,7 +396,8 @@ class GOATPDStandEnv(GOATBaseEnv):
             self.cfg.r_vel_ang_weight * r_vel_ang +
             self.cfg.r_vel_joint_weight * r_vel_joint +
             self.cfg.r_effort_weight * r_effort +
-            self.cfg.r_terminated_weight * r_terminated 
+            self.cfg.r_terminated_weight * r_terminated +
+            self.cfg.r_alive_weight * r_alive
         )
 
         return total_reward
