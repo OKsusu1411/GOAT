@@ -104,8 +104,8 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             stiffness=0.0,                          # Internal PD controller not used
             damping=0.0,                            # Internal PD controller not used
             friction=0.0033,                        # Static friction coefficient
-            dynamic_friction=5.646268e-02,          # Dynamic friction coefficient 
-            viscous_friction=3.190248e-01,          # Viscous friction coefficient
+            dynamic_friction=0,          # Dynamic friction coefficient 
+            viscous_friction=0,          # Viscous friction coefficient
         ),
 
         "thigh": DCMotorCfg(
@@ -116,8 +116,8 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             stiffness=0.0,
             damping=0.32,
             friction=0.0033,
-            dynamic_friction=5.646268e-02,
-            viscous_friction=3.190248e-01,
+            dynamic_friction=0,
+            viscous_friction=0,
         ),
 
         "knee": DCMotorCfg(

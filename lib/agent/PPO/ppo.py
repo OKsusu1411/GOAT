@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from lib.utils.Running_mean_std import RunningMeanStd
 from typing import Any, Mapping, Optional, Tuple, Union
 from packaging import version
 from lib.utils import config, logger
@@ -162,6 +163,8 @@ class PPO(Agent):
             self.checkpoint_modules["value_preprocessor"] = self._value_preprocessor
         else:
             self._value_preprocessor = self._empty_preprocessor
+        
+        self.return_normalizer = RunningMeanStd(shape=1, device=self.device)
 
     def init(self, *, trainer_cfg: dict[str, Any] | None = None) -> None:
         """Initialize the agent.
@@ -278,7 +281,8 @@ class PPO(Agent):
                     "states": self._state_preprocessor(states),
                 }
                 values, _, _ = self.value.act(inputs, role="value")
-                values = self._value_preprocessor(values, inverse=True)
+                values = self.return_normalizer.denormalize(values)
+                # values = self._value_preprocessor(values, inverse=True)
 
             # time-limit (truncation) bootstrapping
             if self.cfg.time_limit_bootstrap:
@@ -376,7 +380,8 @@ class PPO(Agent):
             self.value.enable_training_mode(False)
             last_values, _, _ = self.value.act(inputs, role="value")
             self.value.enable_training_mode(True)
-            last_values = self._value_preprocessor(last_values, inverse=True)
+            last_values = self.return_normalizer.denormalize(last_values)
+            # last_values = self._value_preprocessor(last_values, inverse=True)
 
         values = self.memory.get_tensor_by_name("values")
         returns, advantages = self.compute_gae(
@@ -388,8 +393,8 @@ class PPO(Agent):
             lambda_coefficient=self.cfg.lambda_coeff,
         )
 
-        self.memory.set_tensor_by_name("values", self._value_preprocessor(values, train=True))
-        self.memory.set_tensor_by_name("returns", self._value_preprocessor(returns, train=True))
+        self.memory.set_tensor_by_name("values", self.return_normalizer.normalize(values))
+        self.memory.set_tensor_by_name("returns", self.return_normalizer.normalize(returns))
         self.memory.set_tensor_by_name("advantages", advantages)
 
         # sample mini-batches from memory

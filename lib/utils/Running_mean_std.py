@@ -46,7 +46,6 @@ class RunningMeanStd(nn.Module):
         m_a = self.var * self.count
         m_b = batch_var * batch_count
         
-        # np.square -> torch.square or ** 2
         m_2 = m_a + m_b + torch.square(delta) * self.count * batch_count / tot_count
         new_var = m_2 / tot_count
 
@@ -59,7 +58,9 @@ class RunningMeanStd(nn.Module):
     def normalize(self, x: torch.Tensor) -> None:
         """
         Update the statistics with a new batch of data.
+
         :param x: Input tensor (batch_size, dims)
+        :param subtract_mean: Subtract mean True for value, False for reward
         """
         # Convert into tensor if it's not
         if not isinstance(x, torch.Tensor):
@@ -74,3 +75,15 @@ class RunningMeanStd(nn.Module):
         self._update_distrubution(batch_mean, batch_var, batch_count)
 
         return (x - self.mean) / torch.sqrt(self.var + self.epsilon)
+        
+    def denormalize(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: Normalized input
+        return: Real scale value (x * std + mean)
+        """
+        if not isinstance(x, torch.Tensor):
+            x = torch.tensor(x, dtype=torch.float32, device=self.device)
+            
+        std = torch.sqrt(self.var + self.epsilon)
+        
+        return x * std + self.mean

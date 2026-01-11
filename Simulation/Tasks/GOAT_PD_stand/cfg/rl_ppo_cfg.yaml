@@ -11,9 +11,9 @@ agent:
   learning_rate: 2.0e-04
 
   # state_preprocessor: RunningStandardScaler
-  # state_preprocessor_kwargs: null
+  # state_preprocessor_kwargs: {}
   # value_preprocessor: RunningStandardScaler
-  # value_preprocessor_kwargs: null
+  # value_preprocessor_kwargs: {}
 
   learning_rate_scheduler: KLAdaptiveLR
   learning_rate_scheduler_kwargs:
@@ -26,7 +26,7 @@ agent:
   ratio_clip: 0.2
   value_clip: 0.2
 
-  entropy_loss_scale: 0.005
+  entropy_loss_scale: 0.01
   value_loss_scale: 2.0
   kl_threshold: 0.0
   time_limit_bootstrap: True
@@ -43,8 +43,8 @@ model:
   actor:
     clip_actions: False
     clip_log_std: True
-    min_log_std: -20
-    max_log_std: 2
+    min_log_std: -2.0
+    max_log_std: 0.0
     reduction: "sum"
   
   critic:

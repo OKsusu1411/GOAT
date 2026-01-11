@@ -33,9 +33,12 @@ from lib.utils import Env
 
 HIP_COL_FRI = 5.646268e-02
 HIP_VIS_FRI = 3.190248e-01
-KNEE_COL_FRI = 4.432008e-01
-KNEE_VIS_FRI = 2.993308e-01
-
+# KNEE_COL_FRI = 4.432008e-01
+# KNEE_VIS_FRI = 2.993308e-01
+# HIP_COL_FRI = 0
+# HIP_VIS_FRI = 0
+KNEE_COL_FRI = 0
+KNEE_VIS_FRI = 0
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
     """Design the scene for low-level torque control."""
