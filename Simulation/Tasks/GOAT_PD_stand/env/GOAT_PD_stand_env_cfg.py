@@ -71,12 +71,12 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     r_orient_weight = 0.25
     r_height_weight = 0.2
-    r_vel_lin_weight = 0.07
+    r_vel_lin_weight = 0.01
     r_vel_ang_weight = 0 #0.05
     r_vel_joint_weight = 0.0
     r_effort_weight = 0.0
     r_terminated_weight = 0.2
-    r_alive_weight = 0.1
+    r_alive_weight = 0.15
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
