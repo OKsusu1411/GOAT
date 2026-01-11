@@ -28,7 +28,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     joint_kd=torch.tensor([[0.01, 0.01, 0.001]])
     wheel_kp=torch.tensor([[0.1]])
     wheel_ki=torch.tensor([[0.1]])
-    joint_action_weight = 10
+    joint_action_weight = 15
     wheel_action_weight = 35
     
     ## ==================== Robot configuration ==================== ##
@@ -60,7 +60,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     max_episode_length = 20/sim_dt #5*60/sim_dt            # 5 minutes for truncated    
     ## ==================== Terminal condition ==================== ##
-    height_reset_condition = 0.3
+    height_reset_condition = 0.35
 
     ## ==================== Reward Shaping ==================== ##
     target_height = 0.45                        # meter (m)
@@ -69,14 +69,14 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     curriculum_level_up_threshold = 0.8         # success rate
     curriculum_level_down_threshold = 0.2
 
-    r_orient_weight = 0.25
+    r_orient_weight = 0.3
     r_height_weight = 0.2
     r_vel_lin_weight = 0.01
     r_vel_ang_weight = 0 #0.05
     r_vel_joint_weight = 0.0
     r_effort_weight = 0.0
     r_terminated_weight = 0.2
-    r_alive_weight = 0.15
+    r_alive_weight = 0.17
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(

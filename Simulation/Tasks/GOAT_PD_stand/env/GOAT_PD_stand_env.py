@@ -363,7 +363,7 @@ class GOATPDStandEnv(GOATBaseEnv):
 
         # Base Height Reward
         height_error = torch.norm(self.base_height - self.cfg.target_height, dim=1)
-        r_height = torch.exp(-torch.square(height_error) / 0.4)
+        r_height = torch.exp(-torch.square(height_error) / 0.3)
         
         # vel_penalty_scale = torch.clamp(upright_rate, 0.0, 1.0)                                     # Clamp the rate
         # vel_penalty_scale = torch.pow(vel_penalty_scale, 4)                                         # Make it sharper (only active when really it's upright)
