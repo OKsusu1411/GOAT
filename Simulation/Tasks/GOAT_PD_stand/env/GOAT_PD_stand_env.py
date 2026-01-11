@@ -278,7 +278,8 @@ class GOATPDStandEnv(GOATBaseEnv):
                                       self.base_quaternion_noissy,
                                       self.joint_pos_noissy,
                                       self.joint_vel_noissy,
-                                      self.flat_previous_action),
+                                    #   self.flat_previous_action),
+                                     ),
                                       dim=1)
         
         self.privileged_info = torch.cat((self.base_vel,

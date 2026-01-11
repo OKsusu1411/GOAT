@@ -20,8 +20,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     sim_dt = 0.005                              # 200Hz torque controller
     decimation = 2                              # 100Hz policy
     action_space = 8                            # [L + R, joint pos + wheel velocity]
-    observation_space = 37                      # Observation space
-    state_space = 49                            # Inclde privilege state information
+    observation_space = 29                      # Observation space
+    state_space = 41                            # Inclde privilege state information
 
     ## ==================== Controller gain ==================== ##
     joint_kp=torch.tensor([[0.33, 0.27, 1.4]])
@@ -60,7 +60,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
 
     max_episode_length = 10/sim_dt #5*60/sim_dt            # 5 minutes for truncated    
     ## ==================== Terminal condition ==================== ##
-    height_reset_condition = 0.35
+    height_reset_condition = 0.3
 
     ## ==================== Reward Shaping ==================== ##
     target_height = 0.45                        # meter (m)
