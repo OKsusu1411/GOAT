@@ -310,7 +310,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         is_height_reached = torch.abs(self.base_height - self.cfg.target_height) < self.cfg.height_threshold
         
         # Velocity criteria (Only strict for balancing)
-        lin_vel_norm = torch.norm(self.base_vel, dim=1)                         # L2 norm 
+        lin_vel_norm = torch.norm(self.base_vel, dim=1)                             # L2 norm 
         ang_vel_norm = torch.norm(self.base_angular_vel, dim=1)
         is_stable = (lin_vel_norm < 0.5) & (ang_vel_norm < 1.0)
 
@@ -359,7 +359,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         # ======================= Reward ======================= #
         # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
         orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
-        r_orient = torch.exp(-torch.square(orient_error) / 0.3)                                    # Raidial Basis FUnction (RBF)
+        r_orient = torch.exp(-torch.square(orient_error) / 0.3)                                       # Raidial Basis FUnction (RBF)
 
         # Base Height Reward
         height_error = torch.norm(self.base_height - self.cfg.target_height, dim=1)
@@ -403,8 +403,15 @@ class GOATPDStandEnv(GOATBaseEnv):
         return total_reward
     
     def _get_dones(self): 
-        terminated = self.base_height < self.cfg.height_reset_condition
+        tilt_threshold_rad = torch.tensor(self.cfg.base_tilt_reset_condition, device=self.device) * torch.pi / 180.0
+        cos_threshold = torch.cos(tilt_threshold_rad)
+
+        target_gravity = torch.tensor([0.0, 0.0, -1.0], device=self.device)
+        base_tilt = torch.sum(self.gravity_vector * target_gravity, dim=1)
+
+        terminated = (self.base_height < self.cfg.height_reset_condition) | (base_tilt < cos_threshold).unsqueeze(-1)
         terminated = terminated.squeeze(-1)
+
 
         truncated = self.episode_length_buf >= (self.cfg.max_episode_length - 1)
 

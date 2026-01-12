@@ -61,6 +61,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     max_episode_length = 20/sim_dt #5*60/sim_dt            # 5 minutes for truncated    
     ## ==================== Terminal condition ==================== ##
     height_reset_condition = 0.35
+    base_tilt_reset_condition = 25              # degree
 
     ## ==================== Reward Shaping ==================== ##
     target_height = 0.45                        # meter (m)
@@ -69,8 +70,8 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     curriculum_level_up_threshold = 0.8         # success rate
     curriculum_level_down_threshold = 0.2
 
-    r_orient_weight = 0.4
-    r_height_weight = 0.2
+    r_orient_weight = 0.2
+    r_height_weight = 0.0
     r_vel_lin_weight = 0.01
     r_vel_ang_weight = 0.01
     r_vel_joint_weight = 0.0
