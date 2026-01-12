@@ -69,10 +69,10 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     curriculum_level_up_threshold = 0.8         # success rate
     curriculum_level_down_threshold = 0.2
 
-    r_orient_weight = 0.3
+    r_orient_weight = 0.4
     r_height_weight = 0.2
     r_vel_lin_weight = 0.01
-    r_vel_ang_weight = 0 #0.05
+    r_vel_ang_weight = 0.01
     r_vel_joint_weight = 0.0
     r_effort_weight = 0.0
     r_terminated_weight = 0.2

@@ -376,7 +376,7 @@ class GOATPDStandEnv(GOATBaseEnv):
         r_vel_lin = torch.exp(-torch.square(vel_lin_error) / 0.5)
 
         vel_ang_error = torch.norm(-self.base_angular_vel, dim=1)
-        r_vel_ang = torch.exp(-torch.square(vel_ang_error) / 1)
+        r_vel_ang = torch.exp(-torch.square(vel_ang_error) / 0.5)
 
         vel_joint_error = torch.norm(-self.joint_vel, dim=1)
         r_vel_joint = torch.exp(-torch.square(vel_joint_error) / 1)
