@@ -358,8 +358,8 @@ class GOATPDStandEnv(GOATBaseEnv):
         
         # ======================= Reward ======================= #
         # Orientation Reward (Projected Gravity Alignment) [Highest Priority]
-        orient_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
-        r_orient = torch.exp(-torch.square(orient_error) / 0.25)                                       # Raidial Basis FUnction (RBF)
+        upright_error = torch.norm(self.gravity_vector - target_gravity, dim=1)
+        r_upright = torch.exp(-torch.square(upright_error) / 0.25)                                       # Raidial Basis FUnction (RBF)
 
         # Base Height Reward
         height_error = torch.norm(self.base_height - self.cfg.target_height, dim=1)
@@ -390,7 +390,7 @@ class GOATPDStandEnv(GOATBaseEnv):
 
         # Total Reward Summation
         total_reward = (
-            self.cfg.r_orient_weight * r_orient * r_alive +
+            self.cfg.r_upright_weight * r_upright * r_alive +
             self.cfg.r_height_weight * r_height +
             self.cfg.r_vel_lin_weight * r_vel_lin +
             self.cfg.r_vel_ang_weight * r_vel_ang +
