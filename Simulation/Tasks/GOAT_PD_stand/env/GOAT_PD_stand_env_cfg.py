@@ -58,10 +58,10 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     default_terrain_dynamic_friction = 0.5
     default_terrain_restitution = 0.4
 
-    max_episode_length = 20/sim_dt #5*60/sim_dt            # 5 minutes for truncated    
+    max_episode_length = 80/sim_dt #5*60/sim_dt            # 5 minutes for truncated    
     ## ==================== Terminal condition ==================== ##
     height_reset_condition = 0.35
-    base_tilt_reset_condition = 25              # degree
+    base_tilt_reset_condition = 28              # degree
 
     ## ==================== Reward Shaping ==================== ##
     target_height = 0.45                        # meter (m)
@@ -70,14 +70,14 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     curriculum_level_up_threshold = 0.8         # success rate
     curriculum_level_down_threshold = 0.2
 
-    r_orient_weight = 0.2
+    r_orient_weight = 0.17
     r_height_weight = 0.0
     r_vel_lin_weight = 0.01
     r_vel_ang_weight = 0.01
     r_vel_joint_weight = 0.0
     r_effort_weight = 0.0
-    r_terminated_weight = 0.2
-    r_alive_weight = 0.17
+    r_terminated_weight = 0.0
+    r_alive_weight = 0.0
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(
