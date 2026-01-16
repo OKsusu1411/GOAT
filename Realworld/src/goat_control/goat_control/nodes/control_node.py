@@ -83,7 +83,7 @@ class GoatControlNode(Node):
         self.goat_model, self.control_pipeline = build_control_pipeline_from_yaml(
             yaml_path=yaml_path,
             motor_drivers=[],
-            effort_output_mode="torque_nm",
+            effort_output_mode="current_amp", # Use current output for sim control
         )
         self.control_pipeline.reset()
         self.num_joints = int(self.goat_model.num_joints)
