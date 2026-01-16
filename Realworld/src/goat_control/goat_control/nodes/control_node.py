@@ -198,6 +198,19 @@ class GoatControlNode(Node):
                 )
                 self._last_timeout_warn_time_sec = now_sec
 
+        #log debug info
+        now_sec = now_time.nanoseconds * 1e-9
+        if now_sec - self._last_debug_print_time_sec > self.debug_print_period_sec:
+            self.get_logger().info(
+                f"Control Loop Debug:\n"
+                f"  Desired Pos [rad]: {desired_joint_position_rad}\n"
+                f"  Desired Wheel Speed [rad/s]: {desired_wheel_speed_rad_per_sec}\n"
+                f"  Joint Pos [rad]: {robot_state.joint_position_rad}\n"
+                f"  Joint Vel [rad/s]: {robot_state.joint_velocity_rad_per_sec}\n"
+                f"  Joint Effort-like: {robot_state.joint_effort_like}\n"
+                f"  Safe Command: {safe_command}"
+            )
+            self._last_debug_print_time_sec = now_sec
         # 5. Publish torque command
         self._publish_torque_command(safe_command)
 
