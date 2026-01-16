@@ -177,9 +177,9 @@ class GoatModel:
         gear_ratio = np.asarray(self.config.motor_gear_ratio, dtype=float)
         direction = np.asarray(self.config.motor_direction, dtype=float)
 
-        denominator = direction * gear_ratio * torque_constant
+        denominator = gear_ratio * torque_constant  # direction *
         denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
-        current_command_amp = joint_torque_nm / torque_constant
+        current_command_amp = joint_torque_nm / denominator
 
         zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
         current_command_amp = np.where(zero_mask, 0.0, current_command_amp)
