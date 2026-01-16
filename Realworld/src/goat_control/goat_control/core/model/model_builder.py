@@ -67,7 +67,7 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
 
     motor_current_amp_per_lsb = float(estimation_section.get("motor_current_amp_per_lsb", 66.0 / 4096.0))
     angle_deg_per_lsb = float(estimation_section.get("angle_deg_per_lsb", 0.001))
-    speed_deg_per_sec_per_lsb = float(estimation_section.get("speed_deg_per_sec_per_lsb", 1.0))
+    speed_deg_per_sec_per_lsb = float(estimation_section.get("speed_deg_per_sec_per_lsb", 0.01))
 
     joint_velocity_lpf_alpha = estimation_section.get("joint_velocity_lpf_alpha", None)
     joint_effort_like_lpf_alpha = estimation_section.get("joint_effort_like_lpf_alpha", None)
