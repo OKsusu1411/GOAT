@@ -86,17 +86,17 @@ def generate_launch_description():
         }],
     )
 
-    control_node = Node(
-        package="goat_control",
-        executable="goat_control_node",
-        name="goat_control_node",
-        output="screen",
-        parameters=[{
-            "yaml_path": LaunchConfiguration("yaml_path"),
-            "control_rate_hz": LaunchConfiguration("control_rate_hz"),
-            "command_unit": LaunchConfiguration("command_unit"),
-        }],
-    )
+    # control_node = Node(
+    #     package="goat_control",
+    #     executable="goat_control_node",
+    #     name="goat_control_node",
+    #     output="screen",
+    #     parameters=[{
+    #         "yaml_path": LaunchConfiguration("yaml_path"),
+    #         "control_rate_hz": LaunchConfiguration("control_rate_hz"),
+    #         "command_unit": LaunchConfiguration("command_unit"),
+    #     }],
+    # )
 
     # policy_node = Node(
     #     package="goat_control",
@@ -161,7 +161,7 @@ def generate_launch_description():
         imu_port_arg,
         imu_baudrate_arg,
         state_estimation_node,
-        control_node,
+        # control_node,
         # policy_node,
         log_viewer_node,
         motor_io_node,

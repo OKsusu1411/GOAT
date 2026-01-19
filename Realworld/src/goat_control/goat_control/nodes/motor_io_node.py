@@ -46,7 +46,7 @@ class MotorIONode(Node):
         # Safety / timing
         self.declare_parameter("command_timeout_sec", 0.1)
         self.declare_parameter("zero_on_timeout", True)
-        self.declare_parameter("can_tx_timeout_sec", 0.02)
+        self.declare_parameter("can_tx_timeout_sec", 0.05)
 
         can_channel = str(self.get_parameter("can_channel").value)
         can_interface = str(self.get_parameter("can_interface").value)

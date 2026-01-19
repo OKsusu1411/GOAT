@@ -83,7 +83,7 @@ class GoatControlNode(Node):
         self.goat_model, self.control_pipeline = build_control_pipeline_from_yaml(
             yaml_path=yaml_path,
             motor_drivers=[],
-            effort_output_mode="current_amp", # Use current output for sim control
+            effort_output_mode="torque_nm", # Use current output for sim control
         )
         self.control_pipeline.reset()
         self.num_joints = int(self.goat_model.num_joints)
@@ -209,6 +209,7 @@ class GoatControlNode(Node):
                 f"  Joint Vel [rad/s]: {robot_state.joint_velocity_rad_per_sec}\n"
                 f"  Joint Effort-like: {robot_state.joint_effort_like}\n"
                 f"  Safe Command: {safe_command}"
+                f"  Amp Command: {safe_command / self.goat_model.convert_joint_torque_to_motor_current(safe_command)}"
             )
             self._last_debug_print_time_sec = now_sec
         # 5. Publish torque command
