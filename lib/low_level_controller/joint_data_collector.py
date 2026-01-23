@@ -31,15 +31,17 @@ from lib.env.GOAT_base_env_cfg import GOAT_Cfg
 from lib.RRT.RRT_wrapper import RRTWrapper
 from lib.utils import Env
 
-# HIP_COL_FRI = 5.646268e-02
-# HIP_VIS_FRI = 3.190248e-02
-# TIGH_COL_FRI = 4.432008e-01
-# TIGH_VIS_FRI = 2.993308e-0
-
+<<<<<<< HEAD
+# HIP_COL_FRI = 0
+# HIP_VIS_FRI = 0
+# KNEE_COL_FRI = 0
+# KNEE_VIS_FRI = 0
+=======
 HIP_COL_FRI = 5.646268e-02
 HIP_VIS_FRI = 3.190248e-02
-KNEE_COL_FRI = 0
-KNEE_VIS_FRI = 0
+TIGH_COL_FRI = 4.432008e-01
+TIGH_VIS_FRI = 2.993308e-02
+>>>>>>> f4648517b1d10240ba57bc40cde866833df1a567
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -248,8 +250,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     #     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.248, 1.27]]),
     #                                    kd=torch.tensor([[0.01, 0.001, 0.001]]),
     # --- Initialize PD torque Controller ---
+<<<<<<< HEAD
     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
-                                   kd=torch.tensor([[0.1, 0.00, 0.001]]),
+                                   kd=torch.tensor([[0.01, 0.00, 0.001]]),
                                    num_envs=scene.num_envs,
                                    num_dof=leg_dof,
                                    device=scene.device,
