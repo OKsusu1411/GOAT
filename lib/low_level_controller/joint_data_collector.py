@@ -250,7 +250,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     #     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.248, 1.27]]),
     #                                    kd=torch.tensor([[0.01, 0.001, 0.001]]),
     # --- Initialize PD torque Controller ---
-<<<<<<< HEAD
+    
     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
                                    kd=torch.tensor([[0.01, 0.00, 0.001]]),
                                    num_envs=scene.num_envs,
