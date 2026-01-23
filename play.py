@@ -5,10 +5,8 @@ import argparse
 import torch
 import os
 
-# [중요] Isaac Sim 앱 실행기 (가장 먼저 임포트)
 from isaaclab.app import AppLauncher
 
-# 인자 파싱 (실행 시 checkpoint 경로를 받기 위함)
 parser = argparse.ArgumentParser(description="Play trained policy")
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to the saved .pt file")
 parser.add_argument("--task", type=str, default="GOAT-stand-v0", help="Name of the task.")
@@ -24,7 +22,6 @@ parser.add_argument("--algorithm",
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
-# GUI 모드로 실행 (headless=False)
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
@@ -42,7 +39,6 @@ from lib.wrapper.isaaclab_wrapper import IsaacLabWrapper
 algorithm = args_cli.algorithm.lower()
 
 def main():
-    # 1. 환경 설정 (Visual 모드)
     try:
         env_cfg = load_cfg_from_registry(args_cli.task, "env_cfg_entry_point")
         rl_cfg = load_cfg_from_registry(args_cli.task, f"rl_{algorithm}_cfg_entry_point")
@@ -55,9 +51,6 @@ def main():
 
     # wrap around environment
     env = IsaacLabWrapper(env)  
-
-    # [중요] 렌더링 활성화
-    # env_cfg.sim.render_interval = 1  # 매 스텝마다 렌더링
     
     model_cfg = rl_cfg["model"]
     agent_cfg = rl_cfg["agent"]

@@ -18,7 +18,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     ## ==================== Environment parameters ==================== ##
     episode_length_s = 10.0
     sim_dt = 0.005                              # 200Hz torque controller
-    decimation = 2                              # 100Hz policy
+    decimation = 4                              # 100Hz policy
     action_space = 8                            # [L + R, joint pos + wheel velocity]
     observation_space = 29                      # Observation space
     state_space = 41                            # Inclde privilege state information
@@ -28,7 +28,7 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     joint_kd=torch.tensor([[0.01, 0.01, 0.001]])
     wheel_kp=torch.tensor([[0.1]])
     wheel_ki=torch.tensor([[0.1]])
-    joint_action_weight = 15
+    joint_action_weight = 40
     wheel_action_weight = 35
     
     ## ==================== Robot configuration ==================== ##
@@ -70,14 +70,14 @@ class GOATPDStandEnvCfg(GOATBaseEnvCfg):
     curriculum_level_up_threshold = 0.8         # success rate
     curriculum_level_down_threshold = 0.2
 
-    r_upright_weight = 0.17
+    r_upright_weight = 0.00
     r_height_weight = 0.0
-    r_vel_lin_weight = 0.01
+    r_vel_lin_weight = 0.011
     r_vel_ang_weight = 0.01
     r_vel_joint_weight = 0.0
     r_effort_weight = 0.0
     r_terminated_weight = 0.0
-    r_alive_weight = 0.0
+    r_alive_weight = 0.00
 
     # Simulation
     sim: SimulationCfg = SimulationCfg(

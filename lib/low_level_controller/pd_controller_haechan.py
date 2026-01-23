@@ -28,7 +28,7 @@ from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG, CUBOID_MARKER_CFG
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from lib.env.GOAT_base_env_cfg import GOAT_Cfg
-from lib.RRT.RRT_wrapper import RRTWrapper
+# from lib.RRT.RRT_wrapper import RRTWrapper # (User Code Comment: 주석 처리되어 있거나 사용되지 않음)
 from lib.utils import Env
 
 HIP_COL_FRI = 5.646268e-02
@@ -39,6 +39,7 @@ HIP_VIS_FRI = 3.190248e-01
 # HIP_VIS_FRI = 0
 KNEE_COL_FRI = 0
 KNEE_VIS_FRI = 0
+
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
     """Design the scene for low-level torque control."""
@@ -248,7 +249,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                    dt=sim_dt)
 
     # ---------- Environment Initialization ----------
-    sim_len = 10.0  # [s] simulation length
+    sim_len = 50.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
     torque_limits = robot.data.joint_effort_limits
     default_joint_pos = robot.data.default_joint_pos.clone()
@@ -274,14 +275,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     lower_limits = joint_limits[:, :, 0]
     upper_limits = joint_limits[:, :, 1]
 
-    joint_pos_tmp = default_joint_pos.clone()
-    joint_pos_tmp[:, 0] -=  torch.pi/180*80.0
-    # joint_pos_tmp[:, 1] +=  torch.pi/180*50.0
-    # joint_pos_tmp[:, 2] +=  torch.pi/180*20.0
-    joint_pos_tmp[:, 3] -= torch.pi/180*80.0
-    # joint_pos_tmp[:, 4] += torch.pi/180*20.0
-    # joint_pos_tmp[:, 5] -= torch.pi/180*20.0
-    reference_angle = joint_pos_tmp
+    # Pre-calculate target poses (Path Targets)
+    pose_default = default_joint_pos.clone()
+    
+    pose_flexed = default_joint_pos.clone()
+    pose_flexed[:, 0] -=  torch.pi/180*80.0
+    # pose_flexed[:, 1] +=  torch.pi/180*50.0
+    # pose_flexed[:, 2] +=  torch.pi/180*20.0
+    pose_flexed[:, 3] -= torch.pi/180*80.0
+    # pose_flexed[:, 4] += torch.pi/180*20.0
+    # pose_flexed[:, 5] -= torch.pi/180*20.0
+    
+    # Initialize reference angle
+    reference_angle = pose_flexed.clone() # Start with flexed or use logic below
 
     robot.write_joint_state_to_sim(reference_angle, default_joint_vel)
     target_link_pose = robot.data.body_link_pose_w
@@ -310,8 +316,24 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
     log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
     log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+    
+    # Path generation variables
+    next_step_time = 3.0
 
     while t <= sim_len:
+        # ----------------------------------------
+        # [Modified Logic] Path Generation (Cumulative Step Input)
+        # 4초마다 현재 목표 각도에 20도씩 더해줍니다 (반복)
+        # ----------------------------------------
+        if t >= next_step_time:
+            increment_rad = torch.pi / 180 * -20.0
+            reference_angle[:, 0] += increment_rad  # L_hip
+            # reference_angle[:, 3] += increment_rad  # R_thigh
+            
+            print(f"[INFO] Time {t:.2f}s: Added 20 degrees to reference.")
+            next_step_time += 3.0
+        # ----------------------------------------
+
         # --------- Control ------------ #
         # State awareness
         joint_pos = robot.data.joint_pos
@@ -427,7 +449,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         ax.plot(log_t_np, log_q_np[:, i], label="actual")
         ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
         ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-        ax.axhline(reference_angle[0, i].cpu(), ls="--", label="optimal_angle", color="b")
+        # 여기서 reference_angle은 루프의 마지막 값만 남으므로 플롯엔 정확히 반영되지 않을 수 있음
+        # 만약 시간에 따른 ref 변화를 보고 싶다면 log_ref를 따로 저장해야 함.
+        # ax.axhline(reference_angle[0, i].cpu(), ls="--", label="optimal_angle", color="b") 
         ax.set_title(f"Joint Angle: {joint_name[i]}")
         ax.set_ylabel("angle [rad]")
         if i // n_cols == n_rows - 1:
