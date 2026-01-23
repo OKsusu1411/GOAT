@@ -393,7 +393,7 @@ class PPO(Agent):
             lambda_coefficient=self.cfg.lambda_coeff,
         )
 
-        self.memory.set_tensor_by_name("values", self.return_normalizer.normalize(values))
+        self.memory.set_tensor_by_name("values", self.return_normalizer.normalize(values, update=False))        # No distribution update by value func
         self.memory.set_tensor_by_name("returns", self.return_normalizer.normalize(returns))
         self.memory.set_tensor_by_name("advantages", advantages)
 

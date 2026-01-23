@@ -33,9 +33,9 @@ class RunningMeanStd(nn.Module):
         """
         Combine stats from another ``RunningMeanStd`` object.
         """
-        self._update_distrubution(other.mean, other.var, other.count)
+        self._update_distribution(other.mean, other.var, other.count)
 
-    def _update_distrubution(self, batch_mean: torch.Tensor, batch_var: torch.Tensor, batch_count: torch.Tensor) -> None:
+    def _update_distribution(self, batch_mean: torch.Tensor, batch_var: torch.Tensor, batch_count: torch.Tensor) -> None:
         """
         Updates internal stats based on external batch moments.
         """
@@ -55,12 +55,12 @@ class RunningMeanStd(nn.Module):
         self.var = new_var
         self.count = new_count
 
-    def normalize(self, x: torch.Tensor) -> None:
+    def normalize(self, x: torch.Tensor, update: bool = True) -> None:
         """
         Update the statistics with a new batch of data.
 
         :param x: Input tensor (batch_size, dims)
-        :param subtract_mean: Subtract mean True for value, False for reward
+        :param update: Boolean for update distribution
         """
         # Convert into tensor if it's not
         if not isinstance(x, torch.Tensor):
@@ -71,8 +71,9 @@ class RunningMeanStd(nn.Module):
         batch_mean = torch.mean(x, dim=0)
         batch_var = torch.var(x, dim=0, unbiased=False)
         batch_count = torch.tensor(x.shape[0], dtype=torch.float32, device=self.device)
-
-        self._update_distrubution(batch_mean, batch_var, batch_count)
+        
+        if update:
+            self._update_distribution(batch_mean, batch_var, batch_count)
 
         return (x - self.mean) / torch.sqrt(self.var + self.epsilon)
         
