@@ -20,7 +20,6 @@ class MotorTorqueLogViewer(Node):
     """
     Subscribe:  motor_torque_log (Float32MultiArray)
       - data (supported layouts):
-          (A) [q(rad) xN, dq(rad/s) xN, u(cmd) xN]                       => length = 3 * N
           (B) [q(rad) xN, dq(rad/s) xN, u(cmd) xN, ref xN]               => length = 4 * N
 
         where:
@@ -109,21 +108,18 @@ class MotorTorqueLogViewer(Node):
 
         vector = self.latest.vector
 
-        # Layout parsing (accept both 3N and 4N)
-        expected_3n = 3 * self.num_joints
+        # Layout parsing (ONLY accept 4N, 3N support removed)
         expected_4n = 4 * self.num_joints
-        if vector.size not in (expected_3n, expected_4n):
+        if vector.size != expected_4n:
             self.get_logger().warn(
-                f"log length mismatch: got {vector.size}, expected {expected_3n} (3N) or {expected_4n} (4N)"
+                f"log length mismatch: got {vector.size}, expected {expected_4n} (4N only)"
             )
             return
 
         joint_position_rad = vector[0 : self.num_joints]
         joint_velocity_rad_per_sec = vector[self.num_joints : 2 * self.num_joints]
         command_value = vector[2 * self.num_joints : 3 * self.num_joints]
-        ref_vector = None
-        if vector.size == expected_4n:
-            ref_vector = vector[3 * self.num_joints : 4 * self.num_joints]
+        ref_vector = vector[3 * self.num_joints : 4 * self.num_joints]
 
         if self.print_degrees:
             joint_position = np.rad2deg(joint_position_rad)
@@ -138,25 +134,24 @@ class MotorTorqueLogViewer(Node):
 
         command_unit = "Nm" if self.command_unit == "torque_nm" else "A"
 
-        # Print header periodically (with info line on the very top)
+        # Print header periodically
+        # info_line MUST be printed with the same cadence as header columns
         if (self._print_count % max(self.header_every, 1)) == 0:
             info_line = (
                 f"[topic='{self.log_topic}'] layout = "
                 f"[q({position_unit}) x{self.num_joints}, dq({velocity_unit}) x{self.num_joints}, "
-                f"u({command_unit}) x{self.num_joints}"
-                f"{', ref x'+str(self.num_joints) if ref_vector is not None else ''}]  "
+                f"u({command_unit}) x{self.num_joints}, ref x{self.num_joints}]  "
                 f"(print_rate={self.print_rate_hz:.1f}Hz, names_from_joint_state={self.use_joint_state_names})"
             )
+
             header_cols = [
                 f"{'idx':>3}",
                 f"{'name':<12}",
                 f"{('q[' + position_unit + ']'):>12}",
                 f"{('dq[' + velocity_unit + ']'):>12}",
                 f"{('u[' + command_unit + ']'):>12}",
+                f"{'ref':>12}",
             ]
-            if ref_vector is not None:
-                # ref is mixed semantics (position ref for joints, speed ref for wheels)
-                header_cols.append(f"{'ref':>12}")
 
             header = "  ".join(header_cols)
 
@@ -165,32 +160,15 @@ class MotorTorqueLogViewer(Node):
             self.get_logger().info("-" * len(header))
 
         # Print rows (batch: all joints in ONE log block)
-        if ref_vector is None:
-            fmt = (
-                f"{{:>3}}  {{:<12}}  "
-                f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
-            )
-        else:
-            fmt = (
-                f"{{:>3}}  {{:<12}}  "
-                f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
-            )
+        fmt = (
+            f"{{:>3}}  {{:<12}}  "
+            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  "
+            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+        )
 
         lines = []
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
-
-            if ref_vector is None:
-                lines.append(
-                    fmt.format(
-                        joint_index,
-                        name[:12],
-                        float(joint_position[joint_index]),
-                        float(joint_velocity[joint_index]),
-                        float(command_value[joint_index]),
-                    )
-                )
-                continue
 
             # ref: position ref for joints, speed ref for wheels
             ref_value = float(ref_vector[joint_index])
@@ -213,9 +191,7 @@ class MotorTorqueLogViewer(Node):
             )
 
         self.get_logger().info("\n" + "\n".join(lines))
-
         self._print_count += 1
-
 
 
 def main(args=None):
