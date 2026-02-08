@@ -43,15 +43,15 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            # --- existing scripts ---
-            'states_pub = goat_control.states_pub:main',
-            'torque_converter = goat_control.torque_converter:main',
-            'torque_test_publisher = goat_control.torque_test_publisher:main',
-            'motor_states_echo = goat_control.motor_states_echo:main',
-            'policy = goat_control.policy:main',
-            'pd_controller = goat_control.pd_controller:main',
-            'joint_torque_controller = goat_control.joint_torque_controller:main',
-            'data_logger = goat_control.data_logger:main',
+            # # --- existing scripts ---
+            # 'states_pub = goat_control.states_pub:main',
+            # 'torque_converter = goat_control.torque_converter:main',
+            # 'torque_test_publisher = goat_control.torque_test_publisher:main',
+            # 'motor_states_echo = goat_control.motor_states_echo:main',
+            # 'policy = goat_control.policy:main',
+            # 'pd_controller = goat_control.pd_controller:main',
+            # 'joint_torque_controller = goat_control.joint_torque_controller:main',
+            # 'data_logger = goat_control.data_logger:main',
 
             # --- NEW refactored ROS2 nodes ---
             'goat_control_node = goat_control.nodes.control_node:main',
