@@ -154,7 +154,7 @@ class MotorIONode(Node):
 
         # 3) Send torque command if fresh
         torque_cmd = self._latest_torque_cmd
-        torque_cmd = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # --- IGNORE ---
+
         if torque_cmd is None:
             return
 

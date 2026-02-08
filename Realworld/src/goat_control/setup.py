@@ -61,6 +61,7 @@ setup(
             'policy_node = goat_control.nodes.policy_node:main',
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',
+            'plot_node = goat_control.nodes.plot_node:main',
         ],
     },
 )

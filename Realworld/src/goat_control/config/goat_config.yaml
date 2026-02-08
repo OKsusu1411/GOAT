@@ -20,7 +20,7 @@ wheel_pi:
 
 safety:
   torque_lpf_alpha_per_joint: [0.951,0.951,0.951,0.951,0.951,0.951,0.951,0.951]
-  max_torque_per_joint: [4.5,0.001,4.5,0.001,4.5,0.001,4.5,4.5]
+  max_torque_per_joint: [0.001,0.001,4.5,0.001,0.001,0.001,4.5,4.5]
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125

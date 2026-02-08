@@ -17,7 +17,7 @@ from std_msgs.msg import Float32MultiArray
 NUM_ACTUATORS = 8
 JOINT_COUNT = 6  # 0~5
 WHEEL_COUNT = 2  # 6~7
-STEP = np.deg2rad(20.0)      # joint: deg, wheel: deg/s
+STEP = 20.0      # joint: deg, wheel: deg/s
 PUBLISH_HZ = 50.0
 TOPIC = "goat/action"
 

@@ -209,7 +209,7 @@ class GoatControlNode(Node):
                 f"  Joint Vel [rad/s]: {robot_state.joint_velocity_rad_per_sec}\n"
                 f"  Joint Effort-like: {robot_state.joint_effort_like}\n"
                 f"  Safe Command: {safe_command}"
-                f"  Amp Command: {safe_command / self.goat_model.convert_joint_torque_to_motor_current(safe_command)}"
+                f"  Amp Command: {self.goat_model.convert_joint_torque_to_motor_current(safe_command)}"
             )
             self._last_debug_print_time_sec = now_sec
         # 5. Publish torque command
