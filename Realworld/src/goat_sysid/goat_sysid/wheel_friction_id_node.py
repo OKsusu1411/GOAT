@@ -118,22 +118,22 @@ class WheelFrictionIdNode(Node):
         self.declare_parameter("profile", "plateau")
 
         # plateau profile
-        self.declare_parameter("speed_levels_rad_s", [1.0, 2.0, 4.0, 6.0])  # magnitudes
+        self.declare_parameter("speed_levels_rad_s", [20.0, 40.0, 60.0, 80.0, 100.0, 120.0])  # magnitudes
         self.declare_parameter("plateau_sec", 3.0)
         self.declare_parameter("rest_zero_sec", 1.0)
         self.declare_parameter("include_zero_between", True)
         self.declare_parameter("both_directions", True)  # + and - for each level
 
         # trapezoid profile
-        self.declare_parameter("w_max_rad_s", 8.0)
-        self.declare_parameter("accel_rad_s2", 8.0)
-        self.declare_parameter("hold_sec", 2.0)
-        self.declare_parameter("rest_sec", 1.0)
+        self.declare_parameter("w_max_rad_s", 200.0)
+        self.declare_parameter("accel_rad_s2", 30.0)
+        self.declare_parameter("hold_sec", 4.0)
+        self.declare_parameter("rest_sec", 6.0)
         self.declare_parameter("cycles", 1)  # number of (+ then -) cycles
 
         # total duration
         self.declare_parameter("duration_sec", 0.0)  # 0 => auto from profile
-        self.declare_parameter("settle_sec", 1.0)    # initial logging skip
+        self.declare_parameter("settle_sec", 5.0)    # initial logging skip
 
         # -----------------------------
         # Parameters (logging)
@@ -145,10 +145,10 @@ class WheelFrictionIdNode(Node):
         # Parameters (estimation)
         # -----------------------------
         self.declare_parameter("estimate_ls", True)
-        self.declare_parameter("estimate_mode", "fric_only")  # "fric_only" | "motor_only" | "full_joint"
+        self.declare_parameter("estimate_mode", "full_joint")  # "fric_only" | "motor_only" | "full_joint"
         self.declare_parameter("J_known", 0.0)                # used in motor_only
         self.declare_parameter("v_min_rad_s", 0.5)            # filter |omega| < v_min
-        self.declare_parameter("qdd_max_rad_s2", 0.5)         # used in fric_only (steady-state mask)
+        self.declare_parameter("qdd_max_rad_s2", 0.5)         # used in fric_codeonly (steady-state mask)
         self.declare_parameter("smooth_window", 5)
         self.declare_parameter("result_path", "")             # if empty, auto next to CSV
 
