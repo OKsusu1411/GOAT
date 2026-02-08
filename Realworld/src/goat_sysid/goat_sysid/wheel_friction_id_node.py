@@ -92,6 +92,11 @@ class WheelFrictionIdNode(Node):
       - fric_only:  tau ≈ a*omega + b*sign(omega), using steady-state samples (|qdd| small)
       - motor_only: tau* = tau - J_known*qdd; tau* ≈ a*omega + b*sign(omega)
       - full_joint: tau ≈ J*qdd + a*omega + b*sign(omega)
+
+    Excitation profiles:
+      - plateau: piecewise constant + optional zero rests + optional +/- directions
+      - trapezoid: 0 -> +wmax -> 0 -> -wmax -> 0 (repeat cycles)
+      - constant: keep a constant speed (deg/s input) for the whole duration (publishes continuously every tick)
     """
 
     def __init__(self) -> None:
@@ -116,22 +121,26 @@ class WheelFrictionIdNode(Node):
         # -----------------------------
         # Parameters (excitation profile)
         # -----------------------------
-        # profile: "plateau" or "trapezoid"
+        # profile: "plateau" or "trapezoid" or "constant"
         self.declare_parameter("profile", "plateau")
 
-        # plateau profile
-        self.declare_parameter("speed_levels_rad_s", [20.0, 40.0, 60.0, 80.0, 100.0, 120.0])  # magnitudes
+        # plateau profile (NOTE: values are rad/s)
+        self.declare_parameter("speed_levels_rad_s", [20.0, 40.0, 60.0, 80.0, 100.0, 120.0])  # magnitudes [rad/s]
         self.declare_parameter("plateau_sec", 3.0)
-        self.declare_parameter("rest_zero_sec", 1.0)
+        self.declare_parameter("rest_zero_sec", 3.0)
         self.declare_parameter("include_zero_between", True)
         self.declare_parameter("both_directions", True)
 
-        # trapezoid profile
+        # trapezoid profile (NOTE: rad/s and rad/s^2)
         self.declare_parameter("w_max_rad_s", 200.0)
         self.declare_parameter("accel_rad_s2", 30.0)
         self.declare_parameter("hold_sec", 4.0)
         self.declare_parameter("rest_sec", 6.0)
         self.declare_parameter("cycles", 1)  # number of (+ then -) cycles
+
+        # constant profile (INPUT IN deg/s, converted to rad/s internally)
+        self.declare_parameter("constant_speed_deg_s", 20.0)    # deg/s (what you asked)
+        self.declare_parameter("constant_duration_sec", 30.0)   # used when duration_sec==0
 
         # duration
         self.declare_parameter("duration_sec", 0.0)  # 0 => auto from profile
@@ -150,7 +159,7 @@ class WheelFrictionIdNode(Node):
         self.declare_parameter("estimate_mode", "full_joint")  # "fric_only" | "motor_only" | "full_joint"
         self.declare_parameter("J_known", 0.0)                # used in motor_only
         self.declare_parameter("v_min_rad_s", 0.5)            # filter |omega| < v_min
-        self.declare_parameter("qdd_max_rad_s2", 0.5)         # used in fric_codeonly (steady-state mask)
+        self.declare_parameter("qdd_max_rad_s2", 0.5)         # used in fric_only (steady-state mask)
         self.declare_parameter("smooth_window", 5)
         self.declare_parameter("result_path", "")
 
@@ -177,24 +186,33 @@ class WheelFrictionIdNode(Node):
 
         self.profile = str(self.get_parameter("profile").value).strip().lower()
 
+        # plateau
         self.speed_levels = [float(x) for x in list(self.get_parameter("speed_levels_rad_s").value)]
         self.plateau_sec = float(self.get_parameter("plateau_sec").value)
         self.rest_zero_sec = float(self.get_parameter("rest_zero_sec").value)
         self.include_zero_between = bool(self.get_parameter("include_zero_between").value)
         self.both_directions = bool(self.get_parameter("both_directions").value)
 
+        # trapezoid
         self.w_max = float(self.get_parameter("w_max_rad_s").value)
         self.accel = float(self.get_parameter("accel_rad_s2").value)
         self.hold_sec = float(self.get_parameter("hold_sec").value)
         self.rest_sec = float(self.get_parameter("rest_sec").value)
         self.cycles = int(self.get_parameter("cycles").value)
 
+        # constant
+        self.constant_speed_deg_s = float(self.get_parameter("constant_speed_deg_s").value)
+        self.constant_duration_sec = float(self.get_parameter("constant_duration_sec").value)
+
+        # duration & settle
         self.duration_sec_param = float(self.get_parameter("duration_sec").value)
         self.settle_sec = float(self.get_parameter("settle_sec").value)
 
+        # logging
         self.log_dir = Path(str(self.get_parameter("log_dir").value))
         self.log_filename = str(self.get_parameter("log_filename").value).strip()
 
+        # estimation
         self.estimate_ls = bool(self.get_parameter("estimate_ls").value)
         self.estimate_mode = str(self.get_parameter("estimate_mode").value).strip().lower()
         self.J_known = float(self.get_parameter("J_known").value)
@@ -241,6 +259,7 @@ class WheelFrictionIdNode(Node):
             f"  settle_sec: {self.settle_sec:.2f}s\n"
             f"  estimate_ls: {self.estimate_ls}, estimate_mode: {self.estimate_mode}\n"
             f"  v_min: {self.v_min:.3f} rad/s, qdd_max(fric_only): {self.qdd_max:.3f} rad/s^2, smooth_window: {self.smooth_window}\n"
+            f"  constant_speed_deg_s: {self.constant_speed_deg_s:.2f} deg/s (only if profile=constant)\n"
         )
 
     # -----------------------------
@@ -296,6 +315,7 @@ class WheelFrictionIdNode(Node):
         # else: keep zeros for joint refs
 
         # Set wheel speed refs for selected wheel indices
+        # IMPORTANT: This is published EVERY timer tick, so the speed is held continuously.
         w_ref = float(self.speed_ref.eval(t_sec))
         for wi in self.wheel_indices:
             action[wi] = w_ref
@@ -340,6 +360,8 @@ class WheelFrictionIdNode(Node):
             return self._build_plateau_ref()
         if self.profile == "trapezoid":
             return self._build_trapezoid_ref()
+        if self.profile == "constant":
+            return self._build_constant_ref()
         raise ValueError(f"Unknown profile: {self.profile}")
 
     def _build_plateau_ref(self) -> PiecewiseSpeedRef:
@@ -400,6 +422,43 @@ class WheelFrictionIdNode(Node):
                 add_const(self.rest_sec, 0.0)
 
         add_const(max(self.rest_sec, 0.5), 0.0)
+        return PiecewiseSpeedRef(pieces)
+
+    def _build_constant_ref(self) -> PiecewiseSpeedRef:
+        """
+        Constant speed reference:
+          - optional initial zero rest (rest_zero_sec)
+          - hold constant speed for the remaining time
+
+        Speed input is given in deg/s (constant_speed_deg_s), converted to rad/s.
+        Duration:
+          - if duration_sec > 0: use duration_sec
+          - else: use constant_duration_sec
+        """
+        pieces: List[RefPiece] = []
+        t = 0.0
+
+        def add_const(dt: float, w: float):
+            nonlocal t, pieces
+            dt = max(float(dt), 0.0)
+            pieces.append(RefPiece(t0=t, t1=t + dt, kind="const", w0=w, w1=w))
+            t += dt
+
+        # Convert deg/s -> rad/s
+        w_const = float(np.deg2rad(self.constant_speed_deg_s))
+
+        # Decide total duration for this profile
+        total = self.duration_sec_param if self.duration_sec_param > 0.0 else self.constant_duration_sec
+        total = max(float(total), 0.1)
+
+        # Optional rest at 0
+        if self.rest_zero_sec > 0.0:
+            add_const(min(self.rest_zero_sec, total), 0.0)
+
+        # Hold constant for the remaining time
+        remain = max(total - t, 0.1)
+        add_const(remain, w_const)
+
         return PiecewiseSpeedRef(pieces)
 
     # -----------------------------
@@ -498,7 +557,9 @@ class WheelFrictionIdNode(Node):
                 a_hat, b_hat = float(theta[0]), float(theta[1])
                 rmse = float(np.sqrt(np.mean((Phi @ theta - y) ** 2)))
 
-                out_lines.append(f"  wheel {wi} (fric_only): a={a_hat:.6e}, b={b_hat:.6e}, rmse={rmse:.4g}, used={y.size}/{len(t)}")
+                out_lines.append(
+                    f"  wheel {wi} (fric_only): a={a_hat:.6e}, b={b_hat:.6e}, rmse={rmse:.4g}, used={y.size}/{len(t)}"
+                )
                 yaml_lines.append(f"  wheel_{wi}:")
                 yaml_lines.append(f"    a_hat_nm_per_rad_s: {a_hat:.12f}")
                 yaml_lines.append(f"    b_hat_nm: {b_hat:.12f}")
@@ -519,7 +580,9 @@ class WheelFrictionIdNode(Node):
                 a_hat, b_hat = float(theta[0]), float(theta[1])
                 rmse = float(np.sqrt(np.mean((Phi @ theta - tau_star) ** 2)))
 
-                out_lines.append(f"  wheel {wi} (motor_only): J_known={self.J_known:.3e}, a={a_hat:.6e}, b={b_hat:.6e}, rmse={rmse:.4g}, used={int(mask.sum())}/{len(t)}")
+                out_lines.append(
+                    f"  wheel {wi} (motor_only): J_known={self.J_known:.3e}, a={a_hat:.6e}, b={b_hat:.6e}, rmse={rmse:.4g}, used={int(mask.sum())}/{len(t)}"
+                )
                 yaml_lines.append(f"  wheel_{wi}:")
                 yaml_lines.append(f"    J_known_nm_per_rad_s2: {float(self.J_known):.12f}")
                 yaml_lines.append(f"    a_hat_nm_per_rad_s: {a_hat:.12f}")
@@ -541,7 +604,9 @@ class WheelFrictionIdNode(Node):
                 J_hat, a_hat, b_hat = float(theta[0]), float(theta[1]), float(theta[2])
                 rmse = float(np.sqrt(np.mean((Phi @ theta - y) ** 2)))
 
-                out_lines.append(f"  wheel {wi} (full_joint): J={J_hat:.6e}, a={a_hat:.6e}, b={b_hat:.6e}, rmse={rmse:.4g}, used={int(mask.sum())}/{len(t)}")
+                out_lines.append(
+                    f"  wheel {wi} (full_joint): J={J_hat:.6e}, a={a_hat:.6e}, b={b_hat:.6e}, rmse={rmse:.4g}, used={int(mask.sum())}/{len(t)}"
+                )
                 yaml_lines.append(f"  wheel_{wi}:")
                 yaml_lines.append(f"    J_hat_nm_per_rad_s2: {J_hat:.12f}")
                 yaml_lines.append(f"    a_hat_nm_per_rad_s: {a_hat:.12f}")
