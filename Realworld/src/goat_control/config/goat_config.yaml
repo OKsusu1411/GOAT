@@ -5,12 +5,18 @@ robot:
 #  knee_indices: [2,5]
 
   motor_torque_constant_nm_per_amp: [0.2616,0.2616,0.2616,0.2616,0.2616,0.2616,0.2478,0.2478]
-  motor_gear_ratio: [1,1,1,1,0.5,2,1,1]
-  motor_direction: [1,1,1,1,1,1,1,-1]
+  motor_gear_ratio: [1,1,1,1,0.5,0.5,1,1]
+  motor_direction: [1,1,1,1,1,1,1,1]
 
 pd:
-  proportional_gain: [0.300,0.300,0.270,0.270,0.7000,1.4000,0.0,0.0]
-  derivative_gain:   [0.015,0.015,0.010,0.010,0.0001,0.0001,0.0,0.0]
+  proportional_gain: [0.300,0.300,
+                      0.270,0.270,
+                      0.350,0.350,
+                      0.0,0.0]
+  derivative_gain:   [0.015,0.015,
+                      0.010,0.010,
+                      0.018,0.018,
+                      0.0,0.0]
 
 wheel_pi:
   proportional_gain: [0.0,0.0,0.0,0.0,0.0,0.0,0.02600,0.02600]
@@ -20,7 +26,10 @@ wheel_pi:
 
 safety:
   torque_lpf_alpha_per_joint: [0.951,0.951,0.951,0.951,0.951,0.951,0.951,0.951]
-  max_torque_per_joint: [0.001,0.001,4.5,0.001,0.001,0.001,4.5,4.5]
+  max_torque_per_joint: [ 0.001,0.001,
+                          4.500,4.500, 
+                          4.500,4.500,
+                          4.500,4.500]
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125
