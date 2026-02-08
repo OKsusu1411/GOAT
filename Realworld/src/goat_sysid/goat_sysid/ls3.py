@@ -15,6 +15,19 @@ DynamicFrictionSysID로 뽑은 CSV 로그를 이용해서
     - 그래프: dq vs tau (data + fit)
 """
 
+'''
+python3 fit_joint_sysid_plot.py \
+  --csv /path/to/log.csv \
+  --mode full_joint \
+  --vmin 5 \
+  --smooth 21 \
+  --loss ransac \
+  --save_fig full_joint_2d.png \
+  --save_fig3d full_joint_3d.png \
+  --save_fig_fric full_joint_fric_only.png
+
+'''
+
 import argparse
 import os
 import numpy as np
