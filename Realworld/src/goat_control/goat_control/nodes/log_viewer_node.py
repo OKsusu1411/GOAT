@@ -134,16 +134,8 @@ class MotorTorqueLogViewer(Node):
 
         command_unit = "Nm" if self.command_unit == "torque_nm" else "A"
 
-        # Print header periodically
-        # info_line MUST be printed with the same cadence as header columns
+        # Print header periodically (info_line removed)
         if (self._print_count % max(self.header_every, 1)) == 0:
-            info_line = (
-                f"[topic='{self.log_topic}'] layout = "
-                f"[q({position_unit}) x{self.num_joints}, dq({velocity_unit}) x{self.num_joints}, "
-                f"u({command_unit}) x{self.num_joints}, ref x{self.num_joints}]  "
-                f"(print_rate={self.print_rate_hz:.1f}Hz, names_from_joint_state={self.use_joint_state_names})"
-            )
-
             header_cols = [
                 f"{'idx':>3}",
                 f"{'name':<12}",
@@ -155,7 +147,6 @@ class MotorTorqueLogViewer(Node):
 
             header = "  ".join(header_cols)
 
-            self.get_logger().info(info_line)
             self.get_logger().info(header)
             self.get_logger().info("-" * len(header))
 
