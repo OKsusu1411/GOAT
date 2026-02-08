@@ -64,7 +64,7 @@ class FrictionIdNode(Node):
         # Parameters (excitation)
         # -----------------------------
         self.declare_parameter("amplitude_deg", 30.0)
-        self.declare_parameter("frequency_hz", 0.5)
+        self.declare_parameter("frequency_hz", 50)
         self.declare_parameter("offset_deg", 0.0)
         self.declare_parameter("publish_rate_hz", 200.0)
         self.declare_parameter("duration_sec", 60.0)
