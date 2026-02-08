@@ -134,7 +134,16 @@ class MotorTorqueLogViewer(Node):
 
         command_unit = "Nm" if self.command_unit == "torque_nm" else "A"
 
-        # Print header periodically (info_line removed)
+        # Print rows (batch: all joints in ONE log block)
+        fmt = (
+            f"{{:>3}}  {{:<12}}  "
+            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  "
+            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+        )
+
+        block_lines = []
+
+        # Print header periodically (header + separator + rows printed in ONE log call)
         if (self._print_count % max(self.header_every, 1)) == 0:
             header_cols = [
                 f"{'idx':>3}",
@@ -144,20 +153,10 @@ class MotorTorqueLogViewer(Node):
                 f"{('u[' + command_unit + ']'):>12}",
                 f"{'ref':>12}",
             ]
-
             header = "  ".join(header_cols)
+            block_lines.append(header)
+            block_lines.append("-" * len(header))
 
-            self.get_logger().info(header)
-            self.get_logger().info("-" * len(header))
-
-        # Print rows (batch: all joints in ONE log block)
-        fmt = (
-            f"{{:>3}}  {{:<12}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
-        )
-
-        lines = []
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
@@ -170,7 +169,7 @@ class MotorTorqueLogViewer(Node):
                 # joint ref is position
                 ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
 
-            lines.append(
+            block_lines.append(
                 fmt.format(
                     joint_index,
                     name[:12],
@@ -181,7 +180,8 @@ class MotorTorqueLogViewer(Node):
                 )
             )
 
-        self.get_logger().info("\n" + "\n".join(lines))
+        # Single log emission: header/separator (optional) + rows (always)
+        self.get_logger().info("\n".join(block_lines))
         self._print_count += 1
 
 
