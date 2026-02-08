@@ -141,22 +141,7 @@ class MotorTorqueLogViewer(Node):
             f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
         )
 
-        block_lines = []
-
-        # Print header periodically (header + separator + rows printed in ONE log call)
-        if (self._print_count % max(self.header_every, 1)) == 0:
-            header_cols = [
-                f"{'idx':>3}",
-                f"{'name':<12}",
-                f"{('q[' + position_unit + ']'):>12}",
-                f"{('dq[' + velocity_unit + ']'):>12}",
-                f"{('u[' + command_unit + ']'):>12}",
-                f"{'ref':>12}",
-            ]
-            header = "  ".join(header_cols)
-            block_lines.append(header)
-            block_lines.append("-" * len(header))
-
+        lines = []
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
@@ -169,7 +154,7 @@ class MotorTorqueLogViewer(Node):
                 # joint ref is position
                 ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
 
-            block_lines.append(
+            lines.append(
                 fmt.format(
                     joint_index,
                     name[:12],
@@ -180,8 +165,8 @@ class MotorTorqueLogViewer(Node):
                 )
             )
 
-        # Single log emission: header/separator (optional) + rows (always)
-        self.get_logger().info("\n".join(block_lines))
+        # Leading newline: print one line below the logger prefix ([INFO] ...)
+        self.get_logger().info("\n" + "\n".join(lines))
         self._print_count += 1
 
 
