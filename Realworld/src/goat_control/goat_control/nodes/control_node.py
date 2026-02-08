@@ -221,14 +221,38 @@ class GoatControlNode(Node):
         
     def _decode_action_to_targets(self, action_msg: Float32MultiArray) -> Tuple[np.ndarray, np.ndarray]:
         action_array = np.asarray(action_msg.data, dtype=float).flatten()
+
         desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
         desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
 
-        if action_array.size >= self.num_joints:
-            desired_joint_position_rad[:] = action_array[:self.num_joints]
-        if action_array.size >= (2 * self.num_joints):
-            desired_wheel_speed_rad_per_sec[:] = action_array[self.num_joints: 2 * self.num_joints]
-        
+        joint_indices = [int(i) for i in self.goat_model.joint_indices]
+        wheel_indices = [int(i) for i in self.goat_model.wheel_indices]
+
+        expected_len = len(joint_indices) + len(wheel_indices)
+
+        # compact(8) 포맷만 지원
+        if action_array.size != expected_len:
+            # 로그 스팸 방지: 최초 1회만 경고
+            if not hasattr(self, "_warned_action_len"):
+                self._warned_action_len = False
+            if not self._warned_action_len:
+                self.get_logger().warn(
+                    f"Action length mismatch: expected {expected_len} (=len(joint_indices)+len(wheel_indices)), "
+                    f"got {action_array.size}. Using default targets."
+                )
+                self._warned_action_len = True
+            return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
+
+        # 1) joint targets: action[0:len(joint_indices)]
+        if len(joint_indices) > 0:
+            ji = np.asarray(joint_indices, dtype=int)
+            desired_joint_position_rad[ji] = action_array[: len(joint_indices)]
+
+        # 2) wheel speed targets: action[len(joint_indices):]
+        if len(wheel_indices) > 0:
+            wi = np.asarray(wheel_indices, dtype=int)
+            desired_wheel_speed_rad_per_sec[wi] = action_array[len(joint_indices) : expected_len]
+
         return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
 
     def _publish_torque_command(self, safe_command: np.ndarray):
