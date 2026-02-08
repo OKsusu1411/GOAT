@@ -125,16 +125,16 @@ class WheelFrictionIdNode(Node):
         self.declare_parameter("profile", "plateau")
 
         # plateau profile (NOTE: values are rad/s)
-        self.declare_parameter("speed_levels_rad_s", [20.0, 40.0, 60.0, 80.0, 100.0, 120.0])  # magnitudes [rad/s]
-        self.declare_parameter("plateau_sec", 3.0)
+        self.declare_parameter("speed_levels_rad_s", [np.deg2rad(20.0), np.deg2rad(40.0), np.deg2rad(60.0), np.deg2rad(80.0), np.deg2rad(100.0), np.deg2rad(120.0)])  # magnitudes [rad/s]
+        self.declare_parameter("plateau_sec", 10.0)
         self.declare_parameter("rest_zero_sec", 3.0)
         self.declare_parameter("include_zero_between", True)
         self.declare_parameter("both_directions", True)
 
         # trapezoid profile (NOTE: rad/s and rad/s^2)
-        self.declare_parameter("w_max_rad_s", 200.0)
-        self.declare_parameter("accel_rad_s2", 30.0)
-        self.declare_parameter("hold_sec", 4.0)
+        self.declare_parameter("w_max_rad_s", np.deg2rad(200.0))
+        self.declare_parameter("accel_rad_s2", np.deg2rad(30.0))
+        self.declare_parameter("hold_sec", 10.0)
         self.declare_parameter("rest_sec", 6.0)
         self.declare_parameter("cycles", 1)  # number of (+ then -) cycles
 

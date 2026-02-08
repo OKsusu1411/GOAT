@@ -1,0 +1,18 @@
+mode: full_joint
+units:
+  omega: rad/s
+  qdd: rad/s^2
+  tau: Nm
+results:
+  wheel_6:
+- full_joint: tau ≈ J*qdd + a*omega + b*sign(omega)
+    J_hat_nm_per_rad_s2: 0.014520340117
+    a_hat_nm_per_rad_s: 0.016407771606
+    b_hat_nm: 0.033301143468
+    rmse_nm: 0.030707256012
+    used_samples: 19851
+    total_samples: 31372
+urdf_hint:
+  # Very rough mapping to <dynamics>:
+  #   damping  ~= a_hat
+  #   friction ~= b_hat

@@ -54,7 +54,7 @@ class FrictionIdNode(Node):
         # Parameters (topics / sizes)
         # -----------------------------
         self.declare_parameter("num_joints", 8)
-        self.declare_parameter("joint_index", 0)
+        self.declare_parameter("joint_index", 6)
         self.declare_parameter("joint_name", "")  # optional
         self.declare_parameter("action_topic", "goat/action")
         self.declare_parameter("joint_states_topic", "joint_states")
@@ -64,9 +64,9 @@ class FrictionIdNode(Node):
         # Parameters (excitation)
         # -----------------------------
         self.declare_parameter("amplitude_deg", 30.0)
-        self.declare_parameter("frequency_hz", 50)
+        self.declare_parameter("frequency_hz", 0.3)
         self.declare_parameter("offset_deg", 0.0)
-        self.declare_parameter("publish_rate_hz", 200.0)
+        self.declare_parameter("publish_rate_hz", 50.0)
         self.declare_parameter("duration_sec", 60.0)
         self.declare_parameter("settle_sec", 1.0)
         self.declare_parameter("use_initial_positions", True)

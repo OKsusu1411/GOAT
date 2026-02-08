@@ -29,6 +29,7 @@ setup(
             'friction_id_node = goat_sysid.friction_id_node:main',
             'wheel_step_sysid = goat_sysid.wheel_step_sysid:main',
             'step_trajectory_publisher = goat_sysid.step_trajectory_publisher:main',
+            'wheel_friction_id = goat_sysid.wheel_friction_id_node:main',
         ],
     },
 )
