@@ -1,18 +1,37 @@
+'''
+ GOAT robot configuration file
+'''
+
 robot:
-  joint_names: ["hip_L","hip_R","thigh_L","thigh_R","knee_L","knee_R","wheel_L","wheel_R"]
+  joint_names: ["hip_L","hip_R",
+                "thigh_L","thigh_R",
+                "knee_L","knee_R",
+                "wheel_L","wheel_R"]
+
   joint_indices: [0,1,2,3,4,5]
   wheel_indices: [6,7]
-#  knee_indices: [2,5]
 
-  motor_torque_constant_nm_per_amp: [0.2616,0.2616,0.2616,0.2616,0.2616,0.2616,0.2478,0.2478]
-  motor_gear_ratio: [1,1,1,1,0.5,0.5,1,1]
-  motor_direction: [1,1,1,1,1,1,1,1]
+  motor_torque_constant_nm_per_amp: [0.2616,0.2616,
+                                     0.2616,0.2616,
+                                     0.2616,0.2616,
+                                     0.2478,0.2478]
+
+  motor_gear_ratio: [1,1,
+                     1,1,
+                     0.5,0.5,
+                     1,1]
+                     
+  motor_direction: [1,1,
+                    1,1,
+                    1,1,
+                    1,1]
 
 pd:
   proportional_gain: [0.300,0.300,
                       0.270,0.270,
                       0.350,0.350,
                       0.0,0.0]
+
   derivative_gain:   [0.015,0.015,
                       0.010,0.010,
                       0.018,0.018,
@@ -21,19 +40,29 @@ pd:
 wheel_pi:
   proportional_gain: [0.0,0.0,0.0,0.0,0.0,0.0,
                       0.170,0.02600]
+
   integral_gain:     [0.0,0.0,0.0,0.0,0.0,0.0,
                       0.15,0.01183]
+
   integrator_state_limit: 3.0
+
   output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,4.5,4.5]
 
 safety:
-  torque_lpf_alpha_per_joint: [0.951,0.951,0.951,0.951,0.951,0.951,0.951,0.951]
-  max_torque_per_joint: [ 0.001,0.001,
-                          0.001,0.001, 
-                          0.001,0.001,
-                          4.5,0.001]
+  torque_lpf_alpha_per_joint: [0.951,0.951,
+                               0.951,0.951,
+                               0.951,0.951,
+                               0.951,0.951]
+
+  max_torque_per_joint: [0.001,0.001,
+                         0.001,0.001, 
+                         0.001,0.001,
+                         4.5,0.001]
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125
+
   angle_deg_per_lsb: 0.001
+
   speed_deg_per_sec_per_lsb: 0.01
+
