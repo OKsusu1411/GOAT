@@ -2,22 +2,38 @@
 """
 ls_wheel_version.py
 
-Wheel SysID CSV format:
+Wheel SysID CSV (format):
   t_sec, wheel_index, omega_ref_rad_s, omega_meas_rad_s, tau_cmd_nm
 
 Modes
 -----
-- motor_only:
-    tau* = tau - J_motor * omega_dot
-    tau* = a * omega + b * sign(omega)
-- full_wheel:
-    tau  = J * omega_dot + a * omega + b * sign(omega)
+1) motor_only:
+   - Assume known motor inertia J_motor
+   - tau* = tau - J_motor * omega_dot
+   - tau* = a * omega + b * sign(omega)
+   - Plot: omega (deg/s) vs tau* (data + fit)
 
-Display
--------
-- 기본: 화면에 그래프 창 띄움 (plt.show)
-- 저장도 원하면 --save_fig / --save_fig3d / --save_fig_fric 사용
+2) full_wheel:
+   - Fit tau = J * omega_dot + a * omega + b * sign(omega)
+   - Plot: omega (deg/s) vs tau (data + fit)
+   - Optional plots:
+       * friction-only: omega vs (tau - J*omega_dot)
+       * 3D: omega (deg/s), omega_dot (rad/s^2), tau
 """
+
+'''
+python3 /home/heachanlee/GOAT/GOAT/Realworld/src/goat_sysid/goat_sysid/ls_wheel_version.py \
+  --csv /home/heachanlee/GOAT/GOAT/Realworld/src/goat_sysid/goat_sysid/wheel_sysid_w6_20260208_213837.csv \
+  --mode full_wheel \
+  --vmin_deg_s 0.3 \
+  --smooth 21 \
+  --loss l2 \
+  --save_fig wheel_full_2d.png \
+  --save_fig3d wheel_full_3d.png \
+  --save_fig_fric wheel_full_fric_only.png
+
+'''
+
 
 import argparse
 import os
@@ -31,7 +47,20 @@ except Exception:
     _HAS_CVXPY = False
 
 
+# -----------------------
+# IO
+# -----------------------
 def load_wheel_log(csv_path: str, wheel_index: int | None = None):
+    """
+    Read wheel sysid CSV.
+
+    Required columns:
+      - t_sec
+      - wheel_index
+      - omega_ref_rad_s
+      - omega_meas_rad_s
+      - tau_cmd_nm
+    """
     data = np.genfromtxt(csv_path, delimiter=",", names=True, dtype=None, encoding="utf-8")
 
     required = ["t_sec", "wheel_index", "omega_ref_rad_s", "omega_meas_rad_s", "tau_cmd_nm"]
@@ -40,27 +69,46 @@ def load_wheel_log(csv_path: str, wheel_index: int | None = None):
             raise ValueError(f"CSV 컬럼 '{k}'가 없습니다. 실제 컬럼: {data.dtype.names}")
 
     t = np.asarray(data["t_sec"], dtype=float)
-    w_idx = np.asarray(data["wheel_index"], dtype=float).astype(int)
+    w_idx = np.asarray(data["wheel_index"], dtype=float)
     omega_ref = np.asarray(data["omega_ref_rad_s"], dtype=float)
     omega_meas = np.asarray(data["omega_meas_rad_s"], dtype=float)
     tau = np.asarray(data["tau_cmd_nm"], dtype=float)
 
-    uniq = np.unique(w_idx)
+    # wheel_index 필터
+    uniq = np.unique(w_idx.astype(int))
     if wheel_index is None:
+        # 여러 개가 있으면 첫 번째를 자동 선택
         wheel_index = int(uniq[0])
         if len(uniq) > 1:
-            print(f"[load] wheel_index가 여러 개: {uniq}. 자동으로 {wheel_index} 사용 (--wheel_index로 지정 가능)")
+            print(f"[load] wheel_index가 여러 개 있습니다: {uniq}. "
+                  f"자동으로 {wheel_index}를 사용합니다. (--wheel_index로 지정 가능)")
     else:
         wheel_index = int(wheel_index)
 
-    mask = (w_idx == wheel_index)
-    if mask.sum() == 0:
-        raise RuntimeError(f"[load] wheel_index={wheel_index} 데이터가 0개. CSV wheel_index: {uniq}")
+    mask = (w_idx.astype(int) == wheel_index)
+    t = t[mask]
+    omega_ref = omega_ref[mask]
+    omega_meas = omega_meas[mask]
+    tau = tau[mask]
 
-    return t[mask], wheel_index, omega_ref[mask], omega_meas[mask], tau[mask]
+    if t.size == 0:
+        raise RuntimeError(f"[load] wheel_index={wheel_index}에 해당하는 데이터가 0개입니다. "
+                           f"CSV에 있는 wheel_index: {uniq}")
+
+    return t, wheel_index, omega_ref, omega_meas, tau
 
 
+# -----------------------
+# Signal processing
+# -----------------------
 def compute_omega_and_accel(t, omega_rad_s, smooth_window: int = 1):
+    """
+    omega_rad_s -> (optional moving average) -> omega_dot via np.gradient(t)
+
+    Return:
+      omega_filt (rad/s)
+      omega_dot  (rad/s^2)
+    """
     omega = np.asarray(omega_rad_s, dtype=float)
 
     if smooth_window > 1:
@@ -73,47 +121,70 @@ def compute_omega_and_accel(t, omega_rad_s, smooth_window: int = 1):
     return omega_f, omega_dot
 
 
+# -----------------------
+# Robust solvers
+# -----------------------
 def solve_l1_cvxpy(Phi, y, verbose=False):
     if not _HAS_CVXPY:
-        raise RuntimeError("cvxpy 미설치. `pip install cvxpy ecos scs` 후 --loss l1_cvx 사용")
+        raise RuntimeError("cvxpy가 설치되어 있지 않습니다. `pip install cvxpy ecos scs` 후 --loss l1_cvx 사용하세요.")
 
     Phi = np.asarray(Phi, dtype=float)
     y = np.asarray(y, dtype=float).reshape(-1)
 
-    p = Phi.shape[1]
+    n, p = Phi.shape
     theta = cp.Variable(p)
-    prob = cp.Problem(cp.Minimize(cp.norm1(Phi @ theta - y)))
+    obj = cp.Minimize(cp.norm1(Phi @ theta - y))
+    prob = cp.Problem(obj)
     prob.solve(verbose=verbose)
 
     if theta.value is None:
-        raise RuntimeError("[cvxpy] 최적해 실패(theta.value None)")
+        raise RuntimeError("[cvxpy] 최적해를 찾지 못했습니다(theta.value is None).")
+
     return np.array(theta.value).reshape(-1)
 
 
-def irls_l1(Phi, y, max_iter=30, eps=1e-6):
+def irls_l1(Phi, y, max_iter=30, eps=1e-6, verbose=False):
+    """
+    L1 근사 IRLS:
+      반복적으로 w_i = 1/(|r_i|+eps) 로 두고 가중 least squares 수행
+    """
     Phi = np.asarray(Phi, dtype=float)
     y = np.asarray(y, dtype=float).reshape(-1)
 
     theta, *_ = np.linalg.lstsq(Phi, y, rcond=None)
 
-    for _ in range(max_iter):
+    for it in range(max_iter):
         r = y - Phi @ theta
-        w = 1.0 / (np.abs(r) + eps)
-        sw = np.sqrt(w)
-        Phi_w = Phi * sw[:, None]
-        y_w = y * sw
+        w = 1.0 / (np.abs(r) + eps)  # 큰 residual에 작은 가중
+        sqrtw = np.sqrt(w)
+
+        Phi_w = Phi * sqrtw[:, None]
+        y_w = y * sqrtw
+
         theta_new, *_ = np.linalg.lstsq(Phi_w, y_w, rcond=None)
 
         if np.linalg.norm(theta_new - theta) < 1e-10:
             theta = theta_new
             break
+
         theta = theta_new
+
+        if verbose:
+            print(f"[IRLS] iter={it+1}, |dtheta|={np.linalg.norm(theta_new-theta):.3e}")
 
     return theta
 
 
-def ransac_linear(Phi, y, n_iter=500, sample_size=None, residual_threshold=None,
-                  min_inlier_ratio=0.3, random_state=0, verbose=True):
+def ransac_linear(Phi, y,
+                  n_iter=500,
+                  sample_size=None,
+                  residual_threshold=None,
+                  min_inlier_ratio=0.5,
+                  random_state=0,
+                  verbose=False):
+    """
+    Simple RANSAC for linear regression y ~= Phi @ theta
+    """
     Phi = np.asarray(Phi, dtype=float)
     y = np.asarray(y, dtype=float).reshape(-1)
     N, p = Phi.shape
@@ -134,7 +205,10 @@ def ransac_linear(Phi, y, n_iter=500, sample_size=None, residual_threshold=None,
 
     for _ in range(n_iter):
         idx = rng.choice(N, size=sample_size, replace=False)
-        theta_tmp, *_ = np.linalg.lstsq(Phi[idx], y[idx], rcond=None)
+        Phi_s = Phi[idx]
+        y_s = y[idx]
+
+        theta_tmp, *_ = np.linalg.lstsq(Phi_s, y_s, rcond=None)
 
         resid = y - Phi @ theta_tmp
         inlier_mask = np.abs(resid) <= residual_threshold
@@ -142,11 +216,13 @@ def ransac_linear(Phi, y, n_iter=500, sample_size=None, residual_threshold=None,
 
         if n_in > best_inliers and n_in >= int(min_inlier_ratio * N):
             best_inliers = n_in
-            best_theta, *_ = np.linalg.lstsq(Phi[inlier_mask], y[inlier_mask], rcond=None)
+            Phi_in = Phi[inlier_mask]
+            y_in = y[inlier_mask]
+            best_theta, *_ = np.linalg.lstsq(Phi_in, y_in, rcond=None)
 
     if best_theta is None:
         if verbose:
-            print("[RANSAC] 실패 -> 전체 LS로 대체")
+            print("[RANSAC] 유효 모델 실패 -> 전체 LS로 대체")
         best_theta, *_ = np.linalg.lstsq(Phi, y, rcond=None)
         best_inliers = N
 
@@ -161,205 +237,229 @@ def solve_by_loss(Phi, y, loss: str):
         theta, *_ = np.linalg.lstsq(Phi, y, rcond=None)
         return theta
     if loss == "l1_cvx":
-        return solve_l1_cvxpy(Phi, y)
+        return solve_l1_cvxpy(Phi, y, verbose=False)
     if loss == "l1_irls":
-        return irls_l1(Phi, y)
+        return irls_l1(Phi, y, max_iter=30, eps=1e-6, verbose=False)
     if loss == "ransac":
-        return ransac_linear(Phi, y)
+        return ransac_linear(Phi, y, n_iter=500, min_inlier_ratio=0.3, random_state=0, verbose=True)
     raise ValueError(f"Unknown loss: {loss}")
 
 
-def fit_motor_only(t, omega_meas_rad_s, tau, J_motor, vmin_rad_s, smooth_window, loss):
-    omega_f, omega_dot = compute_omega_and_accel(t, omega_meas_rad_s, smooth_window)
+# -----------------------
+# Fitters
+# -----------------------
+def fit_motor_only(t, omega_meas_rad_s, tau, J_motor,
+                   vmin_rad_s=0.1, smooth_window=1, loss="l2"):
+    omega_f, omega_dot = compute_omega_and_accel(t, omega_meas_rad_s, smooth_window=smooth_window)
     tau_star = tau - J_motor * omega_dot
 
     mask = np.abs(omega_f) >= vmin_rad_s
-    omega_u = omega_f[mask]
-    omega_dot_u = omega_dot[mask]
-    tau_u = tau_star[mask]
+    omega_used = omega_f[mask]
+    tau_used = tau_star[mask]
 
-    if omega_u.size < 10:
-        raise RuntimeError(f"[motor_only] 유효 샘플 10개 미만: {omega_u.size} (vmin={vmin_rad_s:.4g} rad/s)")
+    if omega_used.size < 10:
+        raise RuntimeError(f"[motor_only] 유효 샘플이 너무 적습니다: {omega_used.size}개 (vmin={vmin_rad_s:.4g} rad/s)")
 
-    Phi = np.column_stack([omega_u, np.sign(omega_u)])
-    a_hat, b_hat = solve_by_loss(Phi, tau_u, loss)
-    return a_hat, b_hat, omega_u, omega_dot_u, tau_u
+    Phi = np.column_stack([omega_used, np.sign(omega_used)])
+    theta = solve_by_loss(Phi, tau_used, loss)
+    a_hat, b_hat = theta[0], theta[1]
+    return a_hat, b_hat, omega_used, omega_dot[mask], tau_used
 
 
-def fit_full_wheel(t, omega_meas_rad_s, tau, vmin_rad_s, smooth_window, loss):
-    omega_f, omega_dot = compute_omega_and_accel(t, omega_meas_rad_s, smooth_window)
+def fit_full_wheel(t, omega_meas_rad_s, tau,
+                  vmin_rad_s=0.1, smooth_window=1, loss="l2"):
+    omega_f, omega_dot = compute_omega_and_accel(t, omega_meas_rad_s, smooth_window=smooth_window)
 
     mask = np.abs(omega_f) >= vmin_rad_s
-    omega_u = omega_f[mask]
-    omega_dot_u = omega_dot[mask]
-    tau_u = tau[mask]
+    omega_used = omega_f[mask]
+    omega_dot_used = omega_dot[mask]
+    tau_used = tau[mask]
 
-    if omega_u.size < 10:
-        raise RuntimeError(f"[full_wheel] 유효 샘플 10개 미만: {omega_u.size} (vmin={vmin_rad_s:.4g} rad/s)")
+    if omega_used.size < 10:
+        raise RuntimeError(f"[full_wheel] 유효 샘플이 너무 적습니다: {omega_used.size}개 (vmin={vmin_rad_s:.4g} rad/s)")
 
-    Phi = np.column_stack([omega_dot_u, omega_u, np.sign(omega_u)])
-    J_hat, a_hat, b_hat = solve_by_loss(Phi, tau_u, loss)
-    return J_hat, a_hat, b_hat, omega_u, omega_dot_u, tau_u
+    Phi = np.column_stack([omega_dot_used, omega_used, np.sign(omega_used)])
+    theta = solve_by_loss(Phi, tau_used, loss)
+    J_hat, a_hat, b_hat = theta[0], theta[1], theta[2]
+    return J_hat, a_hat, b_hat, omega_used, omega_dot_used, tau_used
 
 
-def plot_2d(omega_u, y_data, y_fit, title, save_fig=None):
-    omega_deg = np.rad2deg(omega_u)
-    idx = np.argsort(omega_deg)
+# -----------------------
+# Plots
+# -----------------------
+def plot_2d(omega_used_rad_s, y_data, y_fit, title, save_fig=None):
+    omega_deg_s = np.rad2deg(omega_used_rad_s)
+
+    idx = np.argsort(omega_deg_s)
+    x_line = omega_deg_s[idx]
+    y_line = y_fit[idx]
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    ax.scatter(omega_deg, y_data, s=4, alpha=0.3, label="data")
-    ax.plot(omega_deg[idx], y_fit[idx], linewidth=2, label="fit")
-    ax.set_xlabel("omega (deg/s)")
-    ax.set_ylabel("tau (N*m)")
-    ax.set_title(title)
+    ax.scatter(omega_deg_s, y_data, s=4, alpha=0.3, label="data")
+    ax.plot(x_line, y_line, linewidth=2, label="fit")
+
+    ax.set_xlabel("wheel speed omega (deg/s)", fontsize=12)
+    ax.set_ylabel("torque (N*m)", fontsize=12)
+    ax.set_title(title, fontsize=14)
     ax.grid(True)
-    ax.legend()
+    ax.legend(fontsize=10)
     fig.tight_layout()
 
-    if save_fig:
-        fig.savefig(save_fig, dpi=300)
+    if save_fig is not None:
+        fig.savefig(save_fig, dpi=800)
         print(f"[save] {save_fig}")
 
-    return fig
 
-
-def plot_3d(omega_u, omega_dot_u, tau_u, J_hat, a_hat, b_hat, save_fig3d=None):
-    omega_deg = np.rad2deg(omega_u)
+def plot_full_wheel_3d(omega_used_rad_s, omega_dot_used, tau_used,
+                       J_hat, a_hat, b_hat, save_fig3d=None, title_extra=""):
+    omega_deg_s = np.rad2deg(omega_used_rad_s)
+    tau_hat = J_hat * omega_dot_used + a_hat * omega_used_rad_s + b_hat * np.sign(omega_used_rad_s)
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
-    ax.scatter(omega_deg, omega_dot_u, tau_u, s=4, alpha=0.3)
+    ax.scatter(omega_deg_s, omega_dot_used, tau_used, s=4, alpha=0.3)
 
-    o_min, o_max = omega_deg.min(), omega_deg.max()
-    od_min, od_max = omega_dot_u.min(), omega_dot_u.max()
+    # surface
+    o_min, o_max = omega_deg_s.min(), omega_deg_s.max()
+    od_min, od_max = omega_dot_used.min(), omega_dot_used.max()
 
     og, odg = np.meshgrid(np.linspace(o_min, o_max, 30),
                           np.linspace(od_min, od_max, 30))
     og_rad = np.deg2rad(og)
     tg = J_hat * odg + a_hat * og_rad + b_hat * np.sign(og_rad)
 
-    ax.plot_surface(og, odg, tg, alpha=0.35)
+    ax.plot_surface(og, odg, tg, alpha=0.4)
+
     ax.set_xlabel("omega (deg/s)")
     ax.set_ylabel("omega_dot (rad/s^2)")
     ax.set_zlabel("tau (N*m)")
-    ax.set_title("3D: tau ≈ J*omega_dot + a*omega + b*sign(omega)")
-    fig.tight_layout()
+    ax.set_title("full_wheel 3D: tau ≈ J*omega_dot + a*omega + b*sign(omega)" + title_extra)
 
-    if save_fig3d:
-        fig.savefig(save_fig3d, dpi=300)
+    fig.tight_layout()
+    if save_fig3d is not None:
+        fig.savefig(save_fig3d, dpi=800)
         print(f"[save] {save_fig3d}")
 
-    return fig
 
-
+# -----------------------
+# Main
+# -----------------------
 def main():
-    parser = argparse.ArgumentParser(description="Wheel SysID + interactive plot viewer")
+    parser = argparse.ArgumentParser(description="Wheel SysID (J, a, b) from wheel CSV + plots")
 
-    parser.add_argument("--csv", type=str, required=True)
-    parser.add_argument("--wheel_index", type=int, default=None)
+    parser.add_argument("--csv", type=str, required=True, help="wheel sysid CSV path")
+    parser.add_argument("--wheel_index", type=int, default=None,
+                        help="CSV에 wheel_index가 여러개면 선택. 없으면 자동 선택")
 
-    parser.add_argument("--mode", choices=["motor_only", "full_wheel"], default="full_wheel")
+    parser.add_argument("--mode", type=str, choices=["motor_only", "full_wheel"],
+                        default="full_wheel", help="fit mode")
 
-    # vmin: deg/s 입력을 기본으로 제공
-    parser.add_argument("--vmin_deg_s", type=float, default=2.0)
+    # vmin: deg/s 기반 입력을 기본으로 제공(너가 이전에 쓰던 스타일)
+    parser.add_argument("--vmin_deg_s", type=float, default=2.0,
+                        help="|omega| < vmin 샘플 제거 (deg/s). 기본 2.0")
     parser.add_argument("--vmin_rad_s", type=float, default=None,
-                        help="이걸 주면 vmin_deg_s 무시")
+                        help="|omega| < vmin 샘플 제거 (rad/s). 지정하면 vmin_deg_s 무시")
 
-    parser.add_argument("--smooth", type=int, default=21)
-    parser.add_argument("--J_motor", type=float, default=None)
+    parser.add_argument("--smooth", type=int, default=21,
+                        help="moving average window (samples). 1이면 스무딩 없음")
 
-    parser.add_argument("--loss", choices=["l2", "l1_cvx", "l1_irls", "ransac"], default="l2")
+    parser.add_argument("--J_motor", type=float, default=None,
+                        help="motor_only 모드에서 사용할 J_motor [N*m / (rad/s^2)]")
 
-    # 저장 옵션 (원하면만)
-    parser.add_argument("--save_fig", type=str, default=None)
-    parser.add_argument("--save_fig3d", type=str, default=None)
-    parser.add_argument("--save_fig_fric", type=str, default=None)
+    parser.add_argument("--loss", type=str, choices=["l2", "l1_cvx", "l1_irls", "ransac"],
+                        default="l2", help="regression loss")
 
-    # ✅ 화면 표시 옵션
-    parser.add_argument("--show", action="store_true",
-                        help="그래프 창을 띄워서 보기 (기본 권장)")
-    parser.add_argument("--no_show", action="store_true",
-                        help="그래프 창을 띄우지 않음(저장만 할 때)")
+    parser.add_argument("--save_fig", type=str, default=None, help="2D plot output (.png)")
+    parser.add_argument("--save_fig3d", type=str, default=None, help="3D plot output (.png)")
+    parser.add_argument("--save_fig_fric", type=str, default=None,
+                        help="full_wheel에서 (tau - J*omega_dot) vs omega 저장")
 
     args = parser.parse_args()
 
     if not os.path.exists(args.csv):
-        raise FileNotFoundError(args.csv)
+        raise FileNotFoundError(f"CSV not found: {args.csv}")
 
-    t, widx, omega_ref, omega_meas, tau = load_wheel_log(args.csv, args.wheel_index)
-    print(f"[SYSID] CSV={args.csv}")
+    t, widx, omega_ref, omega_meas, tau = load_wheel_log(args.csv, wheel_index=args.wheel_index)
+    print(f"[SYSID] CSV 로드: {args.csv}")
     print(f"[SYSID] wheel_index={widx}, samples={len(t)}")
     print(f"[SYSID] mode={args.mode}, smooth={args.smooth}, loss={args.loss}")
 
     if args.vmin_rad_s is not None:
         vmin_rad_s = float(args.vmin_rad_s)
+        vmin_deg_s = np.rad2deg(vmin_rad_s)
     else:
-        vmin_rad_s = np.deg2rad(float(args.vmin_deg_s))
-    print(f"[SYSID] vmin={np.rad2deg(vmin_rad_s):.3g} deg/s ({vmin_rad_s:.3g} rad/s)")
+        vmin_deg_s = float(args.vmin_deg_s)
+        vmin_rad_s = np.deg2rad(vmin_deg_s)
 
-    figs = []
+    print(f"[SYSID] vmin = {vmin_deg_s:.3g} deg/s ({vmin_rad_s:.3g} rad/s)")
 
     if args.mode == "motor_only":
         if args.J_motor is None:
-            raise ValueError("--mode motor_only이면 --J_motor 필수")
-        a_hat, b_hat, omega_u, omega_dot_u, tau_star_u = fit_motor_only(
+            raise ValueError("--mode motor_only 사용 시 --J_motor 가 필요합니다.")
+        a_hat, b_hat, omega_used, omega_dot_used, tau_star_used = fit_motor_only(
             t, omega_meas, tau,
-            J_motor=float(args.J_motor),
+            J_motor=args.J_motor,
             vmin_rad_s=vmin_rad_s,
             smooth_window=args.smooth,
             loss=args.loss
         )
-        print("\n===== motor_only =====")
-        print(f"a_hat ≈ {a_hat:.6e} [N*m/(rad/s)]")
-        print(f"b_hat ≈ {b_hat:.6e} [N*m]")
-        print(f"used samples = {omega_u.size}")
+        print("\n===== motor_only 결과 =====")
+        print(f"a_hat (viscous) ≈ {a_hat:.6e} [N*m / (rad/s)]")
+        print(f"b_hat (coulomb) ≈ {b_hat:.6e} [N*m]")
+        print(f"used samples = {omega_used.size}")
 
-        tau_fit = a_hat * omega_u + b_hat * np.sign(omega_u)
-        figs.append(plot_2d(
-            omega_u, tau_star_u, tau_fit,
-            "motor_only: tau* ≈ a*omega + b*sign(omega)",
-            save_fig=args.save_fig
-        ))
+        # plot
+        if args.save_fig:
+            # y_fit
+            tau_fit = a_hat * omega_used + b_hat * np.sign(omega_used)
+            plot_2d(
+                omega_used, tau_star_used, tau_fit,
+                title="motor_only: tau* ≈ a*omega + b*sign(omega)",
+                save_fig=args.save_fig
+            )
 
-    else:  # full_wheel
-        J_hat, a_hat, b_hat, omega_u, omega_dot_u, tau_u = fit_full_wheel(
+    elif args.mode == "full_wheel":
+        J_hat, a_hat, b_hat, omega_used, omega_dot_used, tau_used = fit_full_wheel(
             t, omega_meas, tau,
             vmin_rad_s=vmin_rad_s,
             smooth_window=args.smooth,
             loss=args.loss
         )
-        print("\n===== full_wheel =====")
-        print(f"J_hat ≈ {J_hat:.6e} [N*m/(rad/s^2)]")
-        print(f"a_hat ≈ {a_hat:.6e} [N*m/(rad/s)]")
-        print(f"b_hat ≈ {b_hat:.6e} [N*m]")
-        print(f"used samples = {omega_u.size}")
+        print("\n===== full_wheel 결과 =====")
+        print(f"J_hat (equiv inertia) ≈ {J_hat:.6e} [N*m / (rad/s^2)]")
+        print(f"a_hat (viscous)       ≈ {a_hat:.6e} [N*m / (rad/s)]")
+        print(f"b_hat (coulomb)       ≈ {b_hat:.6e} [N*m]")
+        print(f"used samples = {omega_used.size}")
 
-        tau_hat = J_hat * omega_dot_u + a_hat * omega_u + b_hat * np.sign(omega_u)
-        figs.append(plot_2d(
-            omega_u, tau_u, tau_hat,
-            "full_wheel: tau ≈ J*omega_dot + a*omega + b*sign(omega)",
-            save_fig=args.save_fig
-        ))
+        # 2D: omega vs tau
+        if args.save_fig:
+            tau_hat = J_hat * omega_dot_used + a_hat * omega_used + b_hat * np.sign(omega_used)
+            plot_2d(
+                omega_used, tau_used, tau_hat,
+                title="full_wheel: tau ≈ J*omega_dot + a*omega + b*sign(omega)",
+                save_fig=args.save_fig
+            )
 
-        if args.save_fig3d is not None or args.show:
-            figs.append(plot_3d(
-                omega_u, omega_dot_u, tau_u,
+        # 3D
+        if args.save_fig3d:
+            plot_full_wheel_3d(
+                omega_used, omega_dot_used, tau_used,
                 J_hat, a_hat, b_hat,
                 save_fig3d=args.save_fig3d
-            ))
+            )
 
-        if args.save_fig_fric is not None or args.show:
-            tau_fric = tau_u - J_hat * omega_dot_u
-            tau_fric_fit = a_hat * omega_u + b_hat * np.sign(omega_u)
-            figs.append(plot_2d(
-                omega_u, tau_fric, tau_fric_fit,
-                "friction only: (tau - J*omega_dot) vs omega",
+        # friction-only: tau - J*omega_dot vs omega
+        if args.save_fig_fric:
+            tau_fric = tau_used - J_hat * omega_dot_used
+            tau_fric_fit = a_hat * omega_used + b_hat * np.sign(omega_used)
+            plot_2d(
+                omega_used, tau_fric, tau_fric_fit,
+                title="friction only: (tau - J*omega_dot) vs omega",
                 save_fig=args.save_fig_fric
-            ))
+            )
 
-    # ✅ 화면 표시
-    if (args.show and not args.no_show) or (not args.no_show and not (args.save_fig or args.save_fig3d or args.save_fig_fric)):
-        plt.show()
+    else:
+        raise ValueError(f"Unknown mode: {args.mode}")
 
 
 if __name__ == "__main__":
