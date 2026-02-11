@@ -30,7 +30,7 @@ class PolicyNode(Node):
         self.policy_model = self._load_policy(self.policy_checkpoint, self.policy_device)
         self._last_inference_error_log_time_sec = 0.0
 
-        action_frequency_param = float(self.declare_parameter("action_frequency", 50.0).value)
+        action_frequency_param = float(self.declare_parameter("action_frequency", 100.0).value)
 
         # Compatibility: interpret <=1.0 as period(sec), >1.0 as frequency(Hz)
         if action_frequency_param <= 1.0:

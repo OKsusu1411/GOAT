@@ -16,15 +16,16 @@ DynamicFrictionSysID로 뽑은 CSV 로그를 이용해서
 """
 
 '''
-python3 fit_joint_sysid_plot.py \
-  --csv /path/to/log.csv \
+python3 /home/heachanlee/GOAT/GOAT/Realworld/src/goat_sysid/goat_sysid/ls3.py \
+  --csv /home/heachanlee/GOAT/GOAT/Realworld/src/goat_sysid/goat_sysid/sysid_joint4_20260208_200748.csv \
   --mode full_joint \
-  --vmin 5 \
+  --vmin 2 \
   --smooth 21 \
-  --loss ransac \
+  --loss l2 \
   --save_fig full_joint_2d.png \
   --save_fig3d full_joint_3d.png \
   --save_fig_fric full_joint_fric_only.png
+
 
 '''
 
@@ -38,17 +39,27 @@ from mpl_toolkits.mplot3d import Axes3D  # 파일 맨 위에 없으면 추가
 
 def load_log(csv_path):
     """
-    CSV 포맷 (DynamicFrictionSysID 기준):
+    현재 CSV 포맷 (너가 올린 파일 기준):
+      t_sec, q_ref_rad, q_meas_rad, dq_meas_rad_s, tau_cmd_nm
 
-    t, q_ref_deg, q_meas_deg, dq_meas_deg_per_s, tau_cmd
+    내부 로직이 deg/s 기반(vmin, plot 등)이라
+    여기서 rad -> deg 로 변환해서 반환한다.
     """
-    data = np.loadtxt(csv_path, delimiter=",", skiprows=1)
-    t = data[:, 0]
-    q_ref = data[:, 1]
-    q_meas_deg = data[:, 2]
-    dq_meas_deg = data[:, 3]
-    tau = data[:, 4]
-    return t, q_ref, q_meas_deg, dq_meas_deg*0.01, tau
+    data = np.genfromtxt(csv_path, delimiter=",", names=True)
+
+    required = ["t_sec", "q_ref_rad", "q_meas_rad", "dq_meas_rad_s", "tau_cmd_nm"]
+    for k in required:
+        if k not in data.dtype.names:
+            raise ValueError(f"CSV 컬럼 '{k}' 가 없습니다. 실제 컬럼: {data.dtype.names}")
+
+    t = data["t_sec"]
+    q_ref_deg = np.rad2deg(data["q_ref_rad"])
+    q_meas_deg = np.rad2deg(data["q_meas_rad"])
+    dq_deg = np.rad2deg(data["dq_meas_rad_s"])     # ✅ rad/s -> deg/s
+    tau = data["tau_cmd_nm"]                       # ✅ N*m 그대로
+
+    return t, q_ref_deg, q_meas_deg, dq_deg, tau
+
 
 
 def compute_vel_accel_rad(t, dq_deg, smooth_window=1):

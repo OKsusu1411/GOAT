@@ -40,7 +40,7 @@ DEFAULT_WHEEL_SPEED_UNIT = "deg_s"            # "rad_s", "deg_s", "rpm"
 # Plot window / rates
 DEFAULT_HISTORY_SEC = 10.0
 DEFAULT_EXPECTED_LOG_HZ = 200.0
-DEFAULT_PLOT_RATE_HZ = 30.0
+DEFAULT_PLOT_RATE_HZ = 100.0
 DEFAULT_AUTOSCALE_Y = True
 
 
