@@ -1,6 +1,4 @@
-'''
- GOAT robot configuration file
-'''
+# GOAT robot configuration file
 
 robot:
   joint_names: ["hip_L","hip_R",
