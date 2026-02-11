@@ -12,6 +12,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(geometry_msgs REQUIRED)  
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/MotorStates.msg"
   "msg/BaseStates.msg"
   DEPENDENCIES std_msgs
   DEPENDENCIES std_msgs geometry_msgs  

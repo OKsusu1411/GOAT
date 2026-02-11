@@ -28,7 +28,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='heachanlee',
+    maintainer='haechanlee',
     maintainer_email='eojin333c@gmail.com',
     description='GOAT ROS2 control package (refactored core + nodes)',
     license='TODO: License declaration',
