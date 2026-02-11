@@ -42,7 +42,10 @@ class MotorTorqueLogViewer(Node):
         self.declare_parameter("num_joints", 8)
         self.declare_parameter(
             "joint_names",
-            ["hip_L", "hip_R", "thigh_L", "thigh_R", "knee_L", "knee_R", "wheel_L", "wheel_R"]
+            ["hip_L_Joint",  "hip_R_Joint",
+             "thigh_L_Joint","thigh_R_Joint",
+             "knee_L_Joint", "knee_R_Joint",
+             "wheel_L_Joint","wheel_R_Joint",]
         )
 
         # For nicer ref printing (ref is position for joints, speed for wheels)
