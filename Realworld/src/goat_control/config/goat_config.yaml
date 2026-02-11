@@ -1,10 +1,10 @@
 # GOAT robot configuration file
 
 robot:
-  joint_names: ["hip_L","hip_R",
-                "thigh_L","thigh_R",
-                "knee_L","knee_R",
-                "wheel_L","wheel_R"]
+  joint_names: ['hip_L_Joint',   'hip_R_Joint',
+            'thigh_L_Joint', 'thigh_R_Joint',
+            'knee_L_Joint',  'knee_R_Joint',
+            'wheel_L_Joint', 'wheel_R_Joint']
 
   joint_indices: [0,1,2,3,4,5]
   wheel_indices: [6,7]
