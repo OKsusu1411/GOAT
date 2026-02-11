@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 # =========================
 # Defaults (edit here)
 # =========================
-DEFAULT_LOG_TOPIC = "motor_torque_log"
+DEFAULT_LOG_TOPIC = "goat/torque_log"
 DEFAULT_JOINT_STATE_TOPIC = "joint_states"
 DEFAULT_USE_JOINT_STATE_NAMES = True
 
@@ -52,7 +52,7 @@ class LatestLog:
 
 class MotorLogPlotter(Node):
     """
-    Subscribes: motor_torque_log (Float32MultiArray)
+    Subscribes: goat/torque_log (Float32MultiArray)
       layout:
         (A) [q xN, dq xN, u xN]         => 3N
         (B) [q xN, dq xN, u xN, ref xN] => 4N (ref는 여기서는 무시)

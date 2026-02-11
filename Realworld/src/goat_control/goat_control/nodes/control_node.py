@@ -27,7 +27,7 @@ class LatestBuffers:
 class GoatControlNode(Node):
     """
     Main control loop node.
-    - Subscribes to robot state (joint_states, imu_data) and policy actions.
+    - Subscribes to robot state (joint_states, goat/imu_data) and policy actions.
     - Computes control commands using the core control pipeline.
     - Publishes the final torque command.
     - Publishes observation and debug topics.
@@ -41,10 +41,10 @@ class GoatControlNode(Node):
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("debug_print_period_sec", 0.2)
-        self.declare_parameter("log_topic", "motor_torque_log")
+        self.declare_parameter("log_topic", "goat/torque_log")
         self.declare_parameter("policy_action", "goat/action")
         self.declare_parameter("observation_topic", "goat/observation")
-        self.declare_parameter("torque_command_topic", "torque_commands")
+        self.declare_parameter("torque_command_topic", "goat/torque_commands")
 
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -65,11 +65,11 @@ class GoatControlNode(Node):
             JointState, "joint_states", self._on_joint_state_msg, 10
         )
         self.imu_subscriber = self.create_subscription(
-            BaseStates, "imu_data", self._on_imu_msg, 10
+            BaseStates, "/goat/imu_data", self._on_imu_msg, 10
         )
-        self.observation_publisher = self.create_publisher(
-            Float32MultiArray, observation_topic, 10
-        )
+        # self.observation_publisher = self.create_publisher(
+        #     Float32MultiArray, observation_topic, 10
+        # )
         self.motor_torque_log_publisher = self.create_publisher(
             Float32MultiArray, log_topic, 10
         )

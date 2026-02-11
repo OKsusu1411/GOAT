@@ -115,7 +115,7 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(LaunchConfiguration("launch_log_viewer")),
         parameters=[{
-            "log_topic": "motor_torque_log",
+            "log_topic": "goat/torque_log",
             "joint_state_topic": "joint_states",
             "use_joint_state_names": True,
             "print_rate_hz": LaunchConfiguration("print_rate_hz"),

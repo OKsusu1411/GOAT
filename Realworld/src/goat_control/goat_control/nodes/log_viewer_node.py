@@ -18,7 +18,7 @@ class LatestLog:
 
 class MotorTorqueLogViewer(Node):
     """
-    Subscribe:  motor_torque_log (Float32MultiArray)
+    Subscribe:  goat/torque_log (Float32MultiArray)
       - data (supported layouts):
           (B) [q(rad) xN, dq(rad/s) xN, u(cmd) xN, ref xN]               => length = 4 * N
 
@@ -32,10 +32,10 @@ class MotorTorqueLogViewer(Node):
     """
 
     def __init__(self):
-        super().__init__("motor_torque_log_viewer")
+        super().__init__("torque_log_viewer")
 
         # Params
-        self.declare_parameter("log_topic", "motor_torque_log")
+        self.declare_parameter("log_topic", "goat/torque_log")
         self.declare_parameter("joint_state_topic", "joint_states")
         self.declare_parameter("use_joint_state_names", True)
 

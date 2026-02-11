@@ -39,7 +39,7 @@ class MotorCommandNode(Node):
         self.declare_parameter("can_channel", "can0")
         self.declare_parameter("can_interface", "socketcan")
         self.declare_parameter("motor_node_ids", [1, 2, 3, 4, 5, 6, 7, 8])
-        self.declare_parameter("torque_command_topic", "torque_commands")
+        self.declare_parameter("torque_command_topic", "goat/torque_commands")
         self.declare_parameter("yaml_path", "goat_config.yaml")
 
         can_channel = str(self.get_parameter("can_channel").value)

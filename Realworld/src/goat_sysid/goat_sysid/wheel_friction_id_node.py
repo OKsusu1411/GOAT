@@ -83,7 +83,7 @@ class WheelFrictionIdNode(Node):
 
     Subscribes:
       - /joint_states: uses JointState.velocity[wheel_index] as measured omega (rad/s)
-      - /torque_commands: uses Float32MultiArray.data[wheel_index] as commanded torque
+      - /goat/torque_commands: uses Float32MultiArray.data[wheel_index] as commanded torque
 
     Logs CSV:
       t_sec, wheel_index, omega_ref_rad_s, omega_meas_rad_s, tau_cmd_nm
@@ -110,7 +110,7 @@ class WheelFrictionIdNode(Node):
         self.declare_parameter("wheel_start_index", 6)       # 6 means 0..5 are joints, 6..7 are wheels (speed)
         self.declare_parameter("action_topic", "goat/action")
         self.declare_parameter("joint_states_topic", "joint_states")
-        self.declare_parameter("torque_commands_topic", "torque_commands")
+        self.declare_parameter("torque_commands_topic", "goat/torque_commands")
 
         # -----------------------------
         # Parameters (publishing)

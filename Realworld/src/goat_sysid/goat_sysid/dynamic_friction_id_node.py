@@ -31,7 +31,7 @@ class FrictionIdNode(Node):
     This node:
       - Publishes a sine position target to goat_control via `goat/action`
       - Subscribes to `joint_states` for measured q, dq
-      - Subscribes to `torque_commands` for commanded torque tau
+      - Subscribes to `goat/torque_commands` for commanded torque tau
       - Logs {t, q_ref, q_meas, dq_meas, tau_cmd} to CSV
       - Optionally estimates friction parameters using LS with acceleration term:
 
@@ -58,7 +58,7 @@ class FrictionIdNode(Node):
         self.declare_parameter("joint_name", "")  # optional
         self.declare_parameter("action_topic", "goat/action")
         self.declare_parameter("joint_states_topic", "joint_states")
-        self.declare_parameter("torque_commands_topic", "torque_commands")
+        self.declare_parameter("torque_commands_topic", "goat/torque_commands")
 
         # -----------------------------
         # Parameters (excitation)
@@ -94,7 +94,7 @@ class FrictionIdNode(Node):
 
         self.action_topic = str(self.get_parameter("action_topic").value)
         self.joint_states_topic = str(self.get_parameter("joint_states_topic").value)
-        self.torque_commands_topic = str(self.get_parameter("torque_commands_topic").value)
+        self.torque_commands_topic = str(self.get_parameter("goat/torque_commands_topic").value)
 
         amp_deg = float(self.get_parameter("amplitude_deg").value)
         freq_hz = float(self.get_parameter("frequency_hz").value)

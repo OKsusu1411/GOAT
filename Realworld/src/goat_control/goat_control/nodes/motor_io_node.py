@@ -23,7 +23,7 @@ class MotorIONode(Node):
     """Single CAN owner node for real hardware.
 
     - Reads motor states from CAN and publishes `joint_states`.
-    - Subscribes `torque_commands` (Nm per joint) and sends motor current commands.
+    - Subscribes `goat/torque_commands` (Nm per joint) and sends motor current commands.
 
     This replaces the previous pattern:
       StateEstimationNode (CAN read) + MotorCommandNode (CAN write)
@@ -40,7 +40,7 @@ class MotorIONode(Node):
         self.declare_parameter("yaml_path", "goat_config.yaml")
 
         self.declare_parameter("io_rate_hz", 200.0)
-        self.declare_parameter("torque_command_topic", "torque_commands")
+        self.declare_parameter("torque_command_topic", "goat/torque_commands")
         self.declare_parameter("joint_state_topic", "joint_states")
 
         # Safety / timing

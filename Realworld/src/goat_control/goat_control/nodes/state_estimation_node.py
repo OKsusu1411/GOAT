@@ -20,7 +20,7 @@ class StateEstimationNode(Node):
 
     With the new structure:
       - MotorIONode owns CAN (read+write) and publishes `joint_states`.
-      - StateEstimationNode owns IMU serial and publishes `imu_data`.
+      - StateEstimationNode owns IMU serial and publishes `goat/imu_data`.
     """
 
     def __init__(self):
@@ -38,7 +38,7 @@ class StateEstimationNode(Node):
         imu_timeout = float(self.get_parameter("imu_timeout").value)
 
         # Publisher
-        self.imu_publisher = self.create_publisher(BaseStates, "imu_data", 10)
+        self.imu_publisher = self.create_publisher(BaseStates, "/goat/imu_data", 10)
 
         # IMU Reader
         imu_config = ImuConfig(port=imu_port, baudrate=imu_baudrate, timeout=imu_timeout)
@@ -50,7 +50,7 @@ class StateEstimationNode(Node):
         self.estimation_timer = self.create_timer(estimation_period_sec, self._tick)
 
         self.get_logger().info(
-            "StateEstimationNode started (IMU-only). Publishing 'imu_data'. "
+            "StateEstimationNode started (IMU-only). Publishing 'goat/imu_data'. "
             "Motor states are published by MotorIONode."
         )
 

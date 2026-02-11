@@ -9,10 +9,10 @@
 
 사용 토픽 (friction_id_node.py와 동일 계열)
   - Sub:  joint_states (sensor_msgs/JointState)  : q, dq
-  - Pub:  torque_commands (std_msgs/Float32MultiArray) : tau_cmd (Nm)
+  - Pub:  goat/torque_commands (std_msgs/Float32MultiArray) : tau_cmd (Nm)
 
 주의
-  - `torque_commands`는 보통 goat_control 쪽에서도 publish 할 수 있으니,
+  - `goat/torque_commands`는 보통 goat_control 쪽에서도 publish 할 수 있으니,
     실험할 땐 **다른 publisher가 같은 토픽을 동시에 publish 하지 않도록**(컨트롤 노드 정지 등)
     환경을 정리해 주세요.
 """
@@ -46,7 +46,7 @@ class BreakawayTorqueTester(Node):
         self.declare_parameter("joint_index", JOINT_INDEX)
         self.declare_parameter("joint_name", "")  # optional
         self.declare_parameter("joint_states_topic", "joint_states")
-        self.declare_parameter("torque_commands_topic", "torque_commands")
+        self.declare_parameter("torque_commands_topic", "goat/torque_commands")
 
         self.num_joints = int(self.get_parameter("num_joints").value)
         self.joint_index_param = int(self.get_parameter("joint_index").value)
