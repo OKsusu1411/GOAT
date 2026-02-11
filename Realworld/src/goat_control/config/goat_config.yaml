@@ -19,17 +19,19 @@ pd:
                       0.0,0.0]
 
 wheel_pi:
-  proportional_gain: [0.0,0.0,0.0,0.0,0.0,0.0,0.02600,0.02600]
-  integral_gain:     [0.0,0.0,0.0,0.0,0.0,0.0,0.01183,0.01183]
+  proportional_gain: [0.0,0.0,0.0,0.0,0.0,0.0,
+                      0.170,0.02600]
+  integral_gain:     [0.0,0.0,0.0,0.0,0.0,0.0,
+                      0.15,0.01183]
   integrator_state_limit: 3.0
   output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,4.5,4.5]
 
 safety:
   torque_lpf_alpha_per_joint: [0.951,0.951,0.951,0.951,0.951,0.951,0.951,0.951]
   max_torque_per_joint: [ 0.001,0.001,
-                          4.500,4.500, 
-                          4.500,4.500,
-                          4.500,4.500]
+                          0.001,0.001, 
+                          0.001,0.001,
+                          4.5,0.001]
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125
