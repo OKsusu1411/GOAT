@@ -334,7 +334,7 @@
         <origin xyz="0 16.555E-03 -200E-03" rpy="0 0 0"/>
         <parent link="calf_L_Link" />
         <child link="wheel_L_Link" />
-        <axis xyz="0 -1 0" />
+        <axis xyz="0 1 0" />
         <limit effort="2.5" lower="-1000000" upper="1000000" velocity="40" />
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
@@ -344,7 +344,7 @@
         <origin xyz="0 -16.555E-03 -200E-03" rpy="0 0 0"/>
         <parent link="calf_R_Link" />
         <child link="wheel_R_Link" />
-        <axis xyz="0 1 0" />
+        <axis xyz="0 -1 0" />
         <limit effort="2.5" lower="-1000000" upper="1000000" velocity="40" />
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
@@ -370,7 +370,7 @@
                 <box size="0.02505 0.09 0.025"/>
             </geometry>
         </collision>
-    </link>
+    </li
     -->
     <!-- ****************************************** D435 Camera END ******************************************************** -->
 </robot>
