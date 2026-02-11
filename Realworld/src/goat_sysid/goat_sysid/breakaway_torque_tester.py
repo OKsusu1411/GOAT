@@ -28,7 +28,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float32MultiArray
 
-JOINT_INDEX = 0
+# JOINT_INDEX = 0  # default: left hip joint
+# JOINT_INDEX = 2  # default: left thigh joint
+JOINT_INDEX = 4  # default: left knee joint
 
 
 class BreakawayTorqueTester(Node):
