@@ -67,9 +67,9 @@ class GoatControlNode(Node):
         self.imu_subscriber = self.create_subscription(
             BaseStates, "/goat/imu_data", self._on_imu_msg, 10
         )
-        # self.observation_publisher = self.create_publisher(
-        #     Float32MultiArray, observation_topic, 10
-        # )
+        self.observation_publisher = self.create_publisher(
+            Float32MultiArray, observation_topic, 10
+        )
         self.motor_torque_log_publisher = self.create_publisher(
             Float32MultiArray, log_topic, 10
         )
