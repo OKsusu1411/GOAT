@@ -2,7 +2,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="IK + PD torque control for an articulation.")
+parser = argparse.ArgumentParser(description="PD torque control for an articulation.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--mode", type=str, default="plotting", choices=["plotting", "iteration"])
 # append AppLauncher cli args
@@ -46,9 +46,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # Robot
     robot = GOAT_Cfg.replace(
             spawn=GOAT_Cfg.spawn.replace(
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),     # zero-G
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),     # zero-G
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                    enabled_self_collisions=True, solver_position_iteration_count=4,
+                    enabled_self_collisions=False, solver_position_iteration_count=4,
                     solver_velocity_iteration_count=0, fix_root_link=True               # Fixed_base link
               
                 )
@@ -76,32 +76,29 @@ class RobotSceneCfg(InteractiveSceneCfg):
     robot.actuators["wheel"].stiffness = 0.0
     robot.actuators["wheel"].damping = 0.0
 
-class IK_PD_Controller(DifferentialIKController):
+class PD_Controller():
     """
-    
     τ = Kp*e + Kd*ė
     """
-    def __init__(self, diff_ik_cfg: DifferentialIKControllerCfg, kp, kd, num_envs: int, num_dof: int, device: str, dt: float):
+    def __init__(self, kp, kd, num_envs: int, num_dof: int, num_leg: int, device: str, dt: float):
         """
-        Controller initialization
+        PD Controller initialization for position control
 
         Args:
             kp (float or torch.Tensor): Proportional gain. float value or (1, num_dof) size tensor.
             kd (float or torch.Tensor): Derivative gain. float value or (1, num_dof) size tensor.
             num_envs (int): Number of pararell training environments.
             num_dof (int): controllable dof per leg.
+            num_leg (int): Number of legs
             device (str): "cuda:0" or "cpu".
             dt (float): Simulation time-step.
         """
-        self.diff_ik_cfg = diff_ik_cfg
         self.device = device
         self.num_envs = num_envs
         self.num_dof = num_dof
+        self.num_leg = num_leg
         self.dt = dt
-        self.old_torque = torch.zeros(self.num_envs, num_dof * 2 + 2, device=self.device)
-
-        # Initialize Differential IK Controller
-        super().__init__(diff_ik_cfg, num_envs=num_envs, device=device)
+        self.old_torque = torch.zeros(self.num_envs, num_dof * num_leg, device=self.device)
 
         # kp gain
         if isinstance(kp, float):
@@ -122,151 +119,210 @@ class IK_PD_Controller(DifferentialIKController):
             self.kd = kd.to(device).expand(num_envs, -1) # Expand as num_envs
         else:
             raise TypeError("kd must be a float or a torch.Tensor of shape (1, num_dof)")
-        
-    # Override compute method
-    def compute(
-        self, ee_pos: torch.Tensor, ee_quat: torch.Tensor, jacobian: torch.Tensor, joint_pos: torch.Tensor
-    ) -> torch.Tensor:
-        """Computes the target joint positions that will yield the desired end effector pose.
-
-        Args:
-            ee_pos: The current end-effector position in shape (N, 3).
-            ee_quat: The current end-effector orientation in shape (N, 4).
-            jacobian: The geometric jacobian matrix in shape (N, 6, num_joints).
-            joint_pos: The current joint positions in shape (N, num_joints).
-
-        Returns:
-            The target joint positions commands in shape (N, num_joints).
-        """
-
-        # compute the delta in joint-space
-        if "position" in self.cfg.command_type:
-            position_error = self.ee_pos_des - ee_pos
-            jacobian_pos = jacobian[:, 0:3]
-            joint_delta_pos = super()._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
-        else:
-            position_error, axis_angle_error = compute_pose_error(
-                ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
-            )
-            pose_error = torch.cat((position_error, axis_angle_error), dim=1)
-            joint_delta_pos = super()._compute_delta_joint_pos(delta_pose=pose_error, jacobian=jacobian)
-
-        return joint_pos + 0.7 * joint_delta_pos
 
     def compute_torque(
         self,
-        link_pose: torch.Tensor,
         joint_pos: torch.Tensor,
         joint_vel: torch.Tensor,
-        foot_cmd: torch.Tensor,
-        joint_limits: torch.Tensor,
-        torque_limits: torch.Tensor,
-        jacobian: torch.Tensor
+        joint_pos_cmd: torch.Tensor,
+        joint_pos_limits: torch.Tensor,
+        torque_limits: torch.Tensor
     ) -> torch.Tensor:
         """
-        Compute joint input torque using IK + PD controller.
+        Compute joint input torque using PD controller.
 
         Args:
-            link_pose (torch.Tensor): Current all link pose [xyz + quaternion].
             joint_pos (torch.Tensor): Current joint position [rad].
             joint_vel (torch.Tensor): Current joint velocity [rad/s].
-            foot_cmd (torch.Tensor): Reference foot pose [num_env, 2(L, R), 3 or 7].
-            joint_limits (torch.Tensor): Joint position limits [num_env, num_joints, 2].
-            torque_limits (torch.Tensor): Joint torque limits [num_env, num_joints].
-            jacobian (torch.Tensor): Joint Jacobian matrix.
+            joint_pos_cmd (torch.Tensor): Reference joint pos(angle) [num_env, num_leg, num_joint].
+            joint_pos_limits (torch.Tensor): Joint position limits [num_env, num_joint, 2].
+            torque_limits (torch.Tensor): Joint torque limits [num_env, num_joint].
 
         Returns:
-            torch.Tensor: Joint torque, Joint reference angle.
+            torch.Tensor: Joint torque.
         """
         # Robot dof
-        leg_dof = self.num_dof                  # hip, thigh, knee joints
-        base_dof = 6                            # for floating base (linear + angular)
-        num_total_joints = leg_dof * 2 + 2      # 6(revolute) + 2(wheel)
+        leg_dof = self.num_dof                          # hip, thigh, knee joints
+        num_joint = leg_dof * self.num_leg
 
         # Define joint indices for each leg
         # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
-        left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.long)
-        right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.long)
+        left_leg_indices = torch.tensor([0, 2, 4], device=self.device, dtype=torch.int)
+        right_leg_indices = torch.tensor([1, 3, 5], device=self.device, dtype=torch.int)
+        torque_limits = torque_limits[:, :num_joint]    # Extract joint torque limits
+        joint_pos_limits = joint_pos_limits[:, :num_joint]
 
-        # Corresponding indices in the dynamics tensors (for floating base offset)
-        left_leg_dyn_indices = left_leg_indices + base_dof
-        right_leg_dyn_indices = right_leg_indices + base_dof
         # --- Left Leg slicing ---
         joint_pos_left = torch.index_select(joint_pos, 1, left_leg_indices)
         joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
-        foot_cmd_left = foot_cmd[:, 0, :]
-        joint_limits_left = torch.index_select(joint_limits, 1, left_leg_indices)
-        foot_pos_left = link_pose[:, 7, :3]
-        foot_quat_left = link_pose[:, 7, 3:]
-        jacobian_left = jacobian[:, 6, :, left_leg_indices]
+        joint_pos_cmd_left = torch.index_select(joint_pos_cmd, 1, left_leg_indices)
+        joint_limits_left = torch.index_select(joint_pos_limits, 1, left_leg_indices)
 
         # --- Right Leg slicing ---
         joint_pos_right = torch.index_select(joint_pos, 1, right_leg_indices)
         joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
-        foot_cmd_right = foot_cmd[:, 1, :]
-        joint_limits_right = torch.index_select(joint_limits, 1, right_leg_indices)
-        foot_pos_right = link_pose[:, 8, :3]
-        foot_quat_right = link_pose[:, 8, 3:]
-        jacobian_right = jacobian[:, 7, :, right_leg_indices]
+        joint_pos_cmd_right = torch.index_select(joint_pos_cmd, 1, right_leg_indices)
+        joint_limits_right = torch.index_select(joint_pos_limits, 1, right_leg_indices)
 
-        # Left foot IK + PD control
-        super().set_command(command = foot_cmd_left, ee_pos=foot_pos_left, ee_quat=foot_quat_left)
-        joint_pos_left_cmd = self.compute(ee_pos=foot_pos_left, ee_quat=foot_quat_left, jacobian=jacobian_left, joint_pos=joint_pos_left)
-        joint_pos_left_cmd = torch.clamp(joint_pos_left_cmd, joint_limits_left[:, :, 0], joint_limits_left[:, :, 1])            # Clipping joint position command
-        joint_pos_left_error = joint_pos_left_cmd - joint_pos_left
+        # Left foot PD control
+        joint_pos_cmd_left = torch.clamp(joint_pos_cmd_left, joint_limits_left[:, :, 0], joint_limits_left[:, :, 1])            # Clipping joint position command
+        joint_pos_left_error = joint_pos_cmd_left - joint_pos_left
         joint_vel_left_error = - joint_vel_left                                                                                 # reference joint velocity = 0
         torque_left = self.kp * joint_pos_left_error + self.kd * joint_vel_left_error
 
-        # Right foot IK + PD control
-        super().set_command(command = foot_cmd_right, ee_pos=foot_pos_right, ee_quat=foot_quat_right)
-        joint_pos_right_cmd = self.compute(ee_pos=foot_pos_right, ee_quat=foot_quat_right, jacobian=jacobian_right, joint_pos=joint_pos_right)
-        joint_pos_right_cmd = torch.clamp(joint_pos_right_cmd, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
-        joint_pos_right_error = joint_pos_right_cmd - joint_pos_right
+        # Right foot PD control
+        joint_pos_cmd_right = torch.clamp(joint_pos_cmd_right, joint_limits_right[:, :, 0], joint_limits_right[:, :, 1])        # Clipping joint position command
+        joint_pos_right_error = joint_pos_cmd_right - joint_pos_right
         joint_vel_right_error = - joint_vel_right                                                                               # reference joint velocity = 0
         torque_right = self.kp * joint_pos_right_error + self.kd * joint_vel_right_error
         
         # Combine torque inputs
-        torque = torch.zeros(self.num_envs, num_total_joints, device=self.device)
+        torque = torch.zeros(self.num_envs, num_joint, device=self.device)
         torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
         torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
         
         # LPF for torque
-        torque = 0.8 * self.old_torque + 0.2 * torque
+        torque = 0.951 * self.old_torque + (1 - 0.951) * torque
         self.old_torque = torque.clone()
 
         # Clip torque based on torque_limits
         torque = torch.clamp(torque, -torque_limits, torque_limits)
         
-        # Combine target joint angles (for debugging)
-        angle = torch.zeros(self.num_envs, num_total_joints, device=self.device)
-        angle.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), joint_pos_left_cmd)
-        angle.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), joint_pos_right_cmd) 
-        
-        # TODO : Wheel controller
-        return torque, angle
+        return torque
+    
+class PI_Controller():
+    def __init__(self, kp, ki, num_envs: int, num_dof: int, num_leg: int, device: str, dt: float):
+        """
+        PI Controller initialization  for velocity control
 
+        Args:
+            kp (float or torch.Tensor): Proportional gain. float value or (1, num_dof) size tensor.
+            ki (float or torch.Tensor): Intergral gain. float value or (1, num_dof) size tensor.
+            num_envs (int): Number of pararell training environments.
+            num_dof (int): controllable dof per leg.
+            num_leg (int): Number of legs
+            device (str): "cuda:0" or "cpu".
+            dt (float): Simulation time-step.
+        """
+        self.device = device
+        self.num_envs = num_envs
+        self.num_dof = num_dof
+        self.num_leg = num_leg
+        self.dt = dt
+        self.old_torque = torch.zeros(self.num_envs, num_dof * num_leg, device=self.device)
+
+        # kp gain
+        if isinstance(kp, float):
+            self.kp = torch.full((num_envs, num_dof), kp, device=device)
+        elif isinstance(kp, torch.Tensor):
+            if kp.shape != (1, num_dof):
+                raise ValueError(f"kp tensor must have shape (1, {num_dof}), but got {kp.shape}")
+            self.kp = kp.to(device).expand(num_envs, -1)        # Expand as num_envs
+        else:
+            raise TypeError("kp must be a float or a torch.Tensor of shape (1, num_dof)")
+
+        # ki gain
+        if isinstance(ki, float):
+            self.ki = torch.full((num_envs, num_dof), ki, device=device)
+        elif isinstance(ki, torch.Tensor):
+            if ki.shape != (1, num_dof):
+                raise ValueError(f"ki tensor must have shape (1, {num_dof}), but got {ki.shape}")
+            self.ki = ki.to(device).expand(num_envs, -1)        # Expand as num_envs
+        else:
+            raise TypeError("ki must be a float or a torch.Tensor of shape (1, num_dof)")
+    
+    def compute_torque(
+        self,
+        joint_vel: torch.Tensor,
+        joint_vel_cmd: torch.Tensor,
+        joint_vel_limits: torch.Tensor,
+        torque_limits: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute joint input torque using PI controller.
+
+        Args:
+            joint_vel (torch.Tensor): Current joint velocity [rad/s].
+            joint_vel_cmd (torch.Tensor): Reference joint velocity(rad/s) [num_env, num_leg, num_joint].
+            joint_limits (torch.Tensor): Joint position limits [num_env, num_joint, 2].
+            torque_limits (torch.Tensor): Joint torque limits [num_env, num_joint].
+
+        Returns:
+            torch.Tensor: Joint torque.
+        """
+        # Robot dof
+        leg_dof = self.num_dof                          # wheel joint
+        num_joint = leg_dof * self.num_leg
+
+        # Define joint indices for each leg
+        # Isaac sim's Joint order: ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
+        left_leg_indices = torch.tensor([6], device=self.device, dtype=torch.int)
+        right_leg_indices = torch.tensor([7], device=self.device, dtype=torch.int)
+        torque_limits = torque_limits[:, 6:]            # Extract wheel torque limits
+        joint_vel_limits = joint_vel_limits[:, 6:]
+
+        # --- Left Leg slicing ---
+        joint_vel_left = torch.index_select(joint_vel, 1, left_leg_indices)
+        joint_vel_cmd_left = torch.index_select(joint_vel_cmd, 1, 0)
+        joint_vel_limits_left = torch.index_select(joint_vel_limits, 1, left_leg_indices)
+
+        # --- Right Leg slicing ---
+        joint_vel_right = torch.index_select(joint_vel, 1, right_leg_indices)
+        joint_vel_cmd_right = torch.index_select(joint_vel_cmd, 1, right_leg_indices)
+        joint_vel_limits_right = torch.index_select(joint_vel_limits, 1, right_leg_indices)
+
+        # Left foot PI control
+        joint_vel_cmd_left = torch.clamp(joint_vel_cmd_left, joint_vel_limits_left[:, :, 0], joint_vel_limits_left[:, :, 1])            # Clipping joint position command
+        joint_vel_left_error = joint_vel_cmd_left - joint_vel_left
+        torque_left = self.kp * joint_vel_left_error + self.ki * joint_vel_left_error * self.dt                                         # PI feedback
+
+        # Right foot PI control
+        joint_vel_cmd_right = torch.clamp(joint_vel_cmd_right, joint_vel_limits_right[:, :, 0], joint_vel_limits_right[:, :, 1])        # Clipping joint position command
+        joint_vel_right_error = joint_vel_cmd_right - joint_vel_right
+        torque_right = self.kp * joint_vel_right_error + self.ki * joint_vel_right_error * self.dt                                      # PI feedback
+        
+        # Combine torque inputs
+        torque = torch.zeros(self.num_envs, num_joint, device=self.device)
+        torque.scatter_(1, left_leg_indices.repeat(self.num_envs, 1), torque_left)
+        torque.scatter_(1, right_leg_indices.repeat(self.num_envs, 1), torque_right)
+        
+        # LPF for torque
+        torque = 0.951 * self.old_torque + (1 - 0.951) * torque
+        self.old_torque = torque.clone()
+
+        # Clip torque based on torque_limits
+        torque = torch.clamp(torque, -4.5, 4.5)
+        
+        return torque
+        
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene): 
     # define scene
     robot = scene["robot"]
     sim_dt = sim.get_physics_dt()
-    diff_ik_cfg = DifferentialIKControllerCfg(command_type="position", use_relative_mode=False, ik_method="dls")
     
     leg_dof = 3                         # hip, thigh, knee joints
     n_leg_j = leg_dof * 2
     num_total_joints = n_leg_j + 2
 
-    # --- Initialize IK + PD torque Controller ---
+    # --- Initialize PD torque Controller ---
     # Create separate controllers for each leg for independent control
-    leg_controller = IK_PD_Controller(diff_ik_cfg=diff_ik_cfg, 
-                                      kp=torch.tensor([[400.0, 400.0, 300.0]]),
-                                      kd=torch.tensor([[20.0, 20.0, 15.0]]),
-                                      num_envs=scene.num_envs,
-                                      num_dof=leg_dof,
-                                      device=scene.device,
-                                      dt=sim_dt)
+    leg_controller = PD_Controller(kp=torch.tensor([[1.6, 0.036, 1.3]]),
+                                   kd=torch.tensor([[0.5, 0.005, 0.5]]),
+                                   num_envs=scene.num_envs,
+                                   num_dof=leg_dof,
+                                   device=scene.device,
+                                   dt=sim_dt)
+    
+    wheel_controller = PI_Controller(kp=1,
+                                     ki=1,
+                                     num_envs=scene.num_envs,
+                                     num_dof=1,
+                                     num_leg=2,
+                                     device=scene.device,
+                                     dt=sim_dt)
 
     # ---------- Environment Initialization ----------
-    sim_len = 25.0  # [s] simulation length
+    sim_len = 10.0  # [s] simulation length
     joint_limits = robot.data.joint_pos_limits
     torque_limits = robot.data.joint_effort_limits
     default_joint_pos = robot.data.default_joint_pos.clone()
@@ -289,7 +345,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 robot.write_data_to_sim()
                 robot.reset()
                 robot.update(sim_dt)
-                link_pose = robot.data.body_link_pose_w         # Link's initial pose
 
                 print("[INFO] Reset state...")
                 # Random joint angle within limits
@@ -298,7 +353,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
                 robot.write_joint_state_to_sim(random_angle, default_joint_vel)
                 target_link_pose = robot.data.body_link_pose_w
-                q_target = torch.zeros(scene.num_envs, 2, 3, device=scene.device)
 
                 # Visualize target foot position
                 frame_marker_cfg = FRAME_MARKER_CFG.copy()
@@ -310,26 +364,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 left_marker.visualize(target_link_pose[0, 7, :3].unsqueeze(0), target_link_pose[0, 7, 3:].unsqueeze(0))
                 right_marker.visualize(target_link_pose[0, 8, :3].unsqueeze(0), target_link_pose[0, 8, 3:].unsqueeze(0))
 
-                # RRT* trajectory generator
-                left_motion_planner = RRTWrapper(start=link_pose[0, 7].squeeze_(0), goal=target_link_pose[0, 7, :].squeeze_(0), env=Env.Map3D(5, 5, 5), max_dist=0.1, num_traj_points=50)
-                left_optimal_trajectory = left_motion_planner.plan()
-
-                right_motion_planner = RRTWrapper(start=link_pose[0, 8].squeeze_(0), goal=target_link_pose[0, 8, :].squeeze_(0), env=Env.Map3D(5, 5, 5), max_dist=0.1, num_traj_points=50)
-                right_optimal_trajectory = right_motion_planner.plan()
-                
-                # Visualize trajectory
-                point_marker_cfg = CUBOID_MARKER_CFG.copy()
-                point_marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
-
-                left_traj_marker = VisualizationMarkers(point_marker_cfg.replace(prim_path="/Visuals/left_traj"))
-                right_traj_marker = VisualizationMarkers(point_marker_cfg.replace(prim_path="/Visuals/right_traj"))
-
-                left_traj_marker.visualize(left_optimal_trajectory[:, :3])
-                right_traj_marker.visualize(right_optimal_trajectory[:, :3])
-
-                # Initial target position
-                q_target[:, 0, :] = left_optimal_trajectory[0, :3]
-                q_target[:, 1, :] = right_optimal_trajectory[0, :3]
                 # Joint reset to initial pose
                 robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
                 # Joint torque reset to 0
@@ -338,48 +372,21 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 robot.reset()
                 robot.update(sim_dt)
                 
-                i = 0                                   # Trajectory index
             else:
                # --------- Control ------------
                 # State awareness
                 joint_pos = robot.data.joint_pos
                 joint_vel = robot.data.joint_vel
-                link_pose = robot.data.body_link_pose_w
-                jacobian = robot.root_physx_view.get_jacobians()
-
-                # Target position
-                q_target_left = q_target[:, 0, :]
-                q_target_right = q_target[:, 1, :]
-                pos_error = torch.norm(link_pose[0, 7:, :3] - q_target[0, :, :3], dim=1)
-
-                if torch.all(pos_error < 0.05):
-                    i = i + 1                                           # Head to next point
-                    if i == left_optimal_trajectory.shape[0] - 1:
-                        i = i - 1                                       # Stay at the last point                         
-                        print("[INFO] Reached target position.")
-
-                # Update target foot position along the trajectory
-                q_target[:, 0, :] = left_optimal_trajectory[i, :3]
-                q_target[:, 1, :] = right_optimal_trajectory[i, :3]
-                foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
 
                 # Compute torque
-                torque, angle = leg_controller.compute_torque(link_pose=link_pose,
-                                                              joint_pos=joint_pos,
-                                                              joint_vel=joint_vel,
-                                                              foot_cmd=foot_cmd,
-                                                              joint_limits=joint_limits,
-                                                              torque_limits=torque_limits,
-                                                              jacobian=jacobian)
+                torque = leg_controller.compute_torque(joint_pos=joint_pos,
+                                                       joint_vel=joint_vel,
+                                                       joint_pos_cmd=random_angle,
+                                                       joint_limits=joint_limits,
+                                                       torque_limits=torque_limits)
 
                 robot.set_joint_effort_target(torque)
-                # robot.write_joint_state_to_sim(angle, default_joint_vel)              # For IK solver debugging
                 robot.write_data_to_sim()
-
-            # Simulation step
-            sim.step()
-            robot.update(sim_dt)
-            scene.update(sim_dt)
 
             # Simulation step
             sim.step()
@@ -392,7 +399,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_q = []
         log_angle = []
         log_torque = []
-        link_pose = robot.data.body_link_pose_w
 
         # reset state
         print("[INFO] Reset state for plotting...")
@@ -403,7 +409,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         random_angle = lower_limits + torch.rand_like(lower_limits) * (upper_limits - lower_limits)
         robot.write_joint_state_to_sim(random_angle, default_joint_vel)
         target_link_pose = robot.data.body_link_pose_w
-        q_target = torch.zeros(scene.num_envs, 2, 3, device=scene.device)
 
         # Visualize target foot position
         frame_marker_cfg = FRAME_MARKER_CFG.copy()
@@ -414,27 +419,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         left_marker.visualize(target_link_pose[0, 7, :3].unsqueeze(0), target_link_pose[0, 7, 3:].unsqueeze(0))
         right_marker.visualize(target_link_pose[0, 8, :3].unsqueeze(0), target_link_pose[0, 8, 3:].unsqueeze(0))
-
-        # RRT* trajectory generator
-        left_motion_planner = RRTWrapper(start=link_pose[0, 7].squeeze_(0), goal=target_link_pose[0, 7, :].squeeze_(0), env=Env.Map3D(5, 5, 5), max_dist=0.1, num_traj_points=50)
-        left_optimal_trajectory = left_motion_planner.plan()
-
-        right_motion_planner = RRTWrapper(start=link_pose[0, 8].squeeze_(0), goal=target_link_pose[0, 8, :].squeeze_(0), env=Env.Map3D(5, 5, 5), max_dist=0.1, num_traj_points=50)
-        right_optimal_trajectory = right_motion_planner.plan()
-        
-        # Visualize trajectory
-        point_marker_cfg = CUBOID_MARKER_CFG.copy()
-        point_marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
-
-        left_traj_marker = VisualizationMarkers(point_marker_cfg.replace(prim_path="/Visuals/left_traj"))
-        right_traj_marker = VisualizationMarkers(point_marker_cfg.replace(prim_path="/Visuals/right_traj"))
-
-        left_traj_marker.visualize(left_optimal_trajectory[:, :3])
-        right_traj_marker.visualize(right_optimal_trajectory[:, :3])
-
-        # Initial target position
-        q_target[:, 0, :] = left_optimal_trajectory[0, :3]
-        q_target[:, 1, :] = right_optimal_trajectory[0, :3]
 
         # Joint reset to initial pose
         robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
@@ -451,42 +435,26 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
         log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
 
-        i = 0                                   # Trajectory index
         while t <= sim_len:
             # --------- Control ------------
             # State awareness
             joint_pos = robot.data.joint_pos
             joint_vel = robot.data.joint_vel
-            link_pose = robot.data.body_link_pose_w
-            jacobian = robot.root_physx_view.get_jacobians()
 
-            # Target position
-            q_target_left = q_target[:, 0, :]
-            q_target_right = q_target[:, 1, :]
-            pos_error = torch.norm(link_pose[0, 7:, :3] - q_target[0, :, :3], dim=1)
-
-            if torch.all(pos_error < 0.05):
-                i = i + 1                                           # Head to next point
-                if i == left_optimal_trajectory.shape[0] - 1:
-                    i = i - 1                                       # Stay at the last point                         
-                    print("[INFO] Reached target position.")
-
-            # Update target foot position along the trajectory
-            q_target[:, 0, :] = left_optimal_trajectory[i, :3]
-            q_target[:, 1, :] = right_optimal_trajectory[i, :3]
-            foot_cmd = torch.cat((q_target_left.unsqueeze(1), q_target_right.unsqueeze(1)), dim=1)
+            random_angle = default_joint_pos + torch.tensor([[0.0, 0.0, 0.349, 0.0, 0.0, 0.0, 0.0, 0.0]],).to(default_joint_pos.device)
 
             # Compute torque
-            torque, angle = leg_controller.compute_torque(link_pose=link_pose,
-                                                          joint_pos=joint_pos,
-                                                          joint_vel=joint_vel,
-                                                          foot_cmd=foot_cmd,
-                                                          joint_limits=joint_limits,
-                                                          torque_limits=torque_limits,
-                                                          jacobian=jacobian)
+            torque = leg_controller.compute_torque(joint_pos=joint_pos,
+                                                   joint_vel=joint_vel,
+                                                   joint_pos_cmd=random_angle,
+                                                   joint_limits=joint_limits,
+                                                   torque_limits=torque_limits,
+                                                   joint_vel=joint_vel,
+                                                   joint_pos_cmd=random_angle,
+                                                   joint_limits=joint_limits,
+                                                   torque_limits=torque_limits)
 
             robot.set_joint_effort_target(torque)
-            # robot.write_joint_state_to_sim(angle, default_joint_vel)              # For IK solver debugging
             robot.write_data_to_sim()
 
             # Simulation step
@@ -496,7 +464,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             t += sim_dt
             log_t.append(t)
             log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
-            log_angle.append(angle[:, :n_leg_j].clone())
             log_torque.append(torque[:, :n_leg_j].clone())
 
         # --- 결과 플롯 ---
@@ -506,7 +473,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         log_t_np = np.asarray(log_t)
         log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
-        log_angle = torch.stack(log_angle, dim=0).cpu().numpy().squeeze(1)
         log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
 
         n_cols = 3
@@ -523,7 +489,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
             ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
             ax.axhline(random_angle[0, i].cpu(), ls="--", label="optimal_angle", color="b")
-            ax.plot(log_t_np, log_angle[:, i], ls="--", label="target", color="k")
             ax.set_title(f"Joint Angle: {joint_name[i]}")
             ax.set_ylabel("angle [rad]")
             if i // n_cols == n_rows - 1:

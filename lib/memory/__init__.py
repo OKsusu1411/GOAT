@@ -1,2 +1,2 @@
-from lib.memory import Memory
-from lib.memory import RandomMemory
+from lib.memory.base import Memory
+from lib.memory.random import RandomMemory

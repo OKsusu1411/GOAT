@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 import torch
 
 from lib.memory import Memory
-from __future__ import annotations
 from typing import Literal
 
 

@@ -2,7 +2,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="Tutorial on inverse dynamics control for an articulation.")
+parser = argparse.ArgumentParser(description="Inverse dynamics control for an articulation.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--mode", type=str, default="default", choices=["default", "plotting"])
 # append AppLauncher cli args

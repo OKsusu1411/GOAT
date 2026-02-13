@@ -41,6 +41,7 @@ docker/.container.cfg
 **/.neptune/*
 docker/artifacts/
 *.tmp
+*.csv
 
 # Doc Outputs
 **/docs/_build/*

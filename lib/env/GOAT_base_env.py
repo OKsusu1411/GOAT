@@ -6,13 +6,13 @@
 #from __future__ import annotations
 
 import torch
-
 from abc import abstractmethod
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.terrains import TerrainImporter
 from lib.env.GOAT_base_env_cfg import GOATBaseEnvCfg
+import isaaclab.sim as sim_utils
 
 
 class GOATBaseEnv(DirectRLEnv):
@@ -24,13 +24,10 @@ class GOATBaseEnv(DirectRLEnv):
 
         # Total env ids
         self.total_env_ids = torch.arange(self.num_envs, device=self.device)
-        
-        # Joint Index
-        self.joint_idx = self._robot.find_joints(".*_Joint")[0]
 
-        # Joint & Link Limits
-        self.robot_dof_lower_limits = self._robot.data.joint_pos_limits[0, :, 0].to(device=self.device)
-        self.robot_dof_upper_limits = self._robot.data.joint_pos_limits[0, :, 1].to(device=self.device)
+        # # Joint & Link Limits
+        # self.robot_dof_lower_limits = self._robot.data.joint_pos_limits[0, :, 0].to(device=self.device)
+        # self.robot_dof_upper_limits = self._robot.data.joint_pos_limits[0, :, 1].to(device=self.device)
         
         # unit tensors
         self.x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float32, device=self.device).repeat((self.num_envs, 1))
@@ -39,28 +36,21 @@ class GOATBaseEnv(DirectRLEnv):
 
     # Create scene
     def _setup_scene(self):
-        """Setup the scene for the environment.
+        self._robot = Articulation(self.cfg.GOAT_cfg)
+        self.scene.articulations["robot"] = self._robot
 
-        This function is responsible for creating the scene objects and setting up the scene for the environment.
-        The scene creation can happen through :class:`isaaclab.scene.InteractiveSceneCfg` or through
-        directly creating the scene objects and registering them with the scene manager.
-
-        We leave the implementation of this function to the derived classes. If the environment does not require
-        any explicit scene setup, the function can be left empty.
-        """
-        pass
-
+        self.scene.clone_environments(copy_from_source=True)          # clone environents
 
     # Reset Env
     def _reset_idx(self, env_ids: torch.Tensor):
         super()._reset_idx(env_ids)
-        joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
-        joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
-        joint_vel = torch.zeros_like(joint_pos)
+        # joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
+        # joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
+        # joint_vel = torch.zeros_like(joint_pos)
 
-        # Publish to simulator
-        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        # # Publish to simulator
+        # self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
+        # self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
 
     ## =============== RL main abstract methods ================ ##

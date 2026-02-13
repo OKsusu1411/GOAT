@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import torch
 import atexit
 import dataclasses
@@ -5,11 +7,9 @@ import sys
 import tqdm
 
 from abc import ABC
-from __future__ import annotations
 from lib.agent import Agent
 from lib.wrapper import Wrapper
-from skrl import config, logger
-from skrl.utils import ScopedTimer
+from lib.utils import config, logger,ScopedTimer
 
 
 def generate_equally_spaced_scopes(*, num_envs: int, num_simultaneous_agents: int) -> list[int]:

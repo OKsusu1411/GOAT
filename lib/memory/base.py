@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
 import csv
@@ -8,7 +10,6 @@ import os
 import gymnasium
 
 from abc import ABC, abstractmethod
-from __future__ import annotations
 from typing import Literal
 from skrl import config
 from skrl.utils.spaces.torch import compute_space_size

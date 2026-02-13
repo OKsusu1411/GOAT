@@ -354,6 +354,14 @@ class Model(torch.nn.Module):
         """
         logger.warning("Make sure to place Mixins before Model during model definition")
         raise NotImplementedError("The action to be taken by the agent (.act()) is not implemented")
+    
+    def enable_training_mode(self, enabled: bool = True) -> None:
+        """Set the training mode of the model: enabled (training) or disabled (evaluation).
+
+        :param enabled: True to enable the training mode, False to enable the evaluation mode.
+            See :py:meth:`torch.nn.Module.train` for more details.
+        """
+        self.train(enabled)
 
     def set_mode(self, mode: str) -> None:
         """Set the model mode (training or evaluation)

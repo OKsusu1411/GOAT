@@ -15,6 +15,31 @@ from lib.utils import ScopedTimer
 @dataclasses.dataclass(kw_only=True)
 class SequentialTrainerCfg(TrainerCfg):
     """Configuration for the sequential trainer."""
+    timesteps: int = 100000
+    """Number of timesteps to train/evaluate for."""
+
+    headless: bool = False
+    """Whether to run in headless mode (do not call ``env.render()``)."""
+
+    disable_progressbar: bool | None = False
+    """Whether to disable the progressbar. If None, disable on non-TTY."""
+
+    close_environment_at_exit: bool = True
+    """Whether to close the environment on normal program termination."""
+
+    environment_info: str = "episode"
+    """Key used to get and log environment info."""
+
+    stochastic_evaluation: bool = False
+    """Whether to use actions rather than (deterministic) mean actions during evaluation."""
+
+    def validate(self) -> bool:
+        """Validate the configuration."""
+        return True
+
+    def expand(self) -> None:
+        """Expand the configuration."""
+        pass
 
 
 class SequentialTrainer(Trainer):
@@ -139,6 +164,7 @@ class SequentialTrainer(Trainer):
             # post-interaction
             for agent in self.agents:
                 agent.post_interaction(timestep=timestep, timesteps=self.cfg.timesteps)
+                self.env._unwrapped.get_rollout(agent._rollout)
 
             # reset environments
             # - parallel/vectorized environments (single or multi-agent)

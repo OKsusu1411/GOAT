@@ -12,6 +12,7 @@ from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.sim.spawners.materials import RigidBodyMaterialCfg
 
 
 # Robot asset paths
@@ -45,17 +46,18 @@ urdf_converter = sim_utils.UrdfConverter(cfg = urdf_cfg)
 
 # URDF conversion check
 if urdf_converter.usd_path == GOAT_ASSET["usd_path"]:
-    print("urdf convertion success!")
+    print("urdf conversion success!")
 else:
-    print("urdf convertion failed!")
+    print("urdf conversion failed!")
 
 
 GOAT_Cfg: ArticulationCfg = ArticulationCfg(
-    prim_path="/World/Robot",
+    # prim_path="{ENV_REGEX_NS}/Robot",               # Path for Interactivescene's clone_environemnts
+    prim_path="/World/envs/env_.*/Robot",               # Path for DirectRLEnv
     spawn=sim_utils.UsdFileCfg(
         usd_path=urdf_converter.usd_path,
         scale=(1.0, 1.0, 1.0),
-        activate_contact_sensors=False,
+        activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             retain_accelerations=False,
@@ -79,7 +81,7 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
     
     # Initial Joint pos and vel
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 1.0),
+        pos=(0.0, 0.0, 0.0),
         joint_pos={
             "hip_L_Joint": 0.0,
             "hip_R_Joint": 0.0,
@@ -94,14 +96,40 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
 
     # Actuators cfg
     actuators={
-        "leg": DCMotorCfg(
-            joint_names_expr=["hip_.*", "thigh_.*", "knee_.*",],       # parameter reference from TRON
+        "hip": DCMotorCfg(
+            joint_names_expr=["hip_.*",],
             effort_limit=4.5,
             saturation_effort=4.5,
             velocity_limit=15.0,
-            stiffness=40.0,
-            damping=2.5,
-            friction=0.0,
+            stiffness=0.0,                          # Internal PD controller not used
+            damping=0.0,                            # Internal PD controller not used
+            friction=0.0033,                        # Static friction coefficient
+            dynamic_friction=0,                     # Dynamic friction coefficient 
+            viscous_friction=0,                     # Viscous friction coefficient
+        ),
+
+        "thigh": DCMotorCfg(
+            joint_names_expr=["thigh_.*",],
+            effort_limit=4.5,
+            saturation_effort=4.5,
+            velocity_limit=15.0,
+            stiffness=0.0,
+            damping=0.32,
+            friction=0.0033,
+            dynamic_friction=0,
+            viscous_friction=0,
+        ),
+
+        "knee": DCMotorCfg(
+            joint_names_expr=["knee_.*",],
+            effort_limit=4.5,
+            saturation_effort=4.5,
+            velocity_limit=15.0,
+            stiffness=0.0,
+            damping=0.0,
+            friction=0.0235,
+            dynamic_friction=4.432008e-01,
+            viscous_friction=2.993308e-01,
         ),
         
         "wheel": DCMotorCfg(
@@ -110,8 +138,10 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             saturation_effort=2.5,
             velocity_limit=15.0,
             stiffness=0.0,
-            damping=0.8,
-            friction=0.0,
+            damping=0.0,
+            friction=None,
+            dynamic_friction=4.432008e-01,
+            viscous_friction=2.993308e-01,
         )
     }
 )
@@ -139,8 +169,14 @@ class GOATBaseEnvCfg(DirectRLEnvCfg):
         debug_vis=False
     )
 
+    physics_material: RigidBodyMaterialCfg = RigidBodyMaterialCfg(
+        static_friction=1.0,
+        dynamic_friction=1.0,
+        restitution=0.0,
+    )
+
     # Light
-    dome_light = AssetBaseCfg(
+    dome_light_cfg = AssetBaseCfg(
         prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
     )
 
