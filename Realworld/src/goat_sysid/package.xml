@@ -9,7 +9,11 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>motor_interfaces</depend>
+
+  <!-- Used by python nodes (logging / least squares) -->
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
