@@ -31,10 +31,10 @@ from lib.env.GOAT_base_env_cfg import GOAT_Cfg
 from lib.RRT.RRT_wrapper import RRTWrapper
 from lib.utils import Env
 
-# HIP_COL_FRI = 0
-# HIP_VIS_FRI = 0
-# KNEE_COL_FRI = 0
-# KNEE_VIS_FRI = 0
+HIP_COL_FRI = 0
+HIP_VIS_FRI = 0
+KNEE_COL_FRI = 0
+KNEE_VIS_FRI = 0
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -244,14 +244,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     #                                    kd=torch.tensor([[0.01, 0.001, 0.001]]),
     # --- Initialize PD torque Controller ---
     
-    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
-                                   kd=torch.tensor([[0.01, 0.00, 0.001]]),
-                                   num_envs=scene.num_envs,
-                                   num_dof=leg_dof,
-                                   device=scene.device,
-                                   dt=sim_dt)
+    # leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
+    #                                kd=torch.tensor([[0.01, 0.00, 0.001]]),
+    #                                num_envs=scene.num_envs,
+    #                                num_dof=leg_dof,
+    #                                device=scene.device,
+    #                                dt=sim_dt)
 
-    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.270, 0.350]]),
+    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 4.270, 0.40]]),
                                    kd=torch.tensor([[0.015, 0.010, 0.018]]),
                                    num_envs=scene.num_envs,
                                    num_dof=leg_dof,
@@ -279,10 +279,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     print("[INFO] Reset state for plotting...")
 
     # ---------- User Configuration for Sine Input ----------
-    TARGET_JOINT_IDX = 1         # [Index] 제어할 관절 인덱스 (0: hip_L, 1: hip_R, 2: thigh_L, 3: thigh_R, 4: knee_L, 5: knee_R, 6~7 wheel)
-    SINE_AMP_DEG = 20.0          # [deg] Sine amplitude (peak)
-    SINE_FREQ_HZ = 0.2           # [Hz] Sine frequency
-    SIM_DURATION = 30.0          # [sec] Total simulation time
+    TARGET_JOINT_IDX = 4         # [Index] 제어할 관절 인덱스 (0: hip_L, 1: hip_R, 2: thigh_L, 3: thigh_R, 4: knee_L, 5: knee_R, 6~7 wheel)
+    SINE_AMP_DEG = 80.0          # [deg] Sine amplitude (peak)
+    SINE_FREQ_HZ = 0.2          # [Hz] Sine frequency
+    SIM_DURATION = 20.0          # [sec] Total simulation time
     
     sim_len = SIM_DURATION
     print(f"[INFO] Simulation Length set to {sim_len}s (sine input).")
@@ -291,7 +291,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     base_joint_pos = default_joint_pos.clone()
     # base_joint_pos[:, 0] -= torch.pi/180*80.0
     # base_joint_pos[:, 1] +=  torch.pi/180*50.0
-    # base_joint_pos[:, 2] +=  torch.pi/180*20.0
+    # base_joint_pos[:, 2] +=  torch.pi/180*30.0
     # base_joint_pos[:, 3] -= torch.pi/180*80.0
     # base_joint_pos[:, 4] += torch.pi/180*20.0
     # base_joint_pos[:, 5] -= torch.pi/180*20.0

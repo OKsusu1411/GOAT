@@ -103,9 +103,9 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             velocity_limit=15.0,
             stiffness=0.0,                          # Internal PD controller not used
             damping=0.0,                            # Internal PD controller not used
-            friction=0.0033,                        # Static friction coefficient
-            dynamic_friction=0,                     # Dynamic friction coefficient 
-            viscous_friction=0,                     # Viscous friction coefficient
+            friction=0.12,                        # Static friction coefficient
+            dynamic_friction=5.646268e-02 ,                     # Dynamic friction coefficient 
+            viscous_friction=3.190248e-01,                     # Viscous friction coefficient
         ),
 
         "thigh": DCMotorCfg(
@@ -114,10 +114,10 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             saturation_effort=4.5,
             velocity_limit=15.0,
             stiffness=0.0,
-            damping=0.32,
-            friction=0.0033,
-            dynamic_friction=0,
-            viscous_friction=0,
+            damping=0.0,
+            friction=0.12,
+            dynamic_friction=5.646268e-02 ,                     # Dynamic friction coefficient 
+            viscous_friction=3.190248e-01,                     # Viscous friction coefficient
         ),
 
         "knee": DCMotorCfg(
@@ -127,9 +127,9 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             velocity_limit=15.0,
             stiffness=0.0,
             damping=0.0,
-            friction=0.0235,
-            dynamic_friction=4.432008e-01,
-            viscous_friction=2.993308e-01,
+            friction=0.12,
+            dynamic_friction=5.373143e-02  ,                     # Dynamic friction coefficient 
+            viscous_friction=8.441387e-02 ,                     # Viscous friction coefficient
         ),
         
         "wheel": DCMotorCfg(
@@ -139,9 +139,9 @@ GOAT_Cfg: ArticulationCfg = ArticulationCfg(
             velocity_limit=15.0,
             stiffness=0.0,
             damping=0.0,
-            friction=None,
-            dynamic_friction=4.432008e-01,
-            viscous_friction=2.993308e-01,
+            friction=0.07,
+            dynamic_friction=3.218126e-02,
+            viscous_friction=1.715931e-02,
         )
     }
 )
