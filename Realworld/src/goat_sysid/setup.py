@@ -28,6 +28,7 @@ setup(
             'dynamic_friction_sysid = goat_sysid.dynamic_friction_sysid:main',
             'friction_id_node = goat_sysid.dynamic_friction_id_node:main',
             'wheel_friction_id = goat_sysid.wheel_friction_id_node:main',
+            'sine_motion_logger_node = goat_sysid.sine_motion_logger_node:main',
         ],
     },
 )
