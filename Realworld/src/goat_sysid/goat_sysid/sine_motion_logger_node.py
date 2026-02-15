@@ -2,13 +2,13 @@
 '''
 ros2 run goat_sysid sine_motion_logger_node --ros-args \
   -p offset_deg:=0.0 \
-  -p excite_indices:="[4]" \
+  -p excite_indices:="[0]" \
   -p amplitude_deg:=80.0 \
-  -p frequency_hz:=0.2 \
+  -p frequency_hz:=0.5 \
   -p publish_rate_hz:=200.0 \
   -p duration_sec:=20.0 \
   -p settle_sec:=0.5 \
-  -p log_filename:="joint_4_sine.csv"
+  -p log_filename:="joint_0_sine.csv"
 
 '''
 from __future__ import annotations
