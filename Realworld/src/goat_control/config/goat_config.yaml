@@ -55,7 +55,7 @@ safety:
   max_torque_per_joint: [4.5,4.5,
                          4.5,4.5, 
                          4.5,4.5,
-                         4.5,4.5]
+                         0.001,0.001]
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125
