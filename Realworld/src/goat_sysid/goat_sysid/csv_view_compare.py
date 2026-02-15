@@ -4,8 +4,8 @@
 
 [A: CSV 보기(단발/실시간)]
 python3 csv_view_compare.py --mode A \
-  --csv joint_4_sine.csv \
-  --joints 4 \
+  --csv joint_0_sine11.csv \
+  --joints 0 \
   --window_sec 0 \
   --unit deg \
   --save_png
