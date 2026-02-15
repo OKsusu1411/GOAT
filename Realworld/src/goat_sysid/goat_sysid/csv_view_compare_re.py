@@ -3,15 +3,15 @@
 사용 예시
 
 [A: CSV 보기(단발/실시간)]
-python3 csv_view_compare.py --mode A \
+python3 csv_view_compare_re.py --mode A \
   --csv joint_0_sine.csv \
-  --joints 4 \
+  --joints 0 \
   --window_sec 0 \
   --unit deg \
   --save_png
 
 실시간 follow (CSV가 계속 append되는 중)
-python3 csv_view_compare.py --mode A \
+python3 csv_view_compare_re.py --mode A \
   --csv joint_0_sine.csv \
   --joints 6 \
   --follow \
@@ -21,7 +21,7 @@ python3 csv_view_compare.py --mode A \
   --fill_missing hold
 
 [B: CSV 두 파일 비교(시작점 정렬 + RMSE)]
-python3 csv_view_compare.py --mode B \
+python3 csv_view_compare_re.py --mode B \
   --csv_a /home/heachanlee/GOAT/GOAT/Realworld/logs/run1.csv \
   --csv_b /home/heachanlee/GOAT/GOAT/Realworld/logs/run2.csv \
   --joints 6 \
