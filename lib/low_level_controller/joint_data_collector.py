@@ -424,19 +424,24 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     n_rows = math.ceil(n_leg_j / n_cols)
     joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
 
-    # Joint Angle Plot (actual vs ref)
+    # Joint Angle Plot (Degree) (actual vs ref)
     fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
     axies = axies.flatten()
 
+    # rad → deg 변환
+    log_q_deg = np.degrees(log_q_np)
+    log_ref_deg = np.degrees(log_ref_np)
+    joint_limits_deg = np.degrees(joint_limits[0].cpu().numpy())
+
     for i in range(n_leg_j):
         ax = axies[i]
-        ax.plot(log_t_np, log_q_np[:, i], label="actual")
-        ax.plot(log_t_np, log_ref_np[:, i], ls="--", label="ref")  # [추가] 사인파 ref 궤적
-        ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
-        ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
+        ax.plot(log_t_np, log_q_deg[:, i], label="actual")
+        ax.plot(log_t_np, log_ref_deg[:, i], ls="--", label="ref")  # [추가] 사인파 ref 궤적 (deg)
+        ax.axhline(joint_limits_deg[i, 0], ls="--", label="lower_limit", color="r")
+        ax.axhline(joint_limits_deg[i, 1], ls="--", label="upper_limit", color="g")
 
         ax.set_title(f"Joint Angle: {joint_name[i]}")
-        ax.set_ylabel("angle [rad]")
+        ax.set_ylabel("angle [deg]")
         if i // n_cols == n_rows - 1:
             ax.set_xlabel("time [s]")
         if i == 0:
