@@ -244,12 +244,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     #                                    kd=torch.tensor([[0.01, 0.001, 0.001]]),
     # --- Initialize PD torque Controller ---
     
-    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
-                                   kd=torch.tensor([[0.01, 0.00, 0.001]]),
-                                   num_envs=scene.num_envs,
-                                   num_dof=leg_dof,
-                                   device=scene.device,
-                                   dt=sim_dt)
+    # leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
+    #                                kd=torch.tensor([[0.01, 0.00, 0.001]]),
+    #                                num_envs=scene.num_envs,
+    #                                num_dof=leg_dof,
+    #                                device=scene.device,
+    #                                dt=sim_dt)
 
     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.270, 0.350]]),
                                    kd=torch.tensor([[0.015, 0.010, 0.018]]),
@@ -326,8 +326,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
     log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
 
-    # [수정됨] csv_data 리스트 초기화 추가
-    csv_data = []
+    # [수정됨] CSV 저장 포맷을 "csv_view_compare.py"가 읽는 형식으로 변경
+    # columns:
+    # t_sec,
+    # q_ref_i_rad, q_meas_i_rad, dq_meas_i_rad_s, tau_cmd_i_nm  (i=0..7)
+    csv_rows = []
 
     while t <= sim_len:
         # --------- Step Input Calculation ------------ #
@@ -352,9 +355,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         joint_pos = robot.data.joint_pos
         joint_vel = robot.data.joint_vel
 
-        #coriilis
+        # coriolis
         coriolis_full = robot.root_physx_view.get_coriolis_and_centrifugal_compensation_forces()
         # print(robot.data.projected_gravity_b)
+
         # Compute torque
         torque, pd_torque = leg_controller.compute_torque(joint_pos=joint_pos,
                                                           joint_vel=joint_vel,
@@ -371,52 +375,45 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         robot.update(sim_dt)
         scene.update(sim_dt)
         t += sim_dt
+
+        # -------- 기존 플롯 로깅(그대로 유지) --------
         log_t.append(t)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
         log_torque.append((torch.round(pd_torque[:, :n_leg_j] * 100) / 100).clone())
         
-        # --- CSV Logging Logic ---
-        current_time_ns = time.time_ns()
-        
+        # --- CSV Logging Logic (viewer/compare 호환 포맷) ---
+        # env 0 기준으로 저장
         env_idx = 0
-        j_pos = joint_pos[env_idx].cpu().numpy()
-        j_vel = joint_vel[env_idx].cpu().numpy()
-        j_eff = pd_torque[env_idx].cpu().numpy()
-        
-        # Retrieve target angle and convert to Degrees
-        j_target_rad = reference_angle[env_idx].cpu().numpy() 
-        j_target_deg = np.degrees(j_target_rad)               
+        q_meas = joint_pos[env_idx].detach().cpu().numpy()          # rad
+        dq_meas = joint_vel[env_idx].detach().cpu().numpy()         # rad/s
+        q_ref = reference_angle[env_idx].detach().cpu().numpy()     # rad
+        tau_cmd = torque[env_idx].detach().cpu().numpy()            # Nm (실제로 시뮬에 넣은 토크)
 
-        j_cmd = torque[env_idx].cpu().numpy()
-        j_vel_dps = np.degrees(j_vel)
-        
-        data_row = {
-            "time_sec": current_time_ns // 1_000_000_000,
-            "time_nanosec": current_time_ns % 1_000_000_000
-        }
-        
+        # row = [t_sec, (q_ref0,q_meas0,dq0,tau0), ..., (q_ref7,q_meas7,dq7,tau7)]
+        row = [float(t)]
         for i in range(8):
-            data_row[f"pos_{i}"] = j_pos[i]
-            data_row[f"motor_speed_dps_{i}"] = j_vel_dps[i]
-            data_row[f"eff_{i}"] = j_eff[i]
-            data_row[f"target_value_{i}"] = j_target_deg[i] 
-            data_row[f"torque_command_{i}"] = j_cmd[i]
-            
-        csv_data.append(data_row)
+            row += [
+                float(q_ref[i]),
+                float(q_meas[i]),
+                float(dq_meas[i]),
+                float(tau_cmd[i]),
+            ]
+        csv_rows.append(row)
 
-    # --- Save CSV ---
-    print("[INFO] Saving CSV data...")
-    df = pd.DataFrame(csv_data)
-    
-    cols = ["time_sec", "time_nanosec"]
-    for i in range(8): cols.append(f"pos_{i}")
-    for i in range(8): cols.append(f"motor_speed_dps_{i}")
-    for i in range(8): cols.append(f"eff_{i}")
-    for i in range(8): cols.append(f"target_value_{i}")
-    for i in range(8): cols.append(f"torque_command_{i}")
-    
-    df = df[cols]
-    csv_filename = "simulation_data_hip.csv"
+    # --- Save CSV (viewer/compare 호환 포맷) ---
+    print("[INFO] Saving CSV data (viewer/compare format)...")
+
+    header = ["t_sec"]
+    for i in range(8):
+        header += [
+            f"q_ref_{i}_rad",
+            f"q_meas_{i}_rad",
+            f"dq_meas_{i}_rad_s",
+            f"tau_cmd_{i}_nm",
+        ]
+
+    df = pd.DataFrame(csv_rows, columns=header)
+    csv_filename = "simulation_data_viewer_format.csv"
     df.to_csv(csv_filename, index=False)
     print(f"[INFO] Data saved to {csv_filename}")
 
