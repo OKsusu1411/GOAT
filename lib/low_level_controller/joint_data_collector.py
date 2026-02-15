@@ -244,12 +244,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     #                                    kd=torch.tensor([[0.01, 0.001, 0.001]]),
     # --- Initialize PD torque Controller ---
     
-    # leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
-    #                                kd=torch.tensor([[0.01, 0.00, 0.001]]),
-    #                                num_envs=scene.num_envs,
-    #                                num_dof=leg_dof,
-    #                                device=scene.device,
-    #                                dt=sim_dt)
+    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.00, 4.37]]),
+                                   kd=torch.tensor([[0.01, 0.00, 0.001]]),
+                                   num_envs=scene.num_envs,
+                                   num_dof=leg_dof,
+                                   device=scene.device,
+                                   dt=sim_dt)
 
     leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.270, 0.350]]),
                                    kd=torch.tensor([[0.015, 0.010, 0.018]]),
@@ -273,19 +273,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_q = []
     log_angle = []
     log_torque = []
+    log_ref = []  # [추가] time-varying reference logging
 
     # reset state
     print("[INFO] Reset state for plotting...")
 
-    # ---------- User Configuration for Step Input ----------
-    TARGET_JOINT_IDX = 1         # [Index] 제어할 관절 인덱스 (0: hip_L, 1: hip_R, 2: thigh_L, 3: thigh_R, 4: knee_L, 5: knee_R)
-    STEP_INTERVAL = 3.0       # [sec] Time interval between steps (3초마다)
-    STEP_DEGREE = 20.0        # [deg] Degree increase per step (20도씩 증가)
-    NUM_STEPS = 9             # [count] Total number of steps (원하는 횟수만큼 설정)
+    # ---------- User Configuration for Sine Input ----------
+    TARGET_JOINT_IDX = 1         # [Index] 제어할 관절 인덱스 (0: hip_L, 1: hip_R, 2: thigh_L, 3: thigh_R, 4: knee_L, 5: knee_R, 6~7 wheel)
+    SINE_AMP_DEG = 20.0          # [deg] Sine amplitude (peak)
+    SINE_FREQ_HZ = 0.2           # [Hz] Sine frequency
+    SIM_DURATION = 30.0          # [sec] Total simulation time
     
-    # Calculate simulation length based on steps (Give some buffer after last step)
-    sim_len = STEP_INTERVAL * (NUM_STEPS + 2) 
-    print(f"[INFO] Simulation Length set to {sim_len}s based on {NUM_STEPS} steps.")
+    sim_len = SIM_DURATION
+    print(f"[INFO] Simulation Length set to {sim_len}s (sine input).")
 
     # Set Initial Base Angle (Initial Offset)
     base_joint_pos = default_joint_pos.clone()
@@ -325,6 +325,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
     log_angle.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
     log_torque.append(torch.zeros(scene.num_envs, n_leg_j, device=scene.device))
+    log_ref.append(reference_angle[:, :n_leg_j].clone())
 
     # [수정됨] CSV 저장 포맷을 "csv_view_compare.py"가 읽는 형식으로 변경
     # columns:
@@ -333,21 +334,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     csv_rows = []
 
     while t <= sim_len:
-        # --------- Step Input Calculation ------------ #
-        # Calculate current step count
-        current_step = int(t // STEP_INTERVAL)
-        
-        # Limit steps to NUM_STEPS
-        if current_step > NUM_STEPS:
-            current_step = NUM_STEPS
-            
-        # Calculate angle to add (in radians)
-        added_angle_rad = (STEP_DEGREE * math.pi / 180.0) * current_step
-        
-        # Update reference angle based on base position + step increase
+        # --------- Sine Input Calculation ------------ #
+        # added_angle_rad(t) = A * sin(2*pi*f*t)
+        added_angle_rad = (SINE_AMP_DEG * math.pi / 180.0) * math.sin(2.0 * math.pi * SINE_FREQ_HZ * t)
+
         reference_angle = base_joint_pos.clone()
-        
-        # [수정됨] 사용자가 지정한 하나의 관절(TARGET_JOINT_IDX)에만 스텝 입력을 적용
+
+        # [수정됨] 사용자가 지정한 하나의 관절(TARGET_JOINT_IDX)에만 사인파 입력을 적용
         reference_angle[:, TARGET_JOINT_IDX] += added_angle_rad
         
         # --------- Control ------------ #
@@ -376,10 +369,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         scene.update(sim_dt)
         t += sim_dt
 
-        # -------- 기존 플롯 로깅(그대로 유지) --------
+        # -------- 기존 플롯 로깅(그대로 유지 + ref 추가) --------
         log_t.append(t)
         log_q.append(robot.data.joint_pos[:, :n_leg_j].clone())
         log_torque.append((torch.round(pd_torque[:, :n_leg_j] * 100) / 100).clone())
+        log_ref.append(reference_angle[:, :n_leg_j].clone())
         
         # --- CSV Logging Logic (viewer/compare 호환 포맷) ---
         # env 0 기준으로 저장
@@ -413,7 +407,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         ]
 
     df = pd.DataFrame(csv_rows, columns=header)
-    csv_filename = "simulation_data_viewer_format.csv"
+    csv_filename = "simulation_data_viewer_format_sine.csv"
     df.to_csv(csv_filename, index=False)
     print(f"[INFO] Data saved to {csv_filename}")
 
@@ -424,27 +418,23 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     log_t_np = np.asarray(log_t)
     log_q_np = torch.stack(log_q, dim=0).cpu().numpy().squeeze(1)
     log_torque_np = torch.stack(log_torque, dim=0).cpu().numpy().squeeze(1)
+    log_ref_np = torch.stack(log_ref, dim=0).cpu().numpy().squeeze(1)  # [추가]
 
     n_cols = 3
     n_rows = math.ceil(n_leg_j / n_cols)
     joint_name = ["L_hip", "R_hip", "L_thigh", "R_thigh", "L_knee", "R_knee"]
 
-    # Joint Angle Plot
+    # Joint Angle Plot (actual vs ref)
     fig, axies = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True)
     axies = axies.flatten()
 
     for i in range(n_leg_j):
         ax = axies[i]
         ax.plot(log_t_np, log_q_np[:, i], label="actual")
+        ax.plot(log_t_np, log_ref_np[:, i], ls="--", label="ref")  # [추가] 사인파 ref 궤적
         ax.axhline(joint_limits[0, i, 0].cpu(), ls="--", label="lower_limit", color="r")
         ax.axhline(joint_limits[0, i, 1].cpu(), ls="--", label="upper_limit", color="g")
-        # Reference angle varies over time, so we can't plot a single line. 
-        # But we can plot the target for the final step or modify this to log target over time if needed.
-        # For now, keeping as is or plotting the final reference might be confusing. 
-        # Let's plot the reference from the CSV log or similar if we logged it. 
-        # Since we didn't log reference_angle in log_*, this line might show the FINAL reference angle.
-        ax.axhline(reference_angle[0, i].cpu(), ls="--", label="final_target", color="b")
-        
+
         ax.set_title(f"Joint Angle: {joint_name[i]}")
         ax.set_ylabel("angle [rad]")
         if i // n_cols == n_rows - 1:
