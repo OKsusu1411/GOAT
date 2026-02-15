@@ -31,17 +31,10 @@ from lib.env.GOAT_base_env_cfg import GOAT_Cfg
 from lib.RRT.RRT_wrapper import RRTWrapper
 from lib.utils import Env
 
-<<<<<<< HEAD
 # HIP_COL_FRI = 0
 # HIP_VIS_FRI = 0
 # KNEE_COL_FRI = 0
 # KNEE_VIS_FRI = 0
-=======
-HIP_COL_FRI = 5.646268e-02
-HIP_VIS_FRI = 3.190248e-02
-TIGH_COL_FRI = 4.432008e-01
-TIGH_VIS_FRI = 2.993308e-02
->>>>>>> f4648517b1d10240ba57bc40cde866833df1a567
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -257,6 +250,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                    num_dof=leg_dof,
                                    device=scene.device,
                                    dt=sim_dt)
+
+    leg_controller = PD_Controller(kp=torch.tensor([[0.330, 0.270, 0.350]]),
+                                   kd=torch.tensor([[0.015, 0.010, 0.018]]),
+                                   num_envs=scene.num_envs,
+                                   num_dof=leg_dof,
+                                   device=scene.device,
+                                   dt=sim_dt)
+                               
     # ---------- Environment Initialization ----------
     joint_limits = robot.data.joint_pos_limits
     torque_limits = robot.data.joint_effort_limits
