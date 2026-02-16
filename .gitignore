@@ -11,7 +11,7 @@
 
 # Python
 .DS_Store
-**/*.egg-info/
+**/*.egg-info
 **/__pycache__/
 **/.pytest_cache/
 **/*.pyc
@@ -41,7 +41,7 @@ docker/.container.cfg
 **/.neptune/*
 docker/artifacts/
 *.tmp
-*.csv
+# *.csv
 
 # Doc Outputs
 **/docs/_build/*
