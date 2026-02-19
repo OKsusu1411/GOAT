@@ -104,25 +104,24 @@ def generate_launch_description():
     #     name="agent_node",
     #     output="screen",
     #     parameters=[{
-    #         "action_frequency": 100.0,
     #     }],
     # )
 
-    log_viewer_node = Node(
-        package="goat_control",
-        executable="log_viewer_node",
-        name="log_viewer_node",
-        output="screen",
-        condition=IfCondition(LaunchConfiguration("launch_log_viewer")),
-        parameters=[{
-            "log_topic": "goat/torque_log",
-            "joint_state_topic": "joint_states",
-            "use_joint_state_names": True,
-            "print_rate_hz": LaunchConfiguration("print_rate_hz"),
-            "command_unit": LaunchConfiguration("command_unit"),
-            "print_degrees": True,
-        }],
-    )
+    # log_viewer_node = Node(
+    #     package="goat_control",
+    #     executable="log_viewer_node",
+    #     name="log_viewer_node",
+    #     output="screen",
+    #     condition=IfCondition(LaunchConfiguration("launch_log_viewer")),
+    #     parameters=[{
+    #         "log_topic": "goat/torque_log",
+    #         "joint_state_topic": "joint_states",
+    #         "use_joint_state_names": True,
+    #         "print_rate_hz": LaunchConfiguration("print_rate_hz"),
+    #         "command_unit": LaunchConfiguration("command_unit"),
+    #         "print_degrees": True,
+    #     }],
+    # )
 
     # motor_command_node = Node(
     #     package="goat_control",
@@ -163,7 +162,7 @@ def generate_launch_description():
         state_estimation_node,
         control_node,
         # policy_node,
-        log_viewer_node,
+        # log_viewer_node,
         motor_io_node,
         # motor_command_node,
     ])

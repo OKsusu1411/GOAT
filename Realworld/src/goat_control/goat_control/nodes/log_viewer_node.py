@@ -59,7 +59,6 @@ class MotorTorqueLogViewer(Node):
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("command_unit", "torque_nm")  # torque_nm or amp
         self.declare_parameter("precision", 3)
-        self.declare_parameter("header_every", 20)
 
         self.log_topic = str(self.get_parameter("log_topic").value)
         self.joint_state_topic = str(self.get_parameter("joint_state_topic").value)
@@ -73,7 +72,6 @@ class MotorTorqueLogViewer(Node):
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.command_unit = str(self.get_parameter("command_unit").value)
         self.precision = int(self.get_parameter("precision").value)
-        self.header_every = int(self.get_parameter("header_every").value)
 
         if len(self.joint_names) != self.num_joints:
             self.get_logger().warn(
@@ -143,21 +141,13 @@ class MotorTorqueLogViewer(Node):
         command_unit = "Nm" if self.command_unit == "torque_nm" else "A"
 
         # Print rows (batch: all joints in ONE log block)
-        fmt = (
-            f"{{:>3}}  {{:<12}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+        header_str = (
+            f"{'ID':>3}  {'NAME':<12}  "
+            f"{'POS':>14}  {'VEL':>14}  {'CMD':>14}  {'REF':>14}"
         )
-        if self._print_count % self.header_every == 0:
-            header_str = (
-                f"{'ID':>3}  {'NAME':<12}  "
-                f"{'POS':>14}  {'VEL':>14}  {'CMD':>14}  {'REF':>14}"
-            )
+        div_str = "-" * len(header_str)
 
-            div_str = "-" * len(header_str)
-            self.get_logger().info("\n" + header_str)
-
-        lines = []
+        lines = [header_str, div_str]
 
         # Print log data
         for joint_index in range(self.num_joints):
