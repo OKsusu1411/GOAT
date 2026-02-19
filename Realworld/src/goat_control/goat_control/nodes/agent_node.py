@@ -10,7 +10,7 @@ from sensor_msgs.msg import JointState
 from motor_interfaces.msg import BaseStates
 
 
-class PolicyNode(Node):
+class AgentNode(Node):
     """
     Legacy-compatible policy I/O:
       - Subscribes:
@@ -21,13 +21,13 @@ class PolicyNode(Node):
     """
 
     def __init__(self):
-        super().__init__("policy")
+        super().__init__("agent")
 
-        self.policy_checkpoint = str(self.declare_parameter("policy_checkpoint", "").value)
-        policy_device_param = str(self.declare_parameter("policy_device", "cpu").value)
-        self.policy_device = self._resolve_device(policy_device_param)
+        self.checkpoint = str(self.declare_parameter("checkpoint", "").value)
+        torch_device_param = str(self.declare_parameter("torch_device", "cuda").value)
+        self.torch_device = self._resolve_device(torch_device_param)
         self.action_shape = tuple(int(x) for x in self.declare_parameter("action_shape", [8]).value)
-        self.policy_model = self._load_policy(self.policy_checkpoint, self.policy_device)
+        self.agent = self._load_agent(self.checkpoint, self.torch_device)
         self._last_inference_error_log_time_sec = 0.0
 
         action_frequency_param = float(self.declare_parameter("action_frequency", 100.0).value)
@@ -64,7 +64,7 @@ class PolicyNode(Node):
             return
 
         observation = self._build_observation(self.latest_joint_state, self.latest_imu)
-        action_array = self._infer_action(observation)
+        action_array = self._actor_act(observation)
 
         action_msg = self._numpy_to_multiarray(action_array)
         self.action_publisher.publish(action_msg)
@@ -73,11 +73,11 @@ class PolicyNode(Node):
         try:
             device = torch.device(device_name)
         except Exception:
-            self.get_logger().warn(f"Invalid policy_device '{device_name}'. Falling back to CPU.")
+            self.get_logger().warn(f"Invalid torch_device '{device_name}'. Falling back to CPU.")
             return torch.device("cpu")
 
         if device.type == "cuda" and not torch.cuda.is_available():
-            self.get_logger().warn("CUDA requested for policy_device but unavailable. Falling back to CPU.")
+            self.get_logger().warn("CUDA requested for torch_device but unavailable. Falling back to CPU.")
             return torch.device("cpu")
 
         return device
@@ -111,38 +111,38 @@ class PolicyNode(Node):
 
         return np.concatenate([positions, velocities, imu_vector], axis=0, dtype=np.float32)
 
-    def _infer_action(self, observation: np.ndarray) -> np.ndarray:
+    def _actor_act(self, observation: np.ndarray) -> np.ndarray:
         target_elements = int(np.prod(self.action_shape)) if self.action_shape else observation.size
         zero_action = np.zeros(target_elements, dtype=np.float32)
 
-        if self.policy_model is None:
+        if self.agent is None:
             return zero_action.reshape(self.action_shape) if self.action_shape else zero_action
 
         try:
             obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.policy_device).unsqueeze(0)
             with torch.no_grad():
-                output = self.policy_model(obs_tensor)
+                action, _, _ , _ = self.agent.act(obs_tensor, timestep=-1, deterministic=True)          # Ignore timestep
 
-            if isinstance(output, (tuple, list)):
-                output = output[0]
+            # if isinstance(output, (tuple, list)):
+            #     output = output[0]
 
-            output_flat = output.detach().cpu().numpy().astype(np.float32).reshape(-1)
+            action_flat = action.detach().cpu().numpy().astype(np.float32).reshape(-1)
 
-            if output_flat.size < target_elements:
-                output_flat = np.pad(output_flat, (0, target_elements - output_flat.size), mode="constant")
-            elif output_flat.size > target_elements:
-                output_flat = output_flat[:target_elements]
+            if action_flat.size < target_elements:
+                action_flat = np.pad(action_flat, (0, target_elements - action_flat.size), mode="constant")
+            elif action_flat.size > target_elements:
+                action_flat = action_flat[:target_elements]
 
         except Exception as exc:
             now_sec = self.get_clock().now().nanoseconds * 1e-9
             if now_sec - self._last_inference_error_log_time_sec > 1.0:
                 self.get_logger().warn(f"Policy inference failed: {exc}")
                 self._last_inference_error_log_time_sec = now_sec
-            output_flat = zero_action
+            action_flat = zero_action
 
-        return output_flat.reshape(self.action_shape) if self.action_shape else output_flat
+        return action_flat.reshape(self.action_shape) if self.action_shape else action_flat
 
-    def _load_policy(self, checkpoint_path: str, device: torch.device):
+    def _load_agent(self, checkpoint_path: str, device: torch.device):
         if not checkpoint_path:
             self.get_logger().info("No policy checkpoint provided; publishing zero actions.")
             return None
@@ -184,7 +184,7 @@ class PolicyNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PolicyNode()
+    node = AgentNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
