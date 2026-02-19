@@ -55,6 +55,7 @@ class GoatControlNode(Node):
         observation_topic = str(self.get_parameter("observation_topic").value)
         torque_command_topic = str(self.get_parameter("torque_command_topic").value)
 
+        # Buffer for observation, action
         self.buffers = LatestBuffers()
 
         # Pub/Sub
@@ -99,7 +100,7 @@ class GoatControlNode(Node):
         self._last_debug_print_time_sec = 0.0
         self.last_action_time = None
         
-        control_period_sec = 1.0 / max(control_rate_hz, 1.0)
+        control_period_sec = 1.0 / max(control_rate_hz, 1.0)                                # Low-level controller frequency
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
 
         self.get_logger().info("GoatControlNode started.")
@@ -131,22 +132,7 @@ class GoatControlNode(Node):
             self.get_logger().warn("No joint states received yet, skipping control loop.")
             return
 
-        # 1. Decode action to targets
-        action_msg = self.buffers.action_msg
-        action_timed_out = self._is_action_timed_out(now_time)
-
-        if (action_msg is None) or action_timed_out:
-            desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
-            desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
-        else:
-            desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg)
-
-        targets = ControlTargets(
-            desired_joint_position_rad=desired_joint_position_rad,
-            desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
-        )
-
-        # 2. Construct RobotState from subscribed messages
+        # 1. Construct RobotState from subscribed messages
         joint_state_msg = self.buffers.joint_state_msg
         imu_msg = self.buffers.imu_msg
         
@@ -157,12 +143,12 @@ class GoatControlNode(Node):
                 orientation_quat_x=float(imu_msg.quat.x),
                 orientation_quat_y=float(imu_msg.quat.y),
                 orientation_quat_z=float(imu_msg.quat.z),
-                angular_velocity_x=float(imu_msg.gyro.x),
-                angular_velocity_y=float(imu_msg.gyro.y),
-                angular_velocity_z=float(imu_msg.gyro.z),
-                linear_acceleration_x=float(imu_msg.acc.x),
-                linear_acceleration_y=float(imu_msg.acc.y),
-                linear_acceleration_z=float(imu_msg.acc.z),
+                gyroscope_x=float(imu_msg.gyro.x),
+                gyroscope_y=float(imu_msg.gyro.y),
+                gyroscope_z=float(imu_msg.gyro.z),
+                acceleration_x=float(imu_msg.acc.x),
+                acceleration_y=float(imu_msg.acc.y),
+                acceleration_z=float(imu_msg.acc.z),
                 magnetic_field_x=float(imu_msg.mag.x),
                 magnetic_field_y=float(imu_msg.mag.y),
                 magnetic_field_z=float(imu_msg.mag.z),
@@ -179,6 +165,22 @@ class GoatControlNode(Node):
             motor_operating_state=[],
             imu_state=imu_state,
             timestamp_sec=now_time.nanoseconds * 1e-9
+        )
+
+        # 2. Decode action to targets
+        action_msg = self.buffers.action_msg
+        action_timed_out = self._is_action_timed_out(now_time)
+
+        if (action_msg is None) or action_timed_out:
+            desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
+            desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
+        else:
+            desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
+
+        # Target 
+        targets = ControlTargets(
+            desired_joint_position_rad=desired_joint_position_rad,
+            desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
         )
         
         # 3. Compute control command
@@ -212,27 +214,32 @@ class GoatControlNode(Node):
         #         f"  Amp Command: {self.goat_model.convert_joint_torque_to_motor_current(safe_command)}"
         #     )
         #     self._last_debug_print_time_sec = now_sec
+
         # 5. Publish torque command
         self._publish_torque_command(safe_command)
 
         # 6. Publish observation and debug topics
         self._publish_observation(robot_state)
         self._publish_motor_torque_log(robot_state, safe_command, targets)
-        
-    def _decode_action_to_targets(self, action_msg: Float32MultiArray) -> Tuple[np.ndarray, np.ndarray]:
+    
+    # Refining action vector
+    def _decode_action_to_targets(self, action_msg: Float32MultiArray, robot_state: RobotState) -> Tuple[np.ndarray, np.ndarray]:
+        # Delta pos action
         action_array = np.asarray(action_msg.data, dtype=float).flatten()
+        current_joint_pos = robot_state.joint_position_rad
 
+        # Initial(zero) pos, vel
         desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
         desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
 
+        # Indices for slicing
         joint_indices = [int(i) for i in self.goat_model.joint_indices]
         wheel_indices = [int(i) for i in self.goat_model.wheel_indices]
 
         expected_len = len(joint_indices) + len(wheel_indices)
 
-        # compact(8) 포맷만 지원
+        # Only 8 bytes
         if action_array.size != expected_len:
-            # 로그 스팸 방지: 최초 1회만 경고
             if not hasattr(self, "_warned_action_len"):
                 self._warned_action_len = False
             if not self._warned_action_len:
@@ -243,12 +250,12 @@ class GoatControlNode(Node):
                 self._warned_action_len = True
             return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
 
-        # 1) joint targets: action[0:len(joint_indices)]
+        # 1) Delta position action
         if len(joint_indices) > 0:
             ji = np.asarray(joint_indices, dtype=int)
-            desired_joint_position_rad[ji] = action_array[: len(joint_indices)]
+            desired_joint_position_rad[ji] = current_joint_pos[:len(joint_indices)] + action_array[:len(joint_indices)]
 
-        # 2) wheel speed targets: action[len(joint_indices):]
+        # 2) Reference velocity action
         if len(wheel_indices) > 0:
             wi = np.asarray(wheel_indices, dtype=int)
             desired_wheel_speed_rad_per_sec[wi] = action_array[len(joint_indices) : expected_len]
@@ -260,12 +267,17 @@ class GoatControlNode(Node):
         msg.data = safe_command.tolist()
         self.torque_command_publisher.publish(msg)
 
+    ## =============================== Observation vector =============================== ## 
     def _publish_observation(self, robot_state):
-        q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
-        dq = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
-        effort_like = np.asarray(robot_state.joint_effort_like, dtype=float).flatten()
+        # TODO: Noise filtering
+        base_acc = np.asarray(robot_state.imu_state.acceleration, dtype=float).flatten()
+        base_angular_vel = np.asarray(robot_state.imu_state.gyroscope, dtype=float).flatten()
+        base_quat = np.asarray(robot_state.imu_state.orientation_quat, dtype=float).flatten()
+        joint_q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
+        joint_dq = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+        # effort_like = np.asarray(robot_state.joint_effort_like, dtype=float).flatten()
         
-        obs = np.concatenate([q, dq, effort_like], axis=0)
+        obs = np.concatenate([base_acc, base_angular_vel, base_quat, joint_q, joint_dq], axis=0)
         msg = Float32MultiArray()
         msg.data = obs.astype(np.float32).tolist()
         self.observation_publisher.publish(msg)
