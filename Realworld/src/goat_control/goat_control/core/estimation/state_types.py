@@ -36,31 +36,43 @@ class ImuState:
       - accel: m/s^2 or g depends on your sensor output.
       - magnetometer: uT or arbitrary, depends on your sensor output.
 
-    If you later standardize units (recommended), rename fields accordingly.
     """
 
-    # Quaternion (unitless)
+    # Quaternion [unitless]
     orientation_quat_w: float
     orientation_quat_x: float
     orientation_quat_y: float
     orientation_quat_z: float
+    orientation_quat = [orientation_quat_w,
+                        orientation_quat_x,
+                        orientation_quat_y,
+                        orientation_quat_z]
 
-    # Angular velocity
-    angular_velocity_x: float
-    angular_velocity_y: float
-    angular_velocity_z: float
+    # Angular velocity [degree per second]
+    gyroscope_x: float
+    gyroscope_y: float
+    gyroscope_z: float
+    gyroscope = [gyroscope_x,
+                 gyroscope_y,
+                 gyroscope_z]
 
-    # Linear acceleration
-    linear_acceleration_x: float
-    linear_acceleration_y: float
-    linear_acceleration_z: float
+    # Base acceleration [g?]
+    acceleration_x: float
+    acceleration_y: float
+    acceleration_z: float
+    acceleration = [acceleration_x,
+                    acceleration_y,
+                    acceleration_z]
 
-    # Magnetic field
+    # Magnetic field [uT]
     magnetic_field_x: float
     magnetic_field_y: float
     magnetic_field_z: float
+    magnetic_field = [magnetic_field_x,
+                      magnetic_field_y,
+                      magnetic_field_z]
 
-    # Sensor timestamp from IMU packet
+    # Sensor timestamp from IMU packet [ms]
     sensor_time_ms: float
 
 
