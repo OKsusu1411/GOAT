@@ -43,38 +43,24 @@ class ImuState:
     orientation_quat_x: float
     orientation_quat_y: float
     orientation_quat_z: float
-    orientation_quat = [orientation_quat_w,
-                        orientation_quat_x,
-                        orientation_quat_y,
-                        orientation_quat_z]
 
     # Angular velocity [degree per second]
     gyroscope_x: float
     gyroscope_y: float
     gyroscope_z: float
-    gyroscope = [gyroscope_x,
-                 gyroscope_y,
-                 gyroscope_z]
 
     # Base acceleration [g?]
     acceleration_x: float
     acceleration_y: float
     acceleration_z: float
-    acceleration = [acceleration_x,
-                    acceleration_y,
-                    acceleration_z]
 
     # Magnetic field [uT]
     magnetic_field_x: float
     magnetic_field_y: float
     magnetic_field_z: float
-    magnetic_field = [magnetic_field_x,
-                      magnetic_field_y,
-                      magnetic_field_z]
 
     # Sensor timestamp from IMU packet [ms]
     sensor_time_ms: float
-
 
 @dataclass
 class RobotState:

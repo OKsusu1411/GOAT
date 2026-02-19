@@ -285,9 +285,25 @@ class GoatControlNode(Node):
     ## =============================== Observation vector =============================== ## 
     def _publish_observation(self, robot_state):
         # TODO: Noise filtering
-        base_acc = np.asarray(robot_state.imu_state.acceleration, dtype=float).flatten()
-        base_angular_vel = np.asarray(robot_state.imu_state.gyroscope, dtype=float).flatten()
-        base_quat = np.asarray(robot_state.imu_state.orientation_quat, dtype=float).flatten()
+
+        acceleration = [robot_state.imu_state.acceleration_x,
+                        robot_state.imu_state.acceleration_y,
+                        robot_state.imu_state.acceleration_z]
+        gyroscope = [robot_state.imu_state.gyroscope_x,
+                     robot_state.imu_state.gyroscope_y,
+                     robot_state.imu_state.gyroscope_z]
+        orientation_quat = [robot_state.imu_state.orientation_quat_w,
+                            robot_state.imu_state.orientation_quat_x,
+                            robot_state.imu_state.orientation_quat_y,
+                            robot_state.imu_state.orientation_quat_z]
+        magnetic_field = [robot_state.imu_state.magnetic_field_x,               # Currently not used
+                          robot_state.imu_state.magnetic_field_y,
+                          robot_state.imu_state.magnetic_field_z]
+        # sensor_time_ms = float(imu_msg.time_ms)
+
+        base_acc = np.asarray(acceleration, dtype=float).flatten()
+        base_angular_vel = np.asarray(gyroscope, dtype=float).flatten()
+        base_quat = np.asarray(orientation_quat, dtype=float).flatten()
         joint_q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_dq = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         # effort_like = np.asarray(robot_state.joint_effort_like, dtype=float).flatten()
