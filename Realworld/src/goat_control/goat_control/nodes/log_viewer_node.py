@@ -42,10 +42,14 @@ class MotorTorqueLogViewer(Node):
         self.declare_parameter("num_joints", 8)
         self.declare_parameter(
             "joint_names",
-            ["hip_L_Joint",  "hip_R_Joint",
-             "thigh_L_Joint","thigh_R_Joint",
-             "knee_L_Joint", "knee_R_Joint",
-             "wheel_L_Joint","wheel_R_Joint",]
+            ["hip_L_Joint",
+             "hip_R_Joint",
+             "thigh_L_Joint",
+             "thigh_R_Joint",
+             "knee_L_Joint", 
+             "knee_R_Joint",
+             "wheel_L_Joint",
+             "wheel_R_Joint"]
         )
 
         # For nicer ref printing (ref is position for joints, speed for wheels)
@@ -119,6 +123,7 @@ class MotorTorqueLogViewer(Node):
             )
             return
 
+        # Data slicing
         joint_position_rad = vector[0 : self.num_joints]
         joint_velocity_rad_per_sec = vector[self.num_joints : 2 * self.num_joints]
         command_value = vector[2 * self.num_joints : 3 * self.num_joints]
@@ -143,29 +148,38 @@ class MotorTorqueLogViewer(Node):
             f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  "
             f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
         )
+        if self._print_count % self.header_every == 0:
+            header_str = (
+                f"{'ID':>3}  {'NAME':<12}  "
+                f"{'POS':>14}  {'VEL':>14}  {'CMD':>14}  {'REF':>14}"
+            )
+
+            div_str = "-" * len(header_str)
+            self.get_logger().info("\n" + header_str)
 
         lines = []
+
+        # Print log data
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
-            # ref: position ref for joints, speed ref for wheels
-            ref_value = float(ref_vector[joint_index])
+            raw_ref = float(ref_vector[joint_index])
             if joint_index in self.wheel_indices:
-                # wheel ref is speed
-                ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
+                # Wheel: Reference is Speed
+                ref_val = float(np.rad2deg(raw_ref)) if self.print_degrees else raw_ref
+                ref_unit = velocity_unit
             else:
-                # joint ref is position
-                ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
+                # Joint: Reference is Position
+                ref_val = float(np.rad2deg(raw_ref)) if self.print_degrees else raw_ref
+                ref_unit = position_unit
 
+            # Integrate data
             lines.append(
-                fmt.format(
-                    joint_index,
-                    name[:12],
-                    float(joint_position[joint_index]),
-                    float(joint_velocity[joint_index]),
-                    float(command_value[joint_index]),
-                    float(ref_print),
-                )
+                f"{joint_index:>3}  {name[:12]:<12}  "
+                f"{float(joint_position[joint_index]):>9.{self.precision}f} {position_unit:<3}  "
+                f"{float(joint_velocity[joint_index]):>9.{self.precision}f} {velocity_unit:<3}  "
+                f"{float(command_value[joint_index]):>9.{self.precision}f} {command_unit:<3}  "
+                f"{float(ref_val):>9.{self.precision}f} {ref_unit:<3}"
             )
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
