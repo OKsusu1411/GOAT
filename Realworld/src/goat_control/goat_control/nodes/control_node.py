@@ -38,15 +38,19 @@ class GoatControlNode(Node):
 
         # Parameters
         self.declare_parameter("control_rate_hz", 200.0)
+        self.declare_parameter("policy_decimation", 2.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("debug_print_period_sec", 0.2)
+        self.declare_parameter("action_space_len", 8)
+        self.declare_parameter("observation_space_len", 28)
         self.declare_parameter("log_topic", "goat/torque_log")
         self.declare_parameter("policy_action", "goat/action")
         self.declare_parameter("observation_topic", "goat/observation")
         self.declare_parameter("torque_command_topic", "goat/torque_commands")
 
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
+        policy_decimation = float(self.get_parameter("policy_decimation").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
         self.debug_print_period_sec = float(self.get_parameter("debug_print_period_sec").value)
@@ -91,7 +95,6 @@ class GoatControlNode(Node):
 
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
-        # self.default_desired_joint_position_rad[2] = np.deg2rad(-20.0)
         self.default_desired_wheel_speed_rad_per_sec = np.zeros(self.num_joints, dtype=float)
 
         # Timers
@@ -99,15 +102,30 @@ class GoatControlNode(Node):
         self._last_timeout_warn_time_sec = 0.0
         self._last_debug_print_time_sec = 0.0
         self.last_action_time = None
+        self.agent_start_time: Optional[rclpy.time.Time] = None
+        self.agent_timestep = 0.0
         
+        # Controller loop timer
         control_period_sec = 1.0 / max(control_rate_hz, 1.0)                                # Low-level controller frequency
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
-
+        
+        # Decimation(Policy) counter
+        self.policy_decimation = policy_decimation
+        self.policy_decimation_counter = 0
         self.get_logger().info("GoatControlNode started.")
 
     def _on_action_msg(self, msg: Float32MultiArray):
+        """Action msg subscriber"""
+        now_time = self.get_clock().now()
+
+        # Record first action recived time
+        if self.agent_start_time is None:
+            self.agent_start_time = now_time
+            self.agent_timestep = 0
+            self.get_logger().info("Agent node's first action detected! Starting policy timer.")
+        
         self.buffers.action_msg = msg
-        self.last_action_time = self.get_clock().now()
+        self.last_action_time = now_time
 
     def _on_joint_state_msg(self, msg: JointState):
         self.buffers.joint_state_msg = msg
@@ -119,7 +137,14 @@ class GoatControlNode(Node):
         if self.last_action_time is None:
             return True
         age_sec = (now_time - self.last_action_time).nanoseconds * 1e-9
-        return age_sec > self.action_timeout_sec
+        
+        if age_sec > self.action_timeout_sec:
+            # Reset agent timer
+            self.agent_start_time = None
+            self.agent_timestep = -1
+            return True
+        
+        return False
 
     def _control_loop(self):
         now_time = self.get_clock().now()
@@ -171,19 +196,19 @@ class GoatControlNode(Node):
         action_msg = self.buffers.action_msg
         action_timed_out = self._is_action_timed_out(now_time)
 
+        # Action timeout exception
         if (action_msg is None) or action_timed_out:
             desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
             desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
         else:
             desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
 
-        # Target 
         targets = ControlTargets(
             desired_joint_position_rad=desired_joint_position_rad,
             desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
         )
         
-        # 3. Compute control command
+        # 3. Compute command torque
         safe_command, _ = self.control_pipeline.compute_control(
             robot_state=robot_state,
             targets=targets,
@@ -199,28 +224,18 @@ class GoatControlNode(Node):
                     f"Policy action timeout (> {self.action_timeout_sec:.3f}s) -> FORCE ZERO TORQUE"
                 )
                 self._last_timeout_warn_time_sec = now_sec
-
-        # #log debug info
-        # now_sec = now_time.nanoseconds * 1e-9
-        # if now_sec - self._last_debug_print_time_sec > self.debug_print_period_sec:
-        #     self.get_logger().info(
-        #         f"Control Loop Debug:\n"
-        #         f"  Desired Pos [rad]: {desired_joint_position_rad}\n"
-        #         f"  Desired Wheel Speed [rad/s]: {desired_wheel_speed_rad_per_sec}\n"
-        #         f"  Joint Pos [rad]: {robot_state.joint_position_rad}\n"
-        #         f"  Joint Vel [rad/s]: {robot_state.joint_velocity_rad_per_sec}\n"
-        #         f"  Joint Effort-like: {robot_state.joint_effort_like}\n"
-        #         f"  Safe Command: {safe_command}"
-        #         f"  Amp Command: {self.goat_model.convert_joint_torque_to_motor_current(safe_command)}"
-        #     )
-        #     self._last_debug_print_time_sec = now_sec
-
-        # 5. Publish torque command
+        
+        # 5. Publish torque command, log
         self._publish_torque_command(safe_command)
-
-        # 6. Publish observation and debug topics
-        self._publish_observation(robot_state)
         self._publish_motor_torque_log(robot_state, safe_command, targets)
+
+        # 6. Decimation counting
+        self.policy_decimation_counter += 1
+        
+        # 7. Publish observation (Execute agent node)
+        if self.policy_decimation_counter >= self.policy_decimation:
+            self._publish_observation(robot_state)
+            self.policy_decimation_counter = 0                              # Reset counter
     
     # Refining action vector
     def _decode_action_to_targets(self, action_msg: Float32MultiArray, robot_state: RobotState) -> Tuple[np.ndarray, np.ndarray]:
@@ -276,8 +291,21 @@ class GoatControlNode(Node):
         joint_q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_dq = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         # effort_like = np.asarray(robot_state.joint_effort_like, dtype=float).flatten()
+
+        # Initial agent time
+        agent_operating_time = 0.0
+
+        # Agent operation detected
+        if self.agent_start_time is not None:
+            now_time = self.get_clock().now()
+            agent_operating_time = (now_time - self.agent_start_time).nanoseconds * 1e-9            # Currently not used (for time specific task later)
+            self.agent_timestep += 1
         
-        obs = np.concatenate([base_acc, base_angular_vel, base_quat, joint_q, joint_dq], axis=0)
+        # Agent time information
+        time_info = np.array([self.agent_timestep, agent_operating_time], dtype=float)
+        
+        # Build observation vector
+        obs = np.concatenate([base_acc, base_angular_vel, base_quat, joint_q, joint_dq, time_info], dtype=float, axis=0)
         msg = Float32MultiArray()
         msg.data = obs.astype(np.float32).tolist()
         self.observation_publisher.publish(msg)

@@ -6,66 +6,60 @@ import torch
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
-from sensor_msgs.msg import JointState
-from motor_interfaces.msg import BaseStates
 
 
 class AgentNode(Node):
     """
-    Legacy-compatible policy I/O:
+    Event-driven policy I/O:
       - Subscribes:
-          * imu_data (motor_interfaces/BaseStates)
-          * joint_states (sensor_msgs/JointState)   <-- policy input requirement
+          * goat/observation (std_msgs/Float32MultiArray)
+            -> Format: [pure_observations, timestep, agent_operating_time]
       - Publishes:
-          * goat/action (std_msgs/Float32MultiArray) with layout populated
+          * goat/action (std_msgs/Float32MultiArray)
     """
 
     def __init__(self):
         super().__init__("agent")
 
+        # Parameters
         self.checkpoint = str(self.declare_parameter("checkpoint", "").value)
         torch_device_param = str(self.declare_parameter("torch_device", "cuda").value)
         self.torch_device = self._resolve_device(torch_device_param)
         self.action_shape = tuple(int(x) for x in self.declare_parameter("action_shape", [8]).value)
+        self.declare_parameter("observation_topic", "goat/observation")
+        self.declare_parameter("action_topic", "goat/action")
+        
+        # Agent model load
         self.agent = self._load_agent(self.checkpoint, self.torch_device)
         self._last_inference_error_log_time_sec = 0.0
 
-        action_frequency_param = float(self.declare_parameter("action_frequency", 100.0).value)
+        # Topic name
+        observation_topic = str(self.get_parameter("observation_topic").value)
+        action_topic = str(self.get_parameter("action_topic").value)
 
-        # Compatibility: interpret <=1.0 as period(sec), >1.0 as frequency(Hz)
-        if action_frequency_param <= 1.0:
-            self.action_period_sec = max(1e-4, action_frequency_param)
-            self.action_frequency_hz = 1.0 / self.action_period_sec
-        else:
-            self.action_frequency_hz = action_frequency_param
-            self.action_period_sec = 1.0 / max(1e-6, self.action_frequency_hz)
+        # Observation subscriber
+        self.create_subscription(Float32MultiArray, observation_topic, self._on_observation, 10)
+        
+        # Action publisher
+        self.action_publisher = self.create_publisher(Float32MultiArray, action_topic, 10)
 
-        self.get_logger().info(
-            f"Policy tick: {self.action_frequency_hz:.1f} Hz ({self.action_period_sec:.4f} s)"
-        )
+        self.get_logger().info(f"!! Agent Node started on device '{self.torch_device}' !!")
 
-        self.latest_imu: BaseStates | None = None
-        self.latest_joint_state: JointState | None = None
+    def _on_observation(self, msg: Float32MultiArray) -> None:
+        """Observation subscriber"""
+        obs_array = np.asarray(msg.data, dtype=np.float32).flatten()
 
-        self.create_subscription(BaseStates, "imu_data", self._on_imu, 10)
-        self.create_subscription(JointState, "joint_states", self._on_joint_state, 10)
+        # 1. Extract time info
+        agent_timestep = int(obs_array[-2])
+        agent_operating_time = float(obs_array[-1])             # Currently not used (for time specific task later)
 
-        self.action_publisher = self.create_publisher(Float32MultiArray, "goat/action", 10)
-        self.timer = self.create_timer(self.action_period_sec, self._tick)
+        # 2. Extract observation
+        pure_observation = obs_array[:-2]
 
-    def _on_imu(self, msg: BaseStates) -> None:
-        self.latest_imu = msg
+        # 3. Extract action
+        action_array = self._policy(pure_observation, agent_timestep)
 
-    def _on_joint_state(self, msg: JointState) -> None:
-        self.latest_joint_state = msg
-
-    def _tick(self) -> None:
-        if self.latest_joint_state is None:
-            return
-
-        observation = self._build_observation(self.latest_joint_state, self.latest_imu)
-        action_array = self._actor_act(observation)
-
+        # 4. Publish action
         action_msg = self._numpy_to_multiarray(action_array)
         self.action_publisher.publish(action_msg)
 
@@ -82,49 +76,23 @@ class AgentNode(Node):
 
         return device
 
-    def _build_observation(self, joint_state: JointState, imu_state: BaseStates | None) -> np.ndarray:
-        positions = np.asarray(joint_state.position or [], dtype=np.float32)
-
-        velocities = np.asarray(joint_state.velocity or [], dtype=np.float32)
-        if velocities.size < positions.size:
-            velocities = np.pad(velocities, (0, positions.size - velocities.size), mode="constant")
-        elif velocities.size > positions.size:
-            velocities = velocities[: positions.size]
-
-        imu_vector = np.zeros(10, dtype=np.float32)
-        if imu_state is not None:
-            imu_vector = np.asarray(
-                [
-                    imu_state.quat.w,
-                    imu_state.quat.x,
-                    imu_state.quat.y,
-                    imu_state.quat.z,
-                    imu_state.gyro.x,
-                    imu_state.gyro.y,
-                    imu_state.gyro.z,
-                    imu_state.acc.x,
-                    imu_state.acc.y,
-                    imu_state.acc.z,
-                ],
-                dtype=np.float32,
-            )
-
-        return np.concatenate([positions, velocities, imu_vector], axis=0, dtype=np.float32)
-
-    def _actor_act(self, observation: np.ndarray) -> np.ndarray:
+    def _policy(self, observation: np.ndarray, agent_timestep: int) -> np.ndarray:
+        """Policy method: Observation -> Action"""
         target_elements = int(np.prod(self.action_shape)) if self.action_shape else observation.size
         zero_action = np.zeros(target_elements, dtype=np.float32)
 
+        # Execption when agent is not defined
         if self.agent is None:
             return zero_action.reshape(self.action_shape) if self.action_shape else zero_action
 
+        
         try:
-            obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.policy_device).unsqueeze(0)
+            # Load observation on cuda
+            obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.torch_device).unsqueeze(0)
+            
+            # Action
             with torch.no_grad():
-                action, _, _ , _ = self.agent.act(obs_tensor, timestep=-1, deterministic=True)          # Ignore timestep
-
-            # if isinstance(output, (tuple, list)):
-            #     output = output[0]
+                action, _, _ , _ = self.agent.act(obs_tensor, timestep=agent_timestep, deterministic=True)          # Ignore timestep
 
             action_flat = action.detach().cpu().numpy().astype(np.float32).reshape(-1)
 
