@@ -98,13 +98,13 @@ def generate_launch_description():
         }],
     )
 
-    # policy_node = Node(
+    # agent_node = Node(
     #     package="goat_control",
-    #     executable="policy_node",
-    #     name="policy_node",
+    #     executable="agent_node",
+    #     name="agent_node",
     #     output="screen",
     #     parameters=[{
-    #         "action_frequency": 50.0,
+    #         "action_frequency": 100.0,
     #     }],
     # )
 
