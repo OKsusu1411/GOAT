@@ -12,7 +12,6 @@ data_files = [
     (f"share/{package_name}", ["package.xml"]),
 ]
 
-# 있으면 설치, 없어도 에러 안 나게
 if os.path.isdir("launch"):
     data_files.append((os.path.join("share", package_name, "launch"), safe_glob("launch/*.py")))
 if os.path.isdir("urdf"):
@@ -20,7 +19,6 @@ if os.path.isdir("urdf"):
 if os.path.isdir("config"):
     data_files.append((os.path.join("share", package_name, "config"), safe_glob("config/*")))
 if os.path.isdir("meshes"):
-    # meshes는 하위 폴더까지 전부 설치
     data_files.append((os.path.join("share", package_name, "meshes"), safe_glob("meshes/**/*")))
 
 setup(
@@ -37,8 +35,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            # ros2 run goat_description imu_tf_broadcaster
-            "imu_tf_broadcaster = goat_description.nodes.imu_tf_broadcaster:main",
+            "imu_tf_publisher = goat_description.nodes.imu_tf_publisher:main",
         ],
     },
 )

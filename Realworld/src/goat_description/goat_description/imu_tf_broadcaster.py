@@ -2,22 +2,22 @@
 from __future__ import annotations
 
 import rclpy
-from rclpy.node import Node
 
+from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
-
-# 너 메시지 패키지에 맞게 import 경로 수정!
 from motor_interfaces.msg import BaseStates
 
 
-class ImuTfBroadcaster(Node):
+class ImuTfPublisher(Node):
     """
+    Transform custom imu msg type into Rviz imu msg type and publish.
+
     Subscribe: /imu_data (motor_interfaces/msg/BaseStates)
     Publish TF: odom -> base_link (rotation = imu quat)
     """
     def __init__(self):
-        super().__init__("imu_tf_broadcaster")
+        super().__init__("imu_tf_publisher")
 
         self.declare_parameter("imu_topic", "/imu_data")
         self.declare_parameter("parent_frame", "odom")
@@ -33,8 +33,7 @@ class ImuTfBroadcaster(Node):
         self.sub = self.create_subscription(BaseStates, imu_topic, self.cb, 10)
 
         self.get_logger().info(
-            f"Listening {imu_topic}, publishing TF {self.parent_frame} -> {self.child_frame}"
-        )
+            f"Listening {imu_topic}, publishing TF {self.parent_frame} -> {self.child_frame}")
 
     def cb(self, msg: BaseStates):
         t = TransformStamped()
@@ -47,7 +46,6 @@ class ImuTfBroadcaster(Node):
             t.transform.translation.y = 0.0
             t.transform.translation.z = 0.0
 
-        # BaseStates.quat가 geometry_msgs/Quaternion 타입이면 그대로 가능
         t.transform.rotation = msg.quat
 
         self.tf_broadcaster.sendTransform(t)
@@ -55,7 +53,7 @@ class ImuTfBroadcaster(Node):
 
 def main():
     rclpy.init()
-    node = ImuTfBroadcaster()
+    node = ImuTfPublisher()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

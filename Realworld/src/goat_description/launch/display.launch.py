@@ -49,10 +49,10 @@ def generate_launch_description():
     # -------------------------------
     # IMU TF Broadcaster (추가!)
     # -------------------------------
-    imu_tf_node = Node(
+    imu_tf_publisher_node = Node(
         package='goat_description',
-        executable='imu_tf_broadcaster',
-        name='imu_tf_broadcaster',
+        executable='imu_tf_publisher',
+        name='imu_tf_publisher',
         output='screen',
         parameters=[
             {
@@ -77,6 +77,6 @@ def generate_launch_description():
         use_gui_arg,
         robot_state_publisher_node,
         joint_state_publisher_gui_node,
-        imu_tf_node,   # 추가됨
+        imu_tf_publisher_node,
         rviz_node,
     ])
