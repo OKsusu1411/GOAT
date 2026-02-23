@@ -273,6 +273,14 @@
         </inertial>
     </link>
 
+    <link name="imu_link">
+        <!-- <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.02 0.02 0.01"/> </geometry>
+            <material name="red"/>
+        </visual> -->
+    </link>
 
     <!-- ****************************************** Joint ******************************************************** -->
     
@@ -348,6 +356,12 @@
         <limit effort="2.5" lower="-1000000" upper="1000000" velocity="40" />
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
+    </joint>
+
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_Link"/>
+        <child link="imu_link"/>
+        <origin xyz="0 0 0.1" rpy="0 0 0"/>
     </joint>
     
     <!-- ****************************************** D435 Camera ******************************************************** -->

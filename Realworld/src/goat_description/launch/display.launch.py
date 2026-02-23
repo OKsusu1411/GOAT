@@ -56,9 +56,9 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {
-                "imu_topic": "/imu_data",
+                "imu_topic": "/goat/imu_data",
                 "parent_frame": "odom",
-                "child_frame": "base_link",
+                "child_frame": "base_Link",
                 "use_translation_zero": True,
             }
         ],
