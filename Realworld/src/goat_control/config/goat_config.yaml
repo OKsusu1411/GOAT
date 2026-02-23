@@ -44,7 +44,7 @@ wheel_pi:
 
   integrator_state_limit: 3.0
 
-  output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,4.5,4.5]
+  output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,2.5,2.5]
 
 safety:
   torque_lpf_alpha_per_joint: [0.951,0.951,
@@ -55,7 +55,14 @@ safety:
   max_torque_per_joint: [4.5,4.5,
                          4.5,4.5, 
                          4.5,4.5,
-                         0.001,0.001]
+                         2.5,2.5]
+
+  joint_limit: [[-1.22173, 0.750492],
+                [-0.750492, 1.22173],
+                [-0.261799, 2.05949],
+                [-2.05949, 0.261799],
+                [0.0, 2.30383],
+                [-2.30383, 0.0]]
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125
