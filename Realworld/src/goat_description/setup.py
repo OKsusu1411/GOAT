@@ -30,9 +30,13 @@ setup(
     zip_safe=True,
     maintainer="heachanlee",
     maintainer_email="eojin333c@gmail.com",
-    description="GOAT description + helper nodes",
+    description="GOAT Rviz display + helper nodes",
     license="TODO: License declaration",
-    tests_require=["pytest"],
+    extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     entry_points={
         "console_scripts": [
             "imu_tf_publisher = goat_description.nodes.imu_tf_publisher:main",
