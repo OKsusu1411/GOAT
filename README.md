@@ -4,6 +4,11 @@ Wheeled Bipedal Robot(WBR) Project by *Hansu Kim*, *Sangjun Moon*, *Haechan Lee*
 Clone repository recursively with AISL-RL submodule.   
 ```bash
 git clone --recurse-submodules https://github.com/DiligentYoon/AISL-RL.git
+```  
+if you already clone GOAT repository without recursively try recurse pull.   
+```bash
+git pull
+git submodule update --init --recursive
 ```
 
 - On progress - 
