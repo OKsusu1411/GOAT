@@ -20,7 +20,7 @@ __all__ = [
     "WheelPIControllerConfig",
     # Safety / Anti-windup
     "TorqueSafetyLimiter",
-    "TorqueSafetyLimiterConfig",
+    "SafetyLimiterConfig",
     "ConditionalIntegratorAntiWindup",
     "ConditionalIntegratorConfig",
 ]
