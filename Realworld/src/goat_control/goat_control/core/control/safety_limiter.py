@@ -8,7 +8,7 @@ import numpy as np
 
 
 @dataclass
-class TorqueSafetyLimiterConfig:
+class SafetyLimiterConfig:
     """Safety layer for torque/effort command.
 
     - lpf_alpha_per_joint:
@@ -23,12 +23,14 @@ class TorqueSafetyLimiterConfig:
     num_joints: int
     lpf_alpha_per_joint: Optional[Sequence[float]] = None
     max_torque_per_joint: Optional[Sequence[float]] = None
+    joint_pos_limit: Optional[Sequence[float]] = None
+    joint_vel_limit: Optional[Sequence[float]] = None
 
 
 class TorqueSafetyLimiter:
     """Apply LPF + per-joint torque clipping."""
 
-    def __init__(self, config: TorqueSafetyLimiterConfig):
+    def __init__(self, config: SafetyLimiterConfig):
         self.num_joints = int(config.num_joints)
 
         if config.lpf_alpha_per_joint is None:
@@ -79,7 +81,35 @@ class TorqueSafetyLimiter:
         clipped = np.clip(filtered, -self.max_torque_per_joint, self.max_torque_per_joint)
 
         return clipped
+    
 
+# ---------------------------------------------------------------------
+# Joint position + velocity safety lock limiter 
+# ---------------------------------------------------------------------
+
+class JointSafetyLimiter:
+    """Apply joint position limit lock after calculate target position"""
+    def __init__(self, config: SafetyLimiterConfig):
+        self.num_joints = int(config.num_joints)
+
+        self.joint_pos_limit = np.asarray(config.joint_pos_limit, dtype=float).flatten()
+        self.joint_vel_limit = np.asarray(config.joint_vel_limit, dtype=float).flatten()
+
+        # Exception
+        if self.joint_pos_limit.size != self.num_joints:
+            raise ValueError("joint_pos_limit length must match num_joints.")
+        if self.joint_vel_limit.size != self.num_joints:
+            raise ValueError("joint_vel_limit length must match num_joints.")
+
+
+    def apply(self,
+              target_joint_position: np.array,
+              target_joint_velocity: np.array,
+              current_joint_position: np.array,
+              current_joint_velocity: np.array):
+        return None
+        
+        
 
 # ---------------------------------------------------------------------
 # Conditional integration anti-windup for PI controller (wheel indices)

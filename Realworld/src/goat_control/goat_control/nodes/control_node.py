@@ -95,7 +95,7 @@ class GoatControlNode(Node):
 
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
-        self.default_desired_wheel_speed_rad_per_sec = np.zeros(self.num_joints, dtype=float)
+        self.default_desired_joint_velocity_rad_per_sec = np.zeros(self.num_joints, dtype=float)
 
         # Timers
         self.last_control_time = self.get_clock().now()
@@ -199,7 +199,7 @@ class GoatControlNode(Node):
         # Action timeout exception
         if (action_msg is None) or action_timed_out:
             desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
-            desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
+            desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
         else:
             desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
 
@@ -245,7 +245,7 @@ class GoatControlNode(Node):
 
         # Initial(zero) pos, vel
         desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
-        desired_wheel_speed_rad_per_sec = self.default_desired_wheel_speed_rad_per_sec.copy()
+        desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
 
         # Indices for slicing
         joint_indices = [int(i) for i in self.goat_model.joint_indices]

@@ -8,7 +8,7 @@ import numpy as np
 
 from ..control.pd_controller import PDControllerConfig
 from ..control.pi_controller import WheelPIControllerConfig
-from ..control.safety_limiter import TorqueSafetyLimiterConfig
+from ..control.safety_limiter import SafetyLimiterConfig
 from ..estimation.state_manager import StateManagerConfig
 
 
@@ -35,9 +35,9 @@ class GoatModelConfig:
     # -----------------------------
     # Motor -> joint mapping params
     # -----------------------------
-    motor_torque_constant_nm_per_amp: List[float]  # length = num_joints
-    motor_gear_ratio: List[float]                 # length = num_joints
-    motor_direction: List[int]                    # length = num_joints (+1 or -1)
+    motor_torque_constant_nm_per_amp: List[float]   # length = num_joints
+    motor_gear_ratio: List[float]                   # length = num_joints
+    motor_direction: List[int]                      # length = num_joints (+1 or -1)
 
     # -----------------------------
     # Estimation scaling parameters
@@ -68,6 +68,8 @@ class GoatModelConfig:
     # -----------------------------
     torque_lpf_alpha_per_joint: Optional[List[float]] = None     # length = num_joints
     max_torque_per_joint: Optional[List[float]] = None           # length = num_joints
+    joint_pos_limit: Optional[List[float]] = None
+    joint_vel_limit: Optional[List[float]] = None
 
     # -----------------------------
     # Optional filtering in state_manager
@@ -163,11 +165,13 @@ class GoatModel:
             output_limit_per_joint=self.config.wheel_output_limit_per_joint,
         )
 
-    def build_torque_safety_limiter_config(self) -> TorqueSafetyLimiterConfig:
-        return TorqueSafetyLimiterConfig(
+    def build_safety_limiter_config(self) -> SafetyLimiterConfig:
+        return SafetyLimiterConfig(
             num_joints=self.num_joints,
             lpf_alpha_per_joint=self.config.torque_lpf_alpha_per_joint,
             max_torque_per_joint=self.config.max_torque_per_joint,
+            joint_pos_limit=self.config.joint_pos_limit,
+            joint_vel_limit=self.config.joint_vel_limit
         )
 
 

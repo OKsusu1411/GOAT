@@ -56,6 +56,7 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
     safety_section = _get_section(config_dict, "safety", "limiter", "torque_limiter")
     estimation_section = _get_section(config_dict, "estimation", "state_manager")
 
+    # Robot cfg
     joint_names = _as_list(_require(robot_section, "joint_names"))
     joint_indices = _as_list(robot_section.get("joint_indices", list(range(0, 6))))
     wheel_indices = _as_list(robot_section.get("wheel_indices", [6, 7]))
@@ -65,14 +66,6 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
     motor_gear_ratio = _as_list(_require(robot_section, "motor_gear_ratio"))
     motor_direction = _as_list(_require(robot_section, "motor_direction"))
 
-    motor_current_amp_per_lsb = float(estimation_section.get("motor_current_amp_per_lsb", 66.0 / 4096.0))
-    angle_deg_per_lsb = float(estimation_section.get("angle_deg_per_lsb", 0.001))
-    speed_deg_per_sec_per_lsb = float(estimation_section.get("speed_deg_per_sec_per_lsb", 0.01))
-
-    joint_velocity_lpf_alpha = estimation_section.get("joint_velocity_lpf_alpha", None)
-    joint_effort_like_lpf_alpha = estimation_section.get("joint_effort_like_lpf_alpha", None)
-    joint_velocity_lpf_alpha = None if joint_velocity_lpf_alpha is None else float(joint_velocity_lpf_alpha)
-    joint_effort_like_lpf_alpha = None if joint_effort_like_lpf_alpha is None else float(joint_effort_like_lpf_alpha)
 
     pd_proportional_gain = pd_section.get("proportional_gain", None)
     pd_derivative_gain = pd_section.get("derivative_gain", None)
@@ -83,8 +76,21 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
     wheel_integrator_state_limit = float(wheel_pi_section.get("integrator_state_limit", 0.0))
     wheel_output_limit_per_joint = wheel_pi_section.get("output_limit_per_joint", None)
 
+    # Safety cfg
     torque_lpf_alpha_per_joint = safety_section.get("torque_lpf_alpha_per_joint", None)
     max_torque_per_joint = safety_section.get("max_torque_per_joint", None)
+    joint_pos_limit = safety_section.get("joint_pos_limit", None)
+    joint_vel_limit = safety_section.get("joint_vel_limit", None)
+
+    # Estimation cfg
+    motor_current_amp_per_lsb = float(estimation_section.get("motor_current_amp_per_lsb", 66.0 / 4096.0))
+    angle_deg_per_lsb = float(estimation_section.get("angle_deg_per_lsb", 0.001))
+    speed_deg_per_sec_per_lsb = float(estimation_section.get("speed_deg_per_sec_per_lsb", 0.01))
+
+    joint_velocity_lpf_alpha = estimation_section.get("joint_velocity_lpf_alpha", None)
+    joint_effort_like_lpf_alpha = estimation_section.get("joint_effort_like_lpf_alpha", None)
+    joint_velocity_lpf_alpha = None if joint_velocity_lpf_alpha is None else float(joint_velocity_lpf_alpha)
+    joint_effort_like_lpf_alpha = None if joint_effort_like_lpf_alpha is None else float(joint_effort_like_lpf_alpha)
 
     goat_model_config = GoatModelConfig(
         joint_names=[str(name) for name in joint_names],
@@ -105,6 +111,8 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
         wheel_output_limit_per_joint=None if wheel_output_limit_per_joint is None else [float(value) for value in _as_list(wheel_output_limit_per_joint)],
         torque_lpf_alpha_per_joint=None if torque_lpf_alpha_per_joint is None else [float(value) for value in _as_list(torque_lpf_alpha_per_joint)],
         max_torque_per_joint=None if max_torque_per_joint is None else [float(value) for value in _as_list(max_torque_per_joint)],
+        joint_pos_limit=None if joint_pos_limit is None else [float(value) for value in _as_list(joint_pos_limit)],
+        joint_vel_limit=None if joint_vel_limit is None else [float(value) for value in _as_list(joint_vel_limit)],
         joint_velocity_lpf_alpha=joint_velocity_lpf_alpha,
         joint_effort_like_lpf_alpha=joint_effort_like_lpf_alpha,
     )
@@ -146,7 +154,7 @@ def build_control_pipeline_from_yaml(
     wheel_pi_controller = WheelPIController(wheel_pi_controller_config, num_joints=goat_model.num_joints)
 
     # 3) Safety limiter
-    safety_limiter_config = goat_model.build_torque_safety_limiter_config()
+    safety_limiter_config = goat_model.build_safety_limiter_config()
     torque_safety_limiter = TorqueSafetyLimiter(safety_limiter_config)
 
     # 4) Pipeline
