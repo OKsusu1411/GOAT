@@ -45,8 +45,8 @@ class GoatControlNode(Node):
         self.declare_parameter("action_space_len", 8)
         self.declare_parameter("observation_space_len", 28)
         self.declare_parameter("log_topic", "goat/torque_log")
-        self.declare_parameter("policy_action", "goat/action")
-        self.declare_parameter("observation_topic", "goat/observation")
+        self.declare_parameter("policy_action", "goat/actions")
+        self.declare_parameter("observation_topic", "goat/observations")
         self.declare_parameter("torque_command_topic", "goat/torque_commands")
 
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
