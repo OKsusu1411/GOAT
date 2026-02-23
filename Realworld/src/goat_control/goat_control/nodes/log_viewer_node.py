@@ -16,7 +16,7 @@ class LatestLog:
     vector: Optional[np.ndarray] = None
 
 
-class MotorTorqueLogViewer(Node):
+class LogViewer(Node):
     """
     Subscribe:  goat/torque_log (Float32MultiArray)
       - data (supported layouts):
@@ -32,7 +32,7 @@ class MotorTorqueLogViewer(Node):
     """
 
     def __init__(self):
-        super().__init__("torque_log_viewer")
+        super().__init__("log_viewer")
 
         # Params
         self.declare_parameter("log_topic", "goat/torque_log")
@@ -179,7 +179,7 @@ class MotorTorqueLogViewer(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = MotorTorqueLogViewer()
+    node = LogViewer()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
