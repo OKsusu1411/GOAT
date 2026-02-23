@@ -281,7 +281,7 @@
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-2.05949" upper="1.09956" velocity="15.0"/>
+        <limit effort="4.5" lower="-1.22173" upper="0.750492" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
     
@@ -290,7 +290,7 @@
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-1.09956" upper="2.05949" velocity="15.0"/>
+        <limit effort="4.5" lower="-0.750492" upper="1.22173" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
     
@@ -299,7 +299,7 @@
         <parent link="hip_L_Link"/>
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-0.593412" upper="1.88496" velocity="15.0"/>
+        <limit effort="4.5" lower="-0.261799" upper="2.05949" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
@@ -308,7 +308,7 @@
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-1.88496" upper="0.593412" velocity="15.0"/>
+        <limit effort="4.5" lower="-2.05949" upper="0.261799" velocity="15.0"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
@@ -317,7 +317,7 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="0.0" upper="1.75192" velocity="15"/>
+        <limit effort="4.5" lower="0.0" upper="2.30383" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
@@ -326,7 +326,7 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-1.75192" upper="0.0" velocity="15"/>
+        <limit effort="4.5" lower="-2.30383" upper="0.0" velocity="15"/>
         <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 

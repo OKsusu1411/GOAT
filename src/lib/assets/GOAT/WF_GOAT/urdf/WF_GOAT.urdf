@@ -281,9 +281,8 @@
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-2.05949" upper="1.09956" velocity="33.5"/>
-        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
-        <dynamics friction="6.453013E-02" />
+        <limit effort="4.5" lower="-1.22173" upper="0.750492" velocity="15.0"/>
+        <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
     
     <joint name="hip_R_Joint" type="revolute">
@@ -291,9 +290,8 @@
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-1.09956" upper="2.05949" velocity="33.5"/>
-        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
-        <dynamics friction="6.453013E-02" />
+        <limit effort="4.5" lower="-0.750492" upper="1.22173" velocity="15.0"/>
+        <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
     
     <joint name="thigh_L_Joint" type="revolute">
@@ -301,9 +299,8 @@
         <parent link="hip_L_Link"/>
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-0.593412" upper="1.88496" velocity="33.5"/>
-        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
-        <dynamics friction="6.453013E-02" />
+        <limit effort="4.5" lower="-0.261799" upper="2.05949" velocity="15.0"/>
+        <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="thigh_R_Joint" type="revolute">
@@ -311,9 +308,8 @@
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-1.88496" upper="0.593412" velocity="33.5"/>
-        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
-        <dynamics friction="6.453013E-02" />
+        <limit effort="4.5" lower="-2.05949" upper="0.261799" velocity="15.0"/>
+        <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="knee_L_Joint" type="revolute">
@@ -321,9 +317,8 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-0.523599" upper="1.75192" velocity="33.5"/>
-        <dynamics damping="2.993308e-01" stiffness ="0.0"/>
-        <dynamics friction="4.432008e-01" />
+        <limit effort="4.5" lower="0.0" upper="2.30383" velocity="15"/>
+        <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="knee_R_Joint" type="revolute">
@@ -331,9 +326,8 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-1.75192" upper="0.523599" velocity="33.5"/>
-        <dynamics damping="2.993308e-01" stiffness ="0.0"/>
-        <dynamics friction="4.432008e-01" />
+        <limit effort="4.5" lower="-2.30383" upper="0.0" velocity="15"/>
+        <dynamics damping="100.0" stiffness="10000.0"/>
     </joint>
 
     <joint name="wheel_L_Joint" type="revolute">
@@ -341,7 +335,7 @@
         <parent link="calf_L_Link" />
         <child link="wheel_L_Link" />
         <axis xyz="0 1 0" />
-        <limit effort="2.5" lower="-1000000" upper="1000000" velocity="33.5" />
+        <limit effort="2.5" lower="-1000000" upper="1000000" velocity="40" />
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
     </joint>
@@ -351,7 +345,7 @@
         <parent link="calf_R_Link" />
         <child link="wheel_R_Link" />
         <axis xyz="0 -1 0" />
-        <limit effort="2.5" lower="-1000000" upper="1000000" velocity="33.5" />
+        <limit effort="2.5" lower="-1000000" upper="1000000" velocity="40" />
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
     </joint>
