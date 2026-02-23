@@ -26,8 +26,8 @@ class AgentNode(Node):
         torch_device_param = str(self.declare_parameter("torch_device", "cuda").value)
         self.torch_device = self._resolve_device(torch_device_param)
         self.action_shape = tuple(int(x) for x in self.declare_parameter("action_shape", [8]).value)
-        self.declare_parameter("observation_topic", "goat/observation")
-        self.declare_parameter("action_topic", "goat/action")
+        self.declare_parameter("observation_topic", "goat/observations")
+        self.declare_parameter("action_topic", "goat/actions")
         
         # Agent model load
         self.agent = self._load_agent(self.checkpoint, self.torch_device)
