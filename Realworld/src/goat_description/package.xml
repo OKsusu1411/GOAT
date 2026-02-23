@@ -3,16 +3,31 @@
 <package format="3">
   <name>goat_description</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>GOAT robot description (URDF/meshes/launch) + helper python nodes</description>
   <maintainer email="eojin333c@gmail.com">heachanlee</maintainer>
   <license>TODO: License declaration</license>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <!-- ament_python 패키지로 전환 -->
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- python node 실행에 필요한 런타임 -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+
+  <!-- BaseStates 같은 커스텀 메시지 쓰면 필요 -->
+  <exec_depend>motor_interfaces</exec_depend>
+
+  <!-- description 패키지에서 런치로 자주 쓰는 것들(필요시만) -->
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>rviz2</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
   <export>
-    <build_type>ament_cmake</build_type>
+    <build_type>ament_python</build_type>
   </export>
 </package>

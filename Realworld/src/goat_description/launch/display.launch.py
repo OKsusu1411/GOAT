@@ -6,20 +6,29 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
+
 def generate_launch_description():
+
     pkg_share = get_package_share_directory('goat_description')
     urdf_file = os.path.join(pkg_share, 'urdf', 'WF_GOAT.urdf')
+
     with open(urdf_file, 'r') as infp:
         robot_description = infp.read()
 
     params = {'robot_description': robot_description}
 
+    # -------------------------------
+    # Launch Arguments
+    # -------------------------------
     use_gui_arg = DeclareLaunchArgument(
         "use_gui",
-        default_value="false",   # 하드웨어 기본은 false 추천
+        default_value="false",
         description="Run joint_state_publisher_gui (ONLY when no external /joint_states publisher).",
     )
 
+    # -------------------------------
+    # Robot State Publisher
+    # -------------------------------
     robot_state_publisher_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -27,14 +36,37 @@ def generate_launch_description():
         parameters=[params],
     )
 
+    # -------------------------------
+    # Joint State Publisher GUI
+    # -------------------------------
     joint_state_publisher_gui_node = Node(
         package='joint_state_publisher_gui',
         executable='joint_state_publisher_gui',
         output='screen',
         condition=IfCondition(LaunchConfiguration("use_gui")),
-        # parameters=[params],  # 굳이 없어도 됨(있어도 OK)
     )
 
+    # -------------------------------
+    # IMU TF Broadcaster (추가!)
+    # -------------------------------
+    imu_tf_node = Node(
+        package='goat_description',
+        executable='imu_tf_broadcaster',
+        name='imu_tf_broadcaster',
+        output='screen',
+        parameters=[
+            {
+                "imu_topic": "/imu_data",
+                "parent_frame": "odom",
+                "child_frame": "base_link",
+                "use_translation_zero": True,
+            }
+        ],
+    )
+
+    # -------------------------------
+    # RViz
+    # -------------------------------
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -45,5 +77,6 @@ def generate_launch_description():
         use_gui_arg,
         robot_state_publisher_node,
         joint_state_publisher_gui_node,
+        imu_tf_node,   # 추가됨
         rviz_node,
     ])
