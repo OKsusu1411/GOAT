@@ -50,7 +50,7 @@ class TorqueSafetyLimiter:
             self.max_torque_per_joint = np.asarray(config.max_torque_per_joint, dtype=float).flatten()
             if self.max_torque_per_joint.size != self.num_joints:
                 raise ValueError("max_torque_per_joint length must match num_joints.")
-            if np.any(self.max_torque_per_joint <= 0.0):
+            if np.any(self.max_torque_per_joint < 0.0):
                 raise ValueError("max_torque_per_joint must be positive.")
 
         self.previous_torque_command = np.zeros(self.num_joints, dtype=float)
