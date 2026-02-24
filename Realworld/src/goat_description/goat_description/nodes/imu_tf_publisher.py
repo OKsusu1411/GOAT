@@ -30,12 +30,12 @@ class ImuTfPublisher(Node):
         self.child_frame = self.get_parameter("child_frame").get_parameter_value().string_value
         self.use_translation_zero = self.get_parameter("use_translation_zero").get_parameter_value().bool_value
         qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT, # 중요!
+            reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.sub = self.create_subscription(BaseStates, imu_topic, self.cb, qos_profile)
+        self.sub = self.create_subscription(BaseStates, imu_topic, self.cb, 10)
 
         self.get_logger().info(
             f"Listening {imu_topic}, publishing TF {self.parent_frame} -> {self.child_frame}")

@@ -22,7 +22,7 @@ class AgentNode(Node):
         super().__init__("agent")
 
         # Parameters
-        self.checkpoint = str(self.declare_parameter("checkpoint", "").value)
+        self.checkpoint = str(self.declare_parameter("checkpoint", "/home/oksusu/Downloads/agent_jit_19200.pt").value)
         torch_device_param = str(self.declare_parameter("torch_device", "cuda").value)
         self.torch_device = self._resolve_device(torch_device_param)
         self.action_shape = tuple(int(x) for x in self.declare_parameter("action_shape", [8]).value)
@@ -30,6 +30,7 @@ class AgentNode(Node):
         self.declare_parameter("action_topic", "goat/actions")
         
         # Agent model load
+        self.checkpoint_modules = {}
         self.agent = self._load_agent(self.checkpoint, self.torch_device)
         self._last_inference_error_log_time_sec = 0.0
 
@@ -57,11 +58,12 @@ class AgentNode(Node):
         pure_observation = obs_array[:-2]
 
         # 3. Extract action
+        # self.get_logger().info(f"Published Obs: {pure_observation}")
         action_array = self._policy(pure_observation, agent_timestep)
 
         # 4. Publish action
         action_msg = self._numpy_to_multiarray(action_array)
-        self.action_publisher.publish(action_msg)
+        self.get_logger().info(f"Published Action: {action_msg}")
 
     def _resolve_device(self, device_name: str) -> torch.device:
         try:
@@ -85,14 +87,13 @@ class AgentNode(Node):
         if self.agent is None:
             return zero_action.reshape(self.action_shape) if self.action_shape else zero_action
 
-        
         try:
             # Load observation on cuda
             obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.torch_device).unsqueeze(0)
             
             # Action
             with torch.no_grad():
-                action, _, _ , _ = self.agent.act(obs_tensor, timestep=agent_timestep, deterministic=True)          # Ignore timestep
+                action = self.agent(obs_tensor, deterministic=True)          # Ignore timestep  TODO: 나중에 timestep 쓸 때 변경
 
             action_flat = action.detach().cpu().numpy().astype(np.float32).reshape(-1)
 
