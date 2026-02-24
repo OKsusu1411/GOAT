@@ -57,9 +57,9 @@ safety:
   #                        4.5,4.5,
   #                        2.5,2.5]
 
-  max_torque_per_joint: [0.0,0.0,
-                         0.0,0.0, 
-                         0.0,0.0,
+  max_torque_per_joint: [1.5,1.5,
+                         1.5,1.5, 
+                         1.5,1.5,
                          2.5,2.5]
 
   joint_pos_limit: [-1.22173, 0.750492,       # rad
