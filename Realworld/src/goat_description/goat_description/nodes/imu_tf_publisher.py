@@ -35,7 +35,7 @@ class ImuTfPublisher(Node):
             depth=10
         )
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.sub = self.create_subscription(BaseStates, imu_topic, self.cb, 10)
+        self.sub = self.create_subscription(BaseStates, imu_topic, self.cb, qos_profile)
 
         self.get_logger().info(
             f"Listening {imu_topic}, publishing TF {self.parent_frame} -> {self.child_frame}")
