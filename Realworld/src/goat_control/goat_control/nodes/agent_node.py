@@ -56,7 +56,12 @@ class AgentNode(Node):
 
         # 2. Extract observation
         pure_observation = obs_array[:-2]
-        self.get_logger().info(f"Published Obs: {pure_observation[6:10]}")
+        # self.get_logger().info(f"Base accel: {pure_observation[0:3]}")
+        # self.get_logger().info(f"Base ang v: {pure_observation[3:6]}")
+        # self.get_logger().info(f"Quaternion: {pure_observation[6:10]}")
+        # self.get_logger().info(f"Join angle: {pure_observation[10:18]}")
+        # self.get_logger().info(f"Join vel  : {pure_observation[18:26]}")
+        self.get_logger().info(f"{pure_observation}")
 
         # 3. Extract action
         action_array = self._policy(pure_observation, agent_timestep)
@@ -109,8 +114,6 @@ class AgentNode(Node):
                 self.get_logger().warn(f"Policy inference failed: {exc}")
                 self._last_inference_error_log_time_sec = now_sec
             action_flat = zero_action
-
-        self.get_logger().info(f"Published Action: {action_flat}")
 
         return action_flat.reshape(self.action_shape) if self.action_shape else action_flat
 
