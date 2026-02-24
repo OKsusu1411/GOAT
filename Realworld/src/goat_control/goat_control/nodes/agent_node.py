@@ -56,14 +56,15 @@ class AgentNode(Node):
 
         # 2. Extract observation
         pure_observation = obs_array[:-2]
+        self.get_logger().info(f"Published Obs: {pure_observation[6:10]}")
 
         # 3. Extract action
-        # self.get_logger().info(f"Published Obs: {pure_observation}")
         action_array = self._policy(pure_observation, agent_timestep)
 
         # 4. Publish action
         action_msg = self._numpy_to_multiarray(action_array)
         self.get_logger().info(f"Published Action: {action_msg}")
+        self.action_publisher.publish(action_msg)
 
     def _resolve_device(self, device_name: str) -> torch.device:
         try:
@@ -108,6 +109,8 @@ class AgentNode(Node):
                 self.get_logger().warn(f"Policy inference failed: {exc}")
                 self._last_inference_error_log_time_sec = now_sec
             action_flat = zero_action
+
+        self.get_logger().info(f"Published Action: {action_flat}")
 
         return action_flat.reshape(self.action_shape) if self.action_shape else action_flat
 
