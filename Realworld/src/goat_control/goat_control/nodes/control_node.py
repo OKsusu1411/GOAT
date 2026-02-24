@@ -209,6 +209,7 @@ class GoatControlNode(Node):
         )
         
         # 3. Compute command torque
+        self.get_logger().info(f"{targets}")
         safe_command, _ = self.control_pipeline.compute_control(
             robot_state=robot_state,
             targets=targets,
@@ -226,7 +227,6 @@ class GoatControlNode(Node):
                 self._last_timeout_warn_time_sec = now_sec
         
         # 5. Publish torque command, log
-        self.get_logger().info(f"{safe_command}")
         self._publish_torque_command(safe_command)
         self._publish_motor_torque_log(robot_state, safe_command, targets)
 
