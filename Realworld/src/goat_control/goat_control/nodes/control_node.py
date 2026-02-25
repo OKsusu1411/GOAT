@@ -197,7 +197,7 @@ class GoatControlNode(Node):
 
 
         ###### =========================== Safety stop =========================== ###### 
-        if robot_state.joint_velocity_rad_per_sec >= 0.436:
+        if (robot_state.joint_velocity_rad_per_sec[0:6] >= 0.436).any():
             self.get_logger().info("!!!!Emergency Stopped!!!!")
             self.control_timer.cancel()
         ###### =========================== Safety stop =========================== ###### 
