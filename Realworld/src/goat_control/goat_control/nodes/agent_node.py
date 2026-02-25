@@ -68,7 +68,10 @@ class AgentNode(Node):
 
         # 4. Publish action
         action_msg = self._numpy_to_multiarray(action_array)
-        # self.get_logger().info(f"Published Action: {action_msg}")
+
+        # Action scaling
+        action_msg[0:6] *= 1.5
+        action_msg[6:] *= 3
         self.action_publisher.publish(action_msg)
 
     def _resolve_device(self, device_name: str) -> torch.device:
