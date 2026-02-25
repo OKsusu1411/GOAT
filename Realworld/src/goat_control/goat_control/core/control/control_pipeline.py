@@ -156,9 +156,9 @@ class ControlPipeline:
         current_joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
 
-        safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec = self.joint_safety_limiter(robot_state,
-                                                                                                desired_joint_delta_position_rad,
-                                                                                                desired_wheel_speed_rad_per_sec)
+        safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec = self.joint_safety_limiter.apply(robot_state,
+                                                                                                      desired_joint_delta_position_rad,
+                                                                                                      desired_wheel_speed_rad_per_sec)
 
         desired_joint_position_rad = current_joint_position_rad + safe_joint_delta_position_rad
         desired_wheel_speed_rad_per_sec = safe_wheel_speed_rad_per_sec
