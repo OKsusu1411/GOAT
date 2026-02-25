@@ -222,6 +222,8 @@ class GoatControlNode(Node):
             targets=targets,
             dt_sec=dt_sec
         )
+
+        self.get_logger().info(f"{safe_command}")
         
         # 4. Apply action watchdog
         if action_timed_out:
