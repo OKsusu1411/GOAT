@@ -10,7 +10,7 @@ from ..estimation.state_manager import MotorStateCollector, StateManager
 from ..estimation.state_types import ImuState, MotorStatesData, RobotState
 from .pd_controller import PDJointController
 from .pi_controller import WheelPIController
-from .safety_limiter import TorqueSafetyLimiter
+from .safety_limiter import TorqueSafetyLimiter, JointSafetyLimiter
 
 
 @dataclass
@@ -22,7 +22,7 @@ class ControlTargets:
     - desired_wheel_speed_rad_per_sec:
         Used by PI controller on wheel_indices (6~7).
     """
-    desired_joint_position_rad: np.ndarray
+    desired_joint_delta_position_rad: np.ndarray
     desired_wheel_speed_rad_per_sec: np.ndarray
 
 
@@ -58,6 +58,7 @@ class ControlPipeline:
         pd_joint_controller: PDJointController,
         wheel_pi_controller: WheelPIController,
         torque_safety_limiter: TorqueSafetyLimiter,
+        joint_safety_limiter: JointSafetyLimiter,
         num_joints: int,
         wheel_indices: Sequence[int],
     ):
@@ -68,6 +69,7 @@ class ControlPipeline:
         self.wheel_pi_controller = wheel_pi_controller
 
         self.torque_safety_limiter = torque_safety_limiter
+        self.joint_safety_limiter = joint_safety_limiter
 
         self.num_joints = int(num_joints)
         self.wheel_indices = [int(index) for index in wheel_indices]
@@ -83,6 +85,7 @@ class ControlPipeline:
         state_manager: StateManager,
         pd_joint_controller: PDJointController,
         torque_safety_limiter: TorqueSafetyLimiter,
+        joint_safety_limiter: JointSafetyLimiter,
         wheel_pi_controller: WheelPIController,
     ) -> "ControlPipeline":
         """Create ControlPipeline using GoatModel indices."""
@@ -95,6 +98,7 @@ class ControlPipeline:
             pd_joint_controller=pd_joint_controller,
             wheel_pi_controller=wheel_pi_controller,
             torque_safety_limiter=torque_safety_limiter,
+            joint_safety_limiter=joint_safety_limiter,
             num_joints=num_joints,
             wheel_indices=wheel_indices,
         )
@@ -141,16 +145,23 @@ class ControlPipeline:
         if dt_sec <= 0.0:
             raise ValueError("dt_sec must be > 0.")
 
-        desired_joint_position_rad = np.asarray(targets.desired_joint_position_rad, dtype=float).flatten()
+        desired_joint_delta_position_rad = np.asarray(targets.desired_joint_delta_position_rad, dtype=float).flatten()
         desired_wheel_speed_rad_per_sec = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
 
-        if desired_joint_position_rad.size != self.num_joints:
-            raise ValueError("targets.desired_joint_position_rad must have length == num_joints.")
+        if desired_joint_delta_position_rad.size != self.num_joints:
+            raise ValueError("targets.desired_joint_delta_position_rad must have length == num_joints.")
         if desired_wheel_speed_rad_per_sec.size != self.num_joints:
             raise ValueError("targets.desired_wheel_speed_rad_per_sec must have length == num_joints.")
 
         current_joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+
+        safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec = self.joint_safety_limiter(robot_state,
+                                                                                                desired_joint_delta_position_rad,
+                                                                                                desired_wheel_speed_rad_per_sec)
+
+        desired_joint_position_rad = current_joint_position_rad + safe_joint_delta_position_rad
+        desired_wheel_speed_rad_per_sec = safe_wheel_speed_rad_per_sec
 
         # 1) Joint PD (applies only to joint_indices configured inside PDJointController)
         pd_torque_command = self.pd_joint_controller.compute(

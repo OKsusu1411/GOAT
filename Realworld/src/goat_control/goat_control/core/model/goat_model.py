@@ -69,7 +69,9 @@ class GoatModelConfig:
     torque_lpf_alpha_per_joint: Optional[List[float]] = None     # length = num_joints
     max_torque_per_joint: Optional[List[float]] = None           # length = num_joints
     joint_pos_limit: Optional[List[float]] = None
+    joint_pos_limit_margin: float = None
     joint_vel_limit: Optional[List[float]] = None
+    joint_vel_limit_margin: float = None
 
     # -----------------------------
     # Optional filtering in state_manager
@@ -171,7 +173,9 @@ class GoatModel:
             lpf_alpha_per_joint=self.config.torque_lpf_alpha_per_joint,
             max_torque_per_joint=self.config.max_torque_per_joint,
             joint_pos_limit=self.config.joint_pos_limit,
-            joint_vel_limit=self.config.joint_vel_limit
+            joint_pos_limit_margin=self.config.joint_pos_limit_margin,
+            joint_vel_limit=self.config.joint_vel_limit,
+            joint_vel_limit_margin=self.config.joint_vel_limit_margin
         )
 
 

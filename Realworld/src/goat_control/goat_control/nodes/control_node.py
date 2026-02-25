@@ -201,10 +201,10 @@ class GoatControlNode(Node):
             desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
             desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
         else:
-            desired_joint_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
+            desired_joint_delta_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
 
         targets = ControlTargets(
-            desired_joint_position_rad=desired_joint_position_rad,
+            desired_joint_delta_position_rad=desired_joint_delta_position_rad,
             desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
         )
         
@@ -242,10 +242,10 @@ class GoatControlNode(Node):
     def _decode_action_to_targets(self, action_msg: Float32MultiArray, robot_state: RobotState) -> Tuple[np.ndarray, np.ndarray]:
         # Delta pos action
         action_array = np.asarray(action_msg.data, dtype=float).flatten()
-        current_joint_pos = robot_state.joint_position_rad
+        # current_joint_pos = robot_state.joint_position_rad
 
         # Initial(zero) pos, vel
-        desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
+        desired_joint_delta_position_rad = self.default_desired_joint_position_rad.copy()
         desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
 
         # Indices for slicing
@@ -264,19 +264,19 @@ class GoatControlNode(Node):
                     f"got {action_array.size}. Using default targets."
                 )
                 self._warned_action_len = True
-            return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
+            return desired_joint_delta_position_rad, desired_wheel_speed_rad_per_sec
 
         # 1) Delta position action
         if len(joint_indices) > 0:
             ji = np.asarray(joint_indices, dtype=int)
-            desired_joint_position_rad[ji] = current_joint_pos[:len(joint_indices)] + action_array[:len(joint_indices)]
+            desired_joint_delta_position_rad[ji] = action_array[:len(joint_indices)]
 
         # 2) Reference velocity action
         if len(wheel_indices) > 0:
             wi = np.asarray(wheel_indices, dtype=int)
             desired_wheel_speed_rad_per_sec[wi] = action_array[len(joint_indices) : expected_len]
 
-        return desired_joint_position_rad, desired_wheel_speed_rad_per_sec
+        return desired_joint_delta_position_rad, desired_wheel_speed_rad_per_sec
 
     def _publish_torque_command(self, safe_command: np.ndarray):
         msg = Float32MultiArray()

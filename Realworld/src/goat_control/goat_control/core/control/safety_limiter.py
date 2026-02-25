@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
+from ..estimation.state_types import RobotState
 
 
 @dataclass
@@ -92,22 +93,48 @@ class JointSafetyLimiter:
     def __init__(self, config: SafetyLimiterConfig):
         self.num_joints = int(config.num_joints)
 
+        # Joint limit
         self.joint_pos_limit = np.asarray(config.joint_pos_limit, dtype=float).flatten()
         self.joint_vel_limit = np.asarray(config.joint_vel_limit, dtype=float).flatten()
 
-        # Exception
+         # Exception
         if self.joint_pos_limit.size != self.num_joints:
             raise ValueError("joint_pos_limit length must match num_joints.")
         if self.joint_vel_limit.size != self.num_joints:
             raise ValueError("joint_vel_limit length must match num_joints.")
+        
+        # Margin considering
+        joint_pos_limit_margin = config.joint_pos_limit_margin
+        joint_vel_limit_margin = config.joint_vel_limit_margin
 
+        self.joint_pos_lower_limits = self.joint_pos_limit[0::2] + joint_pos_limit_margin
+        self.joint_pos_upper_limits = self.joint_pos_limit[1::2] - joint_pos_limit_margin
+        self.joint_vel_limit -= joint_vel_limit_margin
+
+        
 
     def apply(self,
-              target_joint_position: np.array,
-              target_joint_velocity: np.array,
-              current_joint_position: np.array,
-              current_joint_velocity: np.array):
-        return None
+              robot_state: RobotState,
+              target_joint_delta_position: np.array,
+              target_joint_velocity: np.array,):
+        
+        current_joint_pos = robot_state.joint_position_rad
+        current_joint_vel = np.abs(robot_state.joint_velocity_rad_per_sec)      # Absolute velocity
+
+        safe_delta_pos = target_joint_delta_position.copy()
+        safe_vel = target_joint_velocity.copy()
+
+        pos_lower_violation_mask = (current_joint_pos <= self.joint_pos_lower_limits) & (safe_delta_pos < 0)
+        pos_upper_violation_mask = (current_joint_pos >= self.joint_pos_upper_limits) & (safe_delta_pos > 0)
+        vel_stop_mask = pos_lower_violation_mask | pos_upper_violation_mask         # Currently not used
+
+        # Clipping
+        safe_delta_pos[pos_lower_violation_mask] = 0.0
+        safe_delta_pos[pos_upper_violation_mask] = 0.0
+        safe_vel = np.clip(current_joint_vel, -self.joint_vel_limit, self.joint_vel_limit)
+        safe_vel[vel_stop_mask] = 0.0                                               # Currently not used
+        
+        return safe_delta_pos, safe_vel
         
         
 
