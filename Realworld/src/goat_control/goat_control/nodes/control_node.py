@@ -336,7 +336,7 @@ class GoatControlNode(Node):
         # Ref vector convention:
         #   - joints: position reference [rad]
         #   - wheels: speed reference [rad/s]
-        ref_vector = np.asarray(targets.desired_joint_position_rad, dtype=float).flatten().copy()
+        ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
         wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
         for wi in getattr(self.goat_model, "wheel_indices", []):
             wi = int(wi)
