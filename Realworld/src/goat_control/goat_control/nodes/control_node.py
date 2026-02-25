@@ -210,7 +210,6 @@ class GoatControlNode(Node):
         )
         
         # 3. Compute command torque
-        self.get_logger().info(f"{targets}")
         safe_command, _ = self.control_pipeline.compute_control(
             robot_state=robot_state,
             targets=targets,
