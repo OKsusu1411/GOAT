@@ -22,7 +22,7 @@ class AgentNode(Node):
         super().__init__("agent")
 
         # Parameters
-        self.checkpoint = str(self.declare_parameter("checkpoint", "/home/oksusu/Downloads/agent_jit_19200.pt").value)
+        self.checkpoint = str(self.declare_parameter("checkpoint", "/home/oksusu/Downloads/agent_jit_36000.pt").value)
         torch_device_param = str(self.declare_parameter("torch_device", "cuda").value)
         self.torch_device = self._resolve_device(torch_device_param)
         self.action_shape = tuple(int(x) for x in self.declare_parameter("action_shape", [8]).value)
