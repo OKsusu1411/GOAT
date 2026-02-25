@@ -191,10 +191,16 @@ class GoatControlNode(Node):
             imu_state=imu_state,
             timestamp_sec=now_time.nanoseconds * 1e-9
         )
-
         # 2. Decode action to targets
         action_msg = self.buffers.action_msg
         action_timed_out = self._is_action_timed_out(now_time)
+
+
+        ###### =========================== Safety stop =========================== ###### 
+        if robot_state.joint_velocity_rad_per_sec >= 0.436:
+            self.control_timer.cancel()
+        ###### =========================== Safety stop =========================== ###### 
+
 
         # Action timeout exception
         if (action_msg is None) or action_timed_out:
