@@ -25,7 +25,9 @@ class SafetyLimiterConfig:
     lpf_alpha_per_joint: Optional[Sequence[float]] = None
     max_torque_per_joint: Optional[Sequence[float]] = None
     joint_pos_limit: Optional[Sequence[float]] = None
+    joint_pos_limit_margin: float
     joint_vel_limit: Optional[Sequence[float]] = None
+    joint_vel_limit_margin: float
 
 
 class TorqueSafetyLimiter:

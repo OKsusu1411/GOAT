@@ -69,9 +69,9 @@ class GoatModelConfig:
     torque_lpf_alpha_per_joint: Optional[List[float]] = None     # length = num_joints
     max_torque_per_joint: Optional[List[float]] = None           # length = num_joints
     joint_pos_limit: Optional[List[float]] = None
-    joint_pos_limit_margin: float = None
+    joint_pos_limit_margin: float = 0.0
     joint_vel_limit: Optional[List[float]] = None
-    joint_vel_limit_margin: float = None
+    joint_vel_limit_margin: float = 0.0
 
     # -----------------------------
     # Optional filtering in state_manager
