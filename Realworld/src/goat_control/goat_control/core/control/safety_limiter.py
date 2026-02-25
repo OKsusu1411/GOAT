@@ -100,8 +100,8 @@ class JointSafetyLimiter:
         self.joint_vel_limit = np.asarray(config.joint_vel_limit, dtype=float).flatten()
 
          # Exception
-        if self.joint_pos_limit.size != self.num_joints:
-            raise ValueError("joint_pos_limit length must match num_joints.")
+        if self.joint_pos_limit.size != self.num_joints * 2:
+            raise ValueError("joint_pos_limit length must match num_joints * 2.")
         if self.joint_vel_limit.size != self.num_joints:
             raise ValueError("joint_vel_limit length must match num_joints.")
         
