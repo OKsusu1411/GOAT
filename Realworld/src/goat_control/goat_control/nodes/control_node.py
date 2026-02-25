@@ -199,6 +199,7 @@ class GoatControlNode(Node):
         # Action timeout exception
         if (action_msg is None) or action_timed_out:
             desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
+            desired_joint_delta_position_rad = self.default_desired_joint_position_rad.copy()
             desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
         else:
             desired_joint_delta_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
