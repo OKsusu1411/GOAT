@@ -121,8 +121,7 @@ class GoatControlNode(Node):
         # Initialize CSV Logger
         self.csv_file = None
         self.csv_writer = None
-        if self.enable_csv_log:
-            self._init_csv_logger()
+        self._is_csv_logging_active = False
 
         self.get_logger().info("GoatControlNode started.")
 
@@ -135,7 +134,10 @@ class GoatControlNode(Node):
             self.agent_start_time = now_time
             self.agent_timestep = 0
             self.get_logger().info("Agent node's first action detected! Starting policy timer.")
-        
+
+            if self.enable_csv_log and not self._is_csv_logging_active:
+                self._init_csv_logger()
+
         self.buffers.action_msg = msg
         self.last_action_time = now_time
 
@@ -151,6 +153,11 @@ class GoatControlNode(Node):
         age_sec = (now_time - self.last_action_time).nanoseconds * 1e-9
         
         if age_sec > self.action_timeout_sec:
+            if self.agent_start_time is not None: 
+                self.get_logger().warn("Action timeout detected. Stopping policy timer and CSV logging.")
+                if self._is_csv_logging_active:
+                    self._close_csv_logger()
+
             # Reset agent timer
             self.agent_start_time = None
             self.agent_timestep = -1
@@ -212,9 +219,13 @@ class GoatControlNode(Node):
         ###### =========================== Safety stop =========================== ###### 
         if (robot_state.joint_velocity_rad_per_sec[0:6] >= 0.436).any():
             self.get_logger().info("!!!!Emergency Stopped!!!!")
+            if self._is_csv_logging_active:
+                self._close_csv_logger()
+            self.control_timer.cancel()
             self.control_timer.cancel()
         ###### =========================== Safety stop =========================== ###### 
 
+        current_action = np.zeros(self.action_dim)
 
         # Action timeout exception
         if (action_msg is None) or action_timed_out:
@@ -223,7 +234,10 @@ class GoatControlNode(Node):
             desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
         else:
             desired_joint_delta_position_rad, desired_wheel_speed_rad_per_sec = self._decode_action_to_targets(action_msg, robot_state)
-
+            raw_action = np.asarray(action_msg.data, dtype=float).flatten()
+            fill_len = min(raw_action.size, self.action_dim)
+            current_action[:fill_len] = raw_action[:fill_len]
+        
         targets = ControlTargets(
             desired_joint_delta_position_rad=desired_joint_delta_position_rad,
             desired_wheel_speed_rad_per_sec=desired_wheel_speed_rad_per_sec,
@@ -255,7 +269,11 @@ class GoatControlNode(Node):
         
         # 7. Publish observation (Execute agent node)
         if self.policy_decimation_counter >= self.policy_decimation:
-            self._publish_observation(robot_state)
+            obs_vector = self._publish_observation(robot_state)
+            
+            # Write csv
+            if self._is_csv_logging_active and self.csv_writer is not None:
+                self._log_data_to_csv(robot_state, obs_vector, current_action, safe_command)
             self.policy_decimation_counter = 0                              # Reset counter
     
     # Refining action vector
@@ -414,13 +432,23 @@ class GoatControlNode(Node):
 
             full_header = headers + obs_headers + action_headers + cmd_headers
             self.csv_writer.writerow(full_header)
-            
-            self.get_logger().info(f"CSV Logging enabled: {filepath}")
+
+            self._is_csv_logging_active = True
+            self.get_logger().info(f"CSV Logging STARTED: {filepath}")
             
         except Exception as e:
             self.get_logger().error(f"Failed to open CSV log file: {e}")
             self.enable_csv_log = False
     
+    def _close_csv_logger(self):
+        """Close the active CSV log file safely."""
+        if self.csv_file is not None and not self.csv_file.closed:
+            self.csv_file.close()
+            self.get_logger().info("CSV Log file STOPPED and saved.")
+        self.csv_file = None
+        self.csv_writer = None
+        self._is_csv_logging_active = False
+        
     def _log_data_to_csv(self, robot_state, obs_vector, action, command):
         """Writes a row to the CSV file."""
         try:
