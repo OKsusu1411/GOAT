@@ -367,6 +367,8 @@ class GoatControlNode(Node):
         msg.data = obs.astype(np.float32).tolist()
         self.observation_publisher.publish(msg)
 
+        return obs
+
     def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, safe_joint_targets: np.ndarray, targets: ControlTargets):
         joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
