@@ -97,6 +97,7 @@ class GoatControlNode(Node):
         )
         self.control_pipeline.reset()
         self.num_joints = int(self.goat_model.num_joints)
+        self.action_dim = 0
 
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
@@ -133,6 +134,7 @@ class GoatControlNode(Node):
         if self.agent_start_time is None:
             self.agent_start_time = now_time
             self.agent_timestep = 0
+            self.action_dim = len(msg.data)
             self.get_logger().info("Agent node's first action detected! Starting policy timer.")
 
             if self.enable_csv_log and not self._is_csv_logging_active:
@@ -448,7 +450,7 @@ class GoatControlNode(Node):
         self.csv_file = None
         self.csv_writer = None
         self._is_csv_logging_active = False
-        
+
     def _log_data_to_csv(self, robot_state, obs_vector, action, command):
         """Writes a row to the CSV file."""
         try:
