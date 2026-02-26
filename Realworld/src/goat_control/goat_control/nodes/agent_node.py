@@ -67,7 +67,7 @@ class AgentNode(Node):
         action_array = self._policy(pure_observation, agent_timestep)
 
         # Action scaling
-        action_array[0:6] *= 3
+        action_array[0:6] *= 3.5
         action_array[6:] *= 6
 
         # 4. Publish action
