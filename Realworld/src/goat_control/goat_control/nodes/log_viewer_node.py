@@ -143,8 +143,8 @@ class LogViewer(Node):
 
         # Print rows (batch: all joints in ONE log block)
         header_str = (
-            f"{'ID':>3}  {'NAME':<11}  "
-            f"{'POS':>15}  {'VEL':>12}  {'CMD':>14}  {'SAFE':>14}  {'REF':>14}"
+            f"{'ID':>3}  {'NAME':<12}  "
+            f"{'POS':>15}  {'VEL':>15}  {'CMD':>15}  {'SAFE':>15}  {'REF':>15}"
         )
         div_str = "-" * len(header_str)
 
@@ -170,11 +170,11 @@ class LogViewer(Node):
             # Integrate data
             lines.append(
                 f"{joint_index:>3}  {name[:12]:<12}  "
-                f"{float(joint_position[joint_index]):>9.{self.precision}f} {position_unit:<3}  "
-                f"{float(joint_velocity[joint_index]):>9.{self.precision}f} {velocity_unit:<3}  "
-                f"{float(command_value[joint_index]):>9.{self.precision}f} {command_unit:<3}  "
-                f"{float(raw_safe):>9.{self.precision}f} {ref_unit:<3}"
-                f"{float(ref_val):>9.{self.precision}f} {ref_unit:<3}"
+                f"{float(joint_position[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
+                f"{float(joint_velocity[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
+                f"{float(command_value[joint_index]):>9.{self.precision}f} {command_unit:<5}  "
+                f"{float(ref_safe):>9.{self.precision}f} {ref_unit:<5}  "
+                f"{float(ref_val):>9.{self.precision}f} {ref_unit:<5}"
             )
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
