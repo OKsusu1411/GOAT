@@ -7,6 +7,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 
+JOINT_SCALE = 3.5
+WHEEL_SCALE = 6.0
 
 class AgentNode(Node):
     """
@@ -66,9 +68,10 @@ class AgentNode(Node):
         # 3. Extract action
         action_array = self._policy(pure_observation, agent_timestep)
 
-        # Action scaling
-        action_array[0:6] *= 3.5
-        action_array[6:] *= 6
+        ######## =================== Action scaling =================== ########
+        action_array[0:6] *= JOINT_SCALE
+        action_array[6:] *= WHEEL_SCALE
+        ######## =================== Action scaling =================== ########
 
         # 4. Publish action
         action_msg = self._numpy_to_multiarray(action_array)
