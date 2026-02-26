@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
+from datetime import datetime
 
+import os
+import csv
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -48,6 +51,8 @@ class GoatControlNode(Node):
         self.declare_parameter("policy_action", "goat/actions")
         self.declare_parameter("observation_topic", "goat/observations")
         self.declare_parameter("torque_command_topic", "goat/torque_commands")
+        self.declare_parameter("enable_csv_log", True)
+        self.declare_parameter("csv_log_dir", "logs")
 
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         policy_decimation = float(self.get_parameter("policy_decimation").value)
@@ -58,6 +63,8 @@ class GoatControlNode(Node):
         action_topic = str(self.get_parameter("policy_action").value)
         observation_topic = str(self.get_parameter("observation_topic").value)
         torque_command_topic = str(self.get_parameter("torque_command_topic").value)
+        self.enable_csv_log = bool(self.get_parameter("enable_csv_log").value)
+        self.csv_log_dir = str(self.get_parameter("csv_log_dir").value)
 
         # Buffer for observation, action
         self.buffers = LatestBuffers()
@@ -83,8 +90,6 @@ class GoatControlNode(Node):
         )
         
         # Build core system (Model + Pipeline)
-        # NOTE: ControlNode does not talk to hardware. We still build the pipeline
-        # to reuse the exact same StateManager + controllers as real hardware.
         self.goat_model, self.control_pipeline = build_control_pipeline_from_yaml(
             yaml_path=yaml_path,
             motor_drivers=[],
@@ -112,6 +117,13 @@ class GoatControlNode(Node):
         # Decimation(Policy) counter
         self.policy_decimation = policy_decimation
         self.policy_decimation_counter = 0
+
+        # Initialize CSV Logger
+        self.csv_file = None
+        self.csv_writer = None
+        if self.enable_csv_log:
+            self._init_csv_logger()
+
         self.get_logger().info("GoatControlNode started.")
 
     def _on_action_msg(self, msg: Float32MultiArray):
@@ -191,6 +203,7 @@ class GoatControlNode(Node):
             imu_state=imu_state,
             timestamp_sec=now_time.nanoseconds * 1e-9
         )
+
         # 2. Decode action to targets
         action_msg = self.buffers.action_msg
         action_timed_out = self._is_action_timed_out(now_time)
@@ -222,8 +235,6 @@ class GoatControlNode(Node):
             targets=targets,
             dt_sec=dt_sec
         )
-
-        self.get_logger().info(f"{safe_command}")
         
         # 4. Apply action watchdog
         if action_timed_out:
@@ -355,6 +366,86 @@ class GoatControlNode(Node):
         msg = Float32MultiArray()
         msg.data = log_vector.astype(np.float32).tolist()
         self.motor_torque_log_publisher.publish(msg)
+
+    def _init_csv_logger(self):
+        """Create CSV file and write headers."""
+        if not os.path.exists(self.csv_log_dir):
+            os.makedirs(self.csv_log_dir)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"goat_log_{timestamp}.csv"
+        filepath = os.path.join(self.csv_log_dir, filename)
+        
+        try:
+            self.csv_file = open(filepath, mode='w', newline='')
+            self.csv_writer = csv.writer(self.csv_file)
+            
+            # 1. Define Headers
+            headers = ["timestamp_sec", "agent_step", "agent_time"]
+            
+            # Observation headers
+            obs_headers = []
+            obs_headers += ["acc_x", "acc_y", "acc_z"]
+            obs_headers += ["gyro_x", "gyro_y", "gyro_z"]
+            obs_headers += ["quat_w", "quat_x", "quat_y", "quat_z"]
+            # obs_headers += ["mag_x", "mag_y", "mag_z"] # Uncomment if mag is used in obs
+            
+            for i in range(self.num_joints):
+                obs_headers.append(f"joint_pos_{i}")
+            for i in range(self.num_joints):
+                obs_headers.append(f"joint_vel_{i}")
+            
+            # Action headers
+            action_headers = []
+            for i in range(self.action_dim):
+                action_headers.append(f"action_{i}")
+            
+            # Torque Command headers (Optional but useful)
+            cmd_headers = []
+            for i in range(self.num_joints):
+                cmd_headers.append(f"tau_cmd_{i}")
+
+            full_header = headers + obs_headers + action_headers + cmd_headers
+            self.csv_writer.writerow(full_header)
+            
+            self.get_logger().info(f"CSV Logging enabled: {filepath}")
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to open CSV log file: {e}")
+            self.enable_csv_log = False
+    
+    def _log_data_to_csv(self, robot_state, obs_vector, action, command):
+        """Writes a row to the CSV file."""
+        try:
+            # Extract basic info
+            timestamp = robot_state.timestamp_sec
+            agent_step = self.agent_timestep
+            
+            # Agent operating time
+            agent_time = 0.0
+            if self.agent_start_time:
+                agent_time = (self.get_clock().now() - self.agent_start_time).nanoseconds * 1e-9
+
+            # Prepare row data
+            # Format: [timestamp, step, agent_time, ...obs(minus time info), ...action, ...command]
+            
+            # NOTE: obs_vector has [..., step, time] at the end. We remove them to avoid duplication if needed,
+            # or keep them. Here I strictly follow header definition.
+            # Header defined: 
+            # [acc(3), gyro(3), quat(4), q(N), dq(N)] -> length = 10 + 2*N
+            # obs_vector has extra 2 at end. Let's slice them off for CSV body to match explicit headers.
+            
+            obs_core = obs_vector[:-2] 
+            
+            row = [timestamp, agent_step, agent_time]
+            row.extend(obs_core.tolist())
+            row.extend(action.tolist())
+            row.extend(command.tolist())
+            
+            self.csv_writer.writerow(row)
+            
+        except Exception as e:
+            self.get_logger().warn(f"CSV write failed: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
