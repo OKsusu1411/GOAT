@@ -248,7 +248,7 @@ class GoatControlNode(Node):
         
         # 5. Publish torque command, log
         self._publish_torque_command(safe_command)
-        self._publish_motor_torque_log(robot_state, safe_command, targets)
+        self._publish_motor_torque_log(robot_state, safe_command, safe_joint_targets, targets)
 
         # 6. Decimation counting
         self.policy_decimation_counter += 1
