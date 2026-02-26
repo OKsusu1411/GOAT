@@ -114,7 +114,7 @@ class LogViewer(Node):
         vector = self.latest.vector
 
         # Layout parsing (ONLY accept 4N, 3N support removed)
-        expected_len = 6 * self.num_joints
+        expected_len = 5 * self.num_joints
         if vector.size != expected_len:
             self.get_logger().warn(
                 f"log length mismatch: got {vector.size}, expected {expected_len}"
