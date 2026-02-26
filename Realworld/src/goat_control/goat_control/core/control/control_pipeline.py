@@ -160,11 +160,11 @@ class ControlPipeline:
                                                                                                       desired_joint_delta_position_rad,
                                                                                                       desired_wheel_speed_rad_per_sec)
         
-        safe_joint_targets = np.array([safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec])
 
-        print(safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec)
         desired_joint_position_rad = current_joint_position_rad + safe_joint_delta_position_rad
         desired_wheel_speed_rad_per_sec = safe_wheel_speed_rad_per_sec
+        
+        safe_joint_targets = np.array([desired_joint_position_rad, desired_wheel_speed_rad_per_sec])
 
         # 1) Joint PD (applies only to joint_indices configured inside PDJointController)
         pd_torque_command = self.pd_joint_controller.compute(

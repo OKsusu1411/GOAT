@@ -121,7 +121,6 @@ class JointSafetyLimiter:
               target_joint_velocity: np.array,):
         
         current_joint_pos = robot_state.joint_position_rad
-        current_joint_vel = np.abs(robot_state.joint_velocity_rad_per_sec)      # Absolute velocity
 
         safe_delta_pos = target_joint_delta_position.copy()
         safe_vel = target_joint_velocity.copy()
@@ -133,11 +132,10 @@ class JointSafetyLimiter:
         # Clipping
         safe_delta_pos[pos_lower_violation_mask] = 0.0
         safe_delta_pos[pos_upper_violation_mask] = 0.0
-        safe_vel = np.clip(current_joint_vel, -self.joint_vel_limit, self.joint_vel_limit)
+        safe_vel = np.clip(safe_vel, -self.joint_vel_limit, self.joint_vel_limit)
         safe_vel[vel_stop_mask] = 0.0                                               # Currently not used
         
         return safe_delta_pos, safe_vel
-        
         
 
 # ---------------------------------------------------------------------
