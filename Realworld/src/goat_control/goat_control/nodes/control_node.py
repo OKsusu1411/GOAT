@@ -346,8 +346,7 @@ class GoatControlNode(Node):
         base_angular_vel = np.asarray(gyroscope, dtype=float).flatten()
         base_angular_vel = np.deg2rad(base_angular_vel).flatten()           # Fucking degree sibal
         base_quat = np.asarray(orientation_quat, dtype=float).flatten()
-        joint_q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
-        joint_q[6:] = 0                                                                 # NOTE: for debug
+        joint_q = np.asarray(robot_state.joint_position_rad[:6], dtype=float).flatten()
         joint_dq = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         # effort_like = np.asarray(robot_state.joint_effort_like, dtype=float).flatten()
 
@@ -421,7 +420,7 @@ class GoatControlNode(Node):
             obs_headers += ["quat_w", "quat_x", "quat_y", "quat_z"]
             # obs_headers += ["mag_x", "mag_y", "mag_z"] # Uncomment if mag is used in obs
             
-            for i in range(self.num_joints):
+            for i in range(self.num_joints-2):
                 obs_headers.append(f"joint_pos_{i}")
             for i in range(self.num_joints):
                 obs_headers.append(f"joint_vel_{i}")
@@ -434,7 +433,7 @@ class GoatControlNode(Node):
             # Torque Command headers (Optional but useful)
             cmd_headers = []
             for i in range(self.num_joints):
-                cmd_headers.append(f"tau_cmd_{i}")
+                cmd_headers.append(f"torque_cmd_{i}")
 
             full_header = headers + obs_headers + action_headers + cmd_headers
             self.csv_writer.writerow(full_header)
