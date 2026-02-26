@@ -52,7 +52,7 @@ class GoatControlNode(Node):
         self.declare_parameter("observation_topic", "goat/observations")
         self.declare_parameter("torque_command_topic", "goat/torque_commands")
         self.declare_parameter("enable_csv_log", True)
-        self.declare_parameter("csv_log_dir", "logs")
+        self.declare_parameter("csv_log_dir", "csv_logs")
 
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         policy_decimation = float(self.get_parameter("policy_decimation").value)
