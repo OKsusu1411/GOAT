@@ -420,7 +420,7 @@ class GoatControlNode(Node):
             obs_headers += ["quat_w", "quat_x", "quat_y", "quat_z"]
             # obs_headers += ["mag_x", "mag_y", "mag_z"] # Uncomment if mag is used in obs
             
-            for i in range(self.num_joints-2):
+            for i in range(self.num_joints - 2):
                 obs_headers.append(f"joint_pos_{i}")
             for i in range(self.num_joints):
                 obs_headers.append(f"joint_vel_{i}")
