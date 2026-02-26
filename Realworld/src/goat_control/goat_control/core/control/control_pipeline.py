@@ -111,28 +111,28 @@ class ControlPipeline:
         self.wheel_pi_controller.reset()
         self.torque_safety_limiter.reset()
 
-    def step(
-        self,
-        targets: ControlTargets,
-        dt_sec: float,
-        imu_state: Optional[ImuState] = None,
-    ) -> ControlPipelineOutput:
-        """Run one control cycle using fresh motor polling."""
-        motor_states_data = self.motor_state_collector.poll_all()
-        robot_state = self.state_manager.build_robot_state(motor_states_data, imu_state=imu_state)
+    # def step(
+    #     self,
+    #     targets: ControlTargets,
+    #     dt_sec: float,
+    #     imu_state: Optional[ImuState] = None,
+    # ) -> ControlPipelineOutput:
+    #     """Run one control cycle using fresh motor polling."""
+    #     motor_states_data = self.motor_state_collector.poll_all()
+    #     robot_state = self.state_manager.build_robot_state(motor_states_data, imu_state=imu_state)
 
-        safe_torque_command, raw_torque_command = self.compute_control(
-            robot_state=robot_state,
-            targets=targets,
-            dt_sec=dt_sec,
-        )
+    #     safe_torque_command, safe_joint_targets, raw_torque_command = self.compute_control(
+    #         robot_state=robot_state,
+    #         targets=targets,
+    #         dt_sec=dt_sec,
+    #     )
 
-        return ControlPipelineOutput(
-            motor_states_data=motor_states_data,
-            robot_state=robot_state,
-            raw_torque_command=raw_torque_command,
-            safe_torque_command=safe_torque_command,
-        )
+    #     return ControlPipelineOutput(
+    #         motor_states_data=motor_states_data,
+    #         robot_state=robot_state,
+    #         raw_torque_command=raw_torque_command,
+    #         safe_torque_command=safe_torque_command,
+    #     )
 
     def compute_control(
         self,
@@ -159,6 +159,8 @@ class ControlPipeline:
         safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec = self.joint_safety_limiter.apply(robot_state,
                                                                                                       desired_joint_delta_position_rad,
                                                                                                       desired_wheel_speed_rad_per_sec)
+        
+        safe_joint_targets = np.array([safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec])
 
         print(safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec)
         desired_joint_position_rad = current_joint_position_rad + safe_joint_delta_position_rad
@@ -185,4 +187,4 @@ class ControlPipeline:
         # 4) Safety limiter (LPF + clipping)
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
-        return safe_torque_command, raw_torque_command
+        return safe_torque_command, safe_joint_targets, raw_torque_command

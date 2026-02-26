@@ -114,10 +114,10 @@ class LogViewer(Node):
         vector = self.latest.vector
 
         # Layout parsing (ONLY accept 4N, 3N support removed)
-        expected_4n = 4 * self.num_joints
-        if vector.size != expected_4n:
+        expected_len = 6 * self.num_joints
+        if vector.size != expected_len:
             self.get_logger().warn(
-                f"log length mismatch: got {vector.size}, expected {expected_4n} (4N only)"
+                f"log length mismatch: got {vector.size}, expected {expected_len}"
             )
             return
 
@@ -125,7 +125,8 @@ class LogViewer(Node):
         joint_position_rad = vector[0 : self.num_joints]
         joint_velocity_rad_per_sec = vector[self.num_joints : 2 * self.num_joints]
         command_value = vector[2 * self.num_joints : 3 * self.num_joints]
-        ref_vector = vector[3 * self.num_joints : 4 * self.num_joints]
+        safe_joint_targets = vector[3 * self.num_joints : 4 * self.num_joints]
+        ref_vector = vector[4 * self.num_joints : 5 * self.num_joints]
 
         if self.print_degrees:
             joint_position = np.rad2deg(joint_position_rad)
@@ -142,8 +143,8 @@ class LogViewer(Node):
 
         # Print rows (batch: all joints in ONE log block)
         header_str = (
-            f"{'ID':>3}  {'NAME':<12}  "
-            f"{'POS':>14}  {'VEL':>14}  {'CMD':>14}  {'REF':>14}"
+            f"{'ID':>3}  {'NAME':<11}  "
+            f"{'POS':>15}  {'VEL':>12}  {'CMD':>14}  {'SAFE':>14}  {'REF':>14}"
         )
         div_str = "-" * len(header_str)
 
@@ -154,13 +155,16 @@ class LogViewer(Node):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
             raw_ref = float(ref_vector[joint_index])
+            raw_safe = float(safe_joint_targets[joint_index])
             if joint_index in self.wheel_indices:
                 # Wheel: Reference is Speed
                 ref_val = float(np.rad2deg(raw_ref)) if self.print_degrees else raw_ref
+                ref_safe = float(np.rad2deg(raw_safe)) if self.print_degrees else raw_safe
                 ref_unit = velocity_unit
             else:
                 # Joint: Reference is Position
                 ref_val = float(np.rad2deg(raw_ref)) if self.print_degrees else raw_ref
+                ref_safe = float(np.rad2deg(raw_safe)) if self.print_degrees else raw_safe
                 ref_unit = position_unit
 
             # Integrate data
@@ -169,6 +173,7 @@ class LogViewer(Node):
                 f"{float(joint_position[joint_index]):>9.{self.precision}f} {position_unit:<3}  "
                 f"{float(joint_velocity[joint_index]):>9.{self.precision}f} {velocity_unit:<3}  "
                 f"{float(command_value[joint_index]):>9.{self.precision}f} {command_unit:<3}  "
+                f"{float(raw_safe):>9.{self.precision}f} {ref_unit:<3}"
                 f"{float(ref_val):>9.{self.precision}f} {ref_unit:<3}"
             )
 

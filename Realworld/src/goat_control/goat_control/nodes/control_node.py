@@ -230,7 +230,7 @@ class GoatControlNode(Node):
         )
         
         # 3. Compute command torque
-        safe_command, _ = self.control_pipeline.compute_control(
+        safe_command, safe_joint_targets, _ = self.control_pipeline.compute_control(
             robot_state=robot_state,
             targets=targets,
             dt_sec=dt_sec
@@ -347,22 +347,29 @@ class GoatControlNode(Node):
         msg.data = obs.astype(np.float32).tolist()
         self.observation_publisher.publish(msg)
 
-    def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, targets: ControlTargets):
+    def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, safe_joint_targets: np.ndarray, targets: ControlTargets):
         joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         command_vector = np.asarray(command_vector, dtype=float).flatten()
+        safe_joint_targets = np.asarray(safe_joint_targets, dtype=float).flatten()
 
         # Ref vector convention:
         #   - joints: position reference [rad]
         #   - wheels: speed reference [rad/s]
         ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
         wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
+
+        # Safe target command
+        safe_joint_pos_targets = np.asarray(safe_joint_targets[:self.num_joints], dtype=float).flatten()
+        safe_joint_vel_targets = np.asarray(safe_joint_targets[self.num_joints:], dtype=float).flatten()
+        
         for wi in getattr(self.goat_model, "wheel_indices", []):
             wi = int(wi)
             if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
                 ref_vector[wi] = float(wheel_ref[wi])
+                safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])              # Combine into one vector
 
-        log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, ref_vector], axis=0)
+        log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, safe_joint_pos_targets, ref_vector], axis=0)
         msg = Float32MultiArray()
         msg.data = log_vector.astype(np.float32).tolist()
         self.motor_torque_log_publisher.publish(msg)
