@@ -347,6 +347,7 @@ class GoatControlNode(Node):
         base_angular_vel = np.deg2rad(base_angular_vel).flatten()           # Fucking degree sibal
         base_quat = np.asarray(orientation_quat, dtype=float).flatten()
         joint_q = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
+        joint_q[6:] = 0                                                                 # NOTE: for debug
         joint_dq = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         # effort_like = np.asarray(robot_state.joint_effort_like, dtype=float).flatten()
 
