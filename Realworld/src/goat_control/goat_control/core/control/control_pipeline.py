@@ -7,7 +7,8 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 
 from ..estimation.state_manager import MotorStateCollector, StateManager
-from ..estimation.state_types import ImuState, MotorStatesData, RobotState
+from ..estimation.state_types import MotorStatesData, RobotState
+from ..estimation.calibration_manager import CalibrationManager
 from .pd_controller import PDJointController
 from .pi_controller import WheelPIController
 from .safety_limiter import TorqueSafetyLimiter, JointSafetyLimiter
@@ -83,6 +84,7 @@ class ControlPipeline:
         goat_model,  # GoatModel (typed loosely to avoid circular import)
         motor_state_collector: MotorStateCollector,
         state_manager: StateManager,
+        calibration_manager: CalibrationManager,
         pd_joint_controller: PDJointController,
         torque_safety_limiter: TorqueSafetyLimiter,
         joint_safety_limiter: JointSafetyLimiter,
@@ -95,6 +97,7 @@ class ControlPipeline:
         return cls(
             motor_state_collector=motor_state_collector,
             state_manager=state_manager,
+            calibration_manager = calibration_manager,
             pd_joint_controller=pd_joint_controller,
             wheel_pi_controller=wheel_pi_controller,
             torque_safety_limiter=torque_safety_limiter,

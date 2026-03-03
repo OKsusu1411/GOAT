@@ -10,6 +10,7 @@ from ..control.pd_controller import PDControllerConfig
 from ..control.pi_controller import WheelPIControllerConfig
 from ..control.safety_limiter import SafetyLimiterConfig
 from ..estimation.state_manager import StateManagerConfig
+from ..estimation.calibration_manager import CalibrationManagerConfig
 
 
 EffortOutputMode = Literal["current_amp", "torque_nm"]
@@ -79,6 +80,11 @@ class GoatModelConfig:
     joint_velocity_lpf_alpha: Optional[float] = None
     joint_effort_like_lpf_alpha: Optional[float] = None
 
+    # -----------------------------
+    # Calibratioin parameters
+    # -----------------------------
+    joint_offsets: Optional[float] = None
+    imu_offsets: Optional[float] = None
 
 class GoatModel:
     """GOAT model: builds configs for estimation/control from a single config block."""
@@ -144,6 +150,12 @@ class GoatModel:
             motor_gear_ratio=list(self.config.motor_gear_ratio),
             motor_direction=list(self.config.motor_direction),
         )
+    
+    def build_calibration_manager_config(self) -> CalibrationManagerConfig:
+        return CalibrationManagerConfig(
+            joint_offsets=np.asarray(self.config.joint_offsets, dtype=float),
+            imu_offsets=np.asarray(self.config.imu_offsets, dtype=float)
+        )
 
     def build_pd_controller_config(self) -> PDControllerConfig:
         if self.config.pd_proportional_gain is None or self.config.pd_derivative_gain is None:
@@ -177,7 +189,6 @@ class GoatModel:
             joint_vel_limit=self.config.joint_vel_limit,
             joint_vel_limit_margin=self.config.joint_vel_limit_margin
         )
-
 
 
     def convert_joint_torque_to_motor_current(self, joint_torque_nm: np.ndarray) -> np.ndarray:

@@ -12,6 +12,7 @@ from ..control.pd_controller import PDJointController
 from ..control.pi_controller import WheelPIController
 from ..control.safety_limiter import TorqueSafetyLimiter, JointSafetyLimiter
 from ..estimation.state_manager import MotorStateCollector, StateManager
+from ..estimation.calibration_manager import CalibrationManager
 from .goat_model import GoatModel, GoatModelConfig, EffortOutputMode
 
 
@@ -55,6 +56,7 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
     wheel_pi_section = _get_section(config_dict, "wheel_pi", "pi", "velocity_pi")
     safety_section = _get_section(config_dict, "safety", "limiter", "torque_limiter")
     estimation_section = _get_section(config_dict, "estimation", "state_manager")
+    calibration_section = _get_section(config_dict, "calibration")
 
     # Robot cfg
     joint_names = _as_list(_require(robot_section, "joint_names"))
@@ -89,6 +91,10 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
     angle_deg_per_lsb = float(estimation_section.get("angle_deg_per_lsb", 0.001))
     speed_deg_per_sec_per_lsb = float(estimation_section.get("speed_deg_per_sec_per_lsb", 0.01))
 
+    # Calibration cfg
+    joint_offsets = calibration_section.get("joint_offsets", None)
+    imu_offsets = calibration_section.get("imu_offsets", None)
+
     joint_velocity_lpf_alpha = estimation_section.get("joint_velocity_lpf_alpha", None)
     joint_effort_like_lpf_alpha = estimation_section.get("joint_effort_like_lpf_alpha", None)
     joint_velocity_lpf_alpha = None if joint_velocity_lpf_alpha is None else float(joint_velocity_lpf_alpha)
@@ -119,6 +125,8 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
         joint_vel_limit_margin=joint_vel_limit_margin,
         joint_velocity_lpf_alpha=joint_velocity_lpf_alpha,
         joint_effort_like_lpf_alpha=joint_effort_like_lpf_alpha,
+        joint_offsets=joint_offsets,
+        imu_offsets=imu_offsets
     )
 
     return GoatModel(goat_model_config)
@@ -144,12 +152,16 @@ def build_control_pipeline_from_yaml(
     """
     goat_model = build_goat_model_from_yaml(yaml_path)
 
-    # 1) Estimation
+    # Estimation
     motor_state_collector = MotorStateCollector(list(motor_drivers))
     state_manager_config = goat_model.build_state_manager_config(effort_output_mode=effort_output_mode)
     state_manager = StateManager(state_manager_config)
 
-    # 2) Controllers
+    # Calibration
+    calibration_manager_coonfig = goat_model.build_calibration_manager_config()
+    calibration_manager = CalibrationManager(calibration_manager_coonfig)
+
+    # Controllers
     pd_controller_config = goat_model.build_pd_controller_config()
     pd_joint_controller = PDJointController(pd_controller_config)
 
@@ -157,16 +169,17 @@ def build_control_pipeline_from_yaml(
     wheel_pi_controller_config = goat_model.build_wheel_pi_controller_config()
     wheel_pi_controller = WheelPIController(wheel_pi_controller_config, num_joints=goat_model.num_joints)
 
-    # 3) Safety limiter
+    # Safety limiter
     safety_limiter_config = goat_model.build_safety_limiter_config()
     torque_safety_limiter = TorqueSafetyLimiter(safety_limiter_config)
     joint_safety_limiter = JointSafetyLimiter(safety_limiter_config)
 
-    # 4) Pipeline
+    # Pipeline
     control_pipeline = ControlPipeline.build_from_goat_model(
         goat_model=goat_model,
         motor_state_collector=motor_state_collector,
         state_manager=state_manager,
+        calibration_manager = calibration_manager,
         pd_joint_controller=pd_joint_controller,
         torque_safety_limiter=torque_safety_limiter,
         joint_safety_limiter=joint_safety_limiter,

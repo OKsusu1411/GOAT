@@ -146,10 +146,6 @@ class MotorIONode(Node):
         js.velocity = list(robot_state.joint_velocity_rad_per_sec)
         js.effort = list(robot_state.joint_effort_like)
 
-        # self.get_logger().info(
-        #     f"Publishing JointState: pos={js.position}",
-        #     throttle_duration_sec=1.0,
-        # )
         self.joint_state_pub.publish(js)
 
         # 3) Send torque command if fresh

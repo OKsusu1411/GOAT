@@ -87,3 +87,10 @@ estimation:
 
   speed_deg_per_sec_per_lsb: 0.01
 
+calibration:
+    joint_offsets: [0,0,
+                    0,0,
+                    0,0,
+                    0,0]
+
+    imu_offsets: []
