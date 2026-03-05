@@ -2,9 +2,9 @@
 
 robot:
   joint_names: ['hip_L_Joint',   'hip_R_Joint',
-            'thigh_L_Joint', 'thigh_R_Joint',
-            'knee_L_Joint',  'knee_R_Joint',
-            'wheel_L_Joint', 'wheel_R_Joint']
+                'thigh_L_Joint', 'thigh_R_Joint',
+                'knee_L_Joint',  'knee_R_Joint',
+                'wheel_L_Joint', 'wheel_R_Joint']
 
   joint_indices: [0,1,2,3,4,5]
   wheel_indices: [6,7]
@@ -23,6 +23,11 @@ robot:
                     1,1,
                     1,1,
                     1,1]
+                    
+  natural_joint_position: [0.0,0.0,                 # Natural standing configuration
+                           0.25,-0.25,
+                           0.6,-0.6,
+                           0.0,0.0]
 
 pd:
   proportional_gain: [0.300,0.300,
@@ -44,7 +49,7 @@ wheel_pi:
 
   integrator_state_limit: 3.0
 
-  output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,4.5,4.5]
+  output_limit_per_joint: [4.5,4.5,4.5,4.5,4.5,4.5,2.5,2.5]
 
 safety:
   torque_lpf_alpha_per_joint: [0.951,0.951,
@@ -52,10 +57,33 @@ safety:
                                0.951,0.951,
                                0.951,0.951]
 
-  max_torque_per_joint: [4.5,4.5,
-                         4.5,4.5, 
-                         4.5,4.5,
-                         0.001,0.001]
+  # max_torque_per_joint: [4.5,4.5,
+  #                        4.5,4.5, 
+  #                        4.5,4.5,
+  #                        2.5,2.5]
+
+  max_torque_per_joint: [0.5,0.5,
+                         0.5,0.5, 
+                         0.5,0.5,
+                         0.5,0.5]
+
+  joint_pos_limit: [-1.22173, 0.750492,       # rad
+                    -0.750492, 1.22173,
+                    -0.261799, 2.05949,
+                    -2.05949, 0.261799,
+                    -0.0, 2.30383,
+                    -2.30383, 0.0,
+                    -.inf, .inf,
+                    -.inf, .inf]
+
+  joint_pos_limit_margin: 0.087267            # 5 degree
+
+  joint_vel_limit: [33.510322, 33.510322,     # rad/s
+                    33.510322, 33.510322,
+                    33.510322, 33.510322,
+                    33.510322, 33.510322]
+
+  joint_vel_limit_margin: 1.047198            # 10 rpm
 
 estimation:
   motor_current_amp_per_lsb: 0.01611328125
@@ -64,3 +92,10 @@ estimation:
 
   speed_deg_per_sec_per_lsb: 0.01
 
+calibration:
+    joint_offsets: [0,0,
+                    0,0,
+                    0,0,
+                    0,0]
+
+    imu_offsets: []

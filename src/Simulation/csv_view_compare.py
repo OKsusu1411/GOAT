@@ -4,7 +4,7 @@
 
 [A: CSV 보기(단발/실시간)]
 python3 csv_view_compare.py --mode A \
-  --csv joint_4_sine.csv \
+  --csv joint_0_sine.csv \
   --joints 4 \
   --window_sec 0 \
   --unit deg \
@@ -22,8 +22,8 @@ python3 csv_view_compare.py --mode A \
 
 [B: CSV 두 파일 비교(시작점 정렬 + RMSE)]
 python3 csv_view_compare.py --mode B \
-  --csv_a joint_0.csv \
-  --csv_b joint_0_sine.csv \
+  --csv_a /home/heachanlee/GOAT/GOAT/Realworld/logs/run1.csv \
+  --csv_b /home/heachanlee/GOAT/GOAT/Realworld/logs/run2.csv \
   --joints 6 \
   --use q_meas \
   --start_method delta \
@@ -31,11 +31,6 @@ python3 csv_view_compare.py --mode B \
   --zero_mode subtract_initial \
   --dt 0.002 \
   --save_png_compare
-
-
-  window
-python csv_view_compare.py --mode B --csv_a joint_0_sine2.csv --csv_b joint_0_sine_sim.csv --joints 0 --use q_meas --start_method delta --start_thresh 0.01 --zero_mode subtract_initial --dt 0.002 --save_png_compare --show_compare
-
 """
 from __future__ import annotations
 
@@ -166,7 +161,6 @@ def run_view_mode(
     period = 1.0 / max(refresh_hz, 0.5)
 
     print("\n[A 모드] 종료: 그래프 창에서 Ctrl+C 또는 터미널에서 Ctrl+C\n")
-    print(f"[INFO] Output directory: {out_dir}")
 
     try:
         while True:
@@ -302,14 +296,10 @@ def run_compare_mode(
     out_dir: Optional[Path],
     unit: str,           # "rad" or "deg" (출력/그래프 표시 단위)
     fill_missing: str,   # 결측 처리(비교에도 동일 적용)
-    show_plot: bool,     # [추가] 비교 그래프 창 띄우기
-    save_all_png: bool,  # [추가] joints 전체를 한 장으로 저장
 ) -> None:
     if out_dir is None:
         out_dir = csv_a.parent
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"[INFO] Output directory: {out_dir}")
 
     df_a = load_csv_safe(csv_a)
     df_b = load_csv_safe(csv_b)
@@ -320,12 +310,12 @@ def run_compare_mode(
     # 정렬 + 결측 처리
     df_a = df_a.sort_values("t_sec")
     df_b = df_b.sort_values("t_sec")
-    prefix = "q_meas" if use == "q_meas" else "q_ref"
-
     for j in joints:
-        col = cols_for_joint(prefix, j)
+        col = cols_for_joint("q_meas" if use == "q_meas" else "q_ref", j)
         df_a[col] = fill_missing_series(df_a[col], fill_missing)
         df_b[col] = fill_missing_series(df_b[col], fill_missing)
+
+    prefix = "q_meas" if use == "q_meas" else "q_ref"
 
     to_deg = (unit == "deg")
     scale = (180.0 / np.pi) if to_deg else 1.0
@@ -334,19 +324,7 @@ def run_compare_mode(
     rows_out = []
     rmse_vals = []
 
-    # [추가] ALL figure 준비 (joints 전부 한 화면)
-    n = len(joints)
-    n_cols = 2 if n > 1 else 1
-    n_rows = int(np.ceil(n / n_cols))
-    fig_all = None
-    axes_all = None
-    if show_plot or save_all_png:
-        fig_all, axes_all = plt.subplots(n_rows, n_cols, figsize=(12, 3.5 * n_rows), sharex=False)
-        if n_rows * n_cols == 1:
-            axes_all = np.array([axes_all])
-        axes_all = axes_all.flatten()
-
-    for k, j in enumerate(joints):
+    for j in joints:
         tA = df_a["t_sec"].to_numpy(dtype=float)
         tB = df_b["t_sec"].to_numpy(dtype=float)
         yA = df_a[cols_for_joint(prefix, j)].to_numpy(dtype=float)
@@ -376,7 +354,6 @@ def run_compare_mode(
         rmse_vals.append(e)
         rows_out.append([j, t0A, t0B, e])
 
-        # [기존] joint별 png 저장
         if save_png:
             fig = plt.figure(figsize=(10, 4))
             ax = fig.add_subplot(1, 1, 1)
@@ -387,28 +364,8 @@ def run_compare_mode(
             ax.set_title(f"Joint {j} start-aligned | RMSE={e*scale:.6f} {y_label}")
             ax.legend()
             fig.tight_layout()
-            out_path = out_dir / f"compare_{csv_a.stem}_vs_{csv_b.stem}_joint{j}_{prefix}.png"
-            fig.savefig(out_path, dpi=150)
+            fig.savefig(out_dir / f"compare_{csv_a.stem}_vs_{csv_b.stem}_joint{j}_{prefix}.png", dpi=150)
             plt.close(fig)
-            print(f"[SAVE] {out_path}")
-
-        # [추가] ALL figure에도 그리기
-        if fig_all is not None and axes_all is not None:
-            ax = axes_all[k]
-            ax.plot(tA2, yA2 * scale, label="A")
-            ax.plot(tB2, yB2 * scale, label="B")
-            ax.set_title(f"Joint {j} | RMSE={e*scale:.4f} {y_label}")
-            ax.set_xlabel("t aligned (s)")
-            ax.set_ylabel(y_label + (" (zeroed)" if zero_mode == "subtract_initial" else ""))
-            ax.grid(True, alpha=0.3)
-            ax.legend(loc="best", fontsize=8)
-
-    # 남는 subplot 비우기
-    if fig_all is not None and axes_all is not None:
-        for idx in range(len(joints), len(axes_all)):
-            axes_all[idx].axis("off")
-        fig_all.suptitle(f"Compare ALL joints ({prefix}) | {csv_a.name} vs {csv_b.name}", y=1.02, fontsize=12)
-        fig_all.tight_layout()
 
     print("\n=== [B 모드] Compare Summary ===")
     for (j, t0A, t0B, e) in rows_out:
@@ -420,27 +377,12 @@ def run_compare_mode(
     if rmse_vals:
         print(f"Overall mean RMSE: {float(np.mean(rmse_vals))*scale:.6f} {y_label}")
 
-    # summary csv (RMSE는 rad 기준으로 저장 유지)
     summary_path = out_dir / f"compare_summary_{csv_a.stem}_vs_{csv_b.stem}.csv"
-    with summary_path.open("w", encoding="utf-8") as f:
+    with summary_path.open("w") as f:
         f.write("joint,startA_sec,startB_sec,rmse_in_rad\n")
         for (j, t0A, t0B, e) in rows_out:
             f.write(f"{j},{t0A:.6f},{t0B:.6f},{'' if e=='' else float(e):.9f}\n")
     print(f"[SAVE] {summary_path}")
-
-    # [추가] ALL figure 저장
-    if (save_all_png or save_png) and fig_all is not None:
-        out_all = out_dir / f"compare_{csv_a.stem}_vs_{csv_b.stem}_ALL_{prefix}.png"
-        fig_all.savefig(out_all, dpi=150)
-        print(f"[SAVE] {out_all}")
-
-    # [추가] 창에 띄우기
-    if show_plot and fig_all is not None:
-        plt.show()
-    else:
-        # show_plot이 아니면 닫아줌(메모리)
-        if fig_all is not None:
-            plt.close(fig_all)
 
 
 # -----------------------------
@@ -486,13 +428,6 @@ def main():
     ap.add_argument("--zero_mode", choices=["raw", "subtract_initial"], default="subtract_initial")
     ap.add_argument("--dt", type=float, default=0.002)
     ap.add_argument("--save_png_compare", action="store_true")
-
-    # [추가] B 모드 그래프 표시/ALL 저장 옵션
-    ap.add_argument("--show_compare", action="store_true",
-                    help="B 모드에서 joints 전체 비교 그래프 창을 띄움")
-    ap.add_argument("--save_png_all", action="store_true",
-                    help="B 모드에서 joints 전체를 한 장(ALL)으로 저장")
-
     args = ap.parse_args()
 
     mode = args.mode.strip().lower() if args.mode else ""
@@ -538,13 +473,11 @@ def main():
         start_method=args.start_method,
         start_thresh=args.start_thresh,
         zero_mode=args.zero_mode,
-        dt=args.dt,
+        dt=args.dt,  # <- 여기 오타 수정됨
         save_png=args.save_png_compare,
         out_dir=out_dir,
         unit=args.unit,
         fill_missing=args.fill_missing,
-        show_plot=args.show_compare,
-        save_all_png=args.save_png_all or args.save_png_compare,  # compare 저장하면 ALL도 저장되게
     )
 
 

@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
+from ..estimation.state_types import RobotState
 
 
 @dataclass
-class TorqueSafetyLimiterConfig:
+class SafetyLimiterConfig:
     """Safety layer for torque/effort command.
 
     - lpf_alpha_per_joint:
@@ -23,12 +24,16 @@ class TorqueSafetyLimiterConfig:
     num_joints: int
     lpf_alpha_per_joint: Optional[Sequence[float]] = None
     max_torque_per_joint: Optional[Sequence[float]] = None
+    joint_pos_limit: Optional[Sequence[float]] = None
+    joint_pos_limit_margin: float = 0.0
+    joint_vel_limit: Optional[Sequence[float]] = None
+    joint_vel_limit_margin: float = 0.0
 
 
 class TorqueSafetyLimiter:
     """Apply LPF + per-joint torque clipping."""
 
-    def __init__(self, config: TorqueSafetyLimiterConfig):
+    def __init__(self, config: SafetyLimiterConfig):
         self.num_joints = int(config.num_joints)
 
         if config.lpf_alpha_per_joint is None:
@@ -48,7 +53,7 @@ class TorqueSafetyLimiter:
             self.max_torque_per_joint = np.asarray(config.max_torque_per_joint, dtype=float).flatten()
             if self.max_torque_per_joint.size != self.num_joints:
                 raise ValueError("max_torque_per_joint length must match num_joints.")
-            if np.any(self.max_torque_per_joint <= 0.0):
+            if np.any(self.max_torque_per_joint < 0.0):
                 raise ValueError("max_torque_per_joint must be positive.")
 
         self.previous_torque_command = np.zeros(self.num_joints, dtype=float)
@@ -79,7 +84,62 @@ class TorqueSafetyLimiter:
         clipped = np.clip(filtered, -self.max_torque_per_joint, self.max_torque_per_joint)
 
         return clipped
+    
 
+# ---------------------------------------------------------------------
+# Joint position + velocity safety lock limiter 
+# ---------------------------------------------------------------------
+
+class JointSafetyLimiter:
+    """Apply joint position limit lock after calculate target position"""
+    def __init__(self, config: SafetyLimiterConfig):
+        self.num_joints = int(config.num_joints)
+
+        # Joint limit
+        self.joint_pos_limit = np.asarray(config.joint_pos_limit, dtype=float).flatten()
+        self.joint_vel_limit = np.asarray(config.joint_vel_limit, dtype=float).flatten()
+
+         # Exception
+        if self.joint_pos_limit.size != self.num_joints * 2:
+            raise ValueError("joint_pos_limit length must match num_joints * 2.")
+        if self.joint_vel_limit.size != self.num_joints:
+            raise ValueError("joint_vel_limit length must match num_joints.")
+        
+        # Margin considering
+        joint_pos_limit_margin = config.joint_pos_limit_margin
+        joint_vel_limit_margin = config.joint_vel_limit_margin
+
+        self.joint_pos_lower_limits = self.joint_pos_limit[0::2] + joint_pos_limit_margin
+        self.joint_pos_upper_limits = self.joint_pos_limit[1::2] - joint_pos_limit_margin
+        self.joint_vel_limit -= joint_vel_limit_margin
+
+        # Violation boolean
+        self.has_violation = False
+
+    def apply(self,
+              robot_state: RobotState,
+              target_joint_delta_position: np.array,
+              target_joint_velocity: np.array,):
+        
+        current_joint_pos = robot_state.joint_position_rad
+
+        safe_delta_pos = target_joint_delta_position.copy()
+        safe_vel = target_joint_velocity.copy()
+
+        # Examine violation
+        pos_lower_violation_mask = (current_joint_pos <= self.joint_pos_lower_limits)# & (safe_delta_pos < 0)
+        pos_upper_violation_mask = (current_joint_pos >= self.joint_pos_upper_limits)# & (safe_delta_pos > 0)
+        vel_stop_mask = pos_lower_violation_mask | pos_upper_violation_mask         # Currently not used
+        self.has_violation = bool(pos_lower_violation_mask | pos_upper_violation_mask.any())
+
+        # Clipping
+        safe_delta_pos[pos_lower_violation_mask] = 0.0
+        safe_delta_pos[pos_upper_violation_mask] = 0.0
+        safe_vel = np.clip(safe_vel, -self.joint_vel_limit, self.joint_vel_limit)
+        safe_vel[vel_stop_mask] = 0.0                                               # Currently not used
+        
+        return safe_delta_pos, safe_vel, self.has_violation
+        
 
 # ---------------------------------------------------------------------
 # Conditional integration anti-windup for PI controller (wheel indices)

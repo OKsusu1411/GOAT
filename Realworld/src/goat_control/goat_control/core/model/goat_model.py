@@ -8,8 +8,9 @@ import numpy as np
 
 from ..control.pd_controller import PDControllerConfig
 from ..control.pi_controller import WheelPIControllerConfig
-from ..control.safety_limiter import TorqueSafetyLimiterConfig
+from ..control.safety_limiter import SafetyLimiterConfig
 from ..estimation.state_manager import StateManagerConfig
+from ..estimation.calibration_manager import CalibrationManagerConfig
 
 
 EffortOutputMode = Literal["current_amp", "torque_nm"]
@@ -33,11 +34,16 @@ class GoatModelConfig:
     knee_indices: Sequence[int]             # subset of joint_indices (if any)
 
     # -----------------------------
+    # Natural configuration joint position
+    # -----------------------------
+    natural_joint_position: List[float]
+
+    # -----------------------------
     # Motor -> joint mapping params
     # -----------------------------
-    motor_torque_constant_nm_per_amp: List[float]  # length = num_joints
-    motor_gear_ratio: List[float]                 # length = num_joints
-    motor_direction: List[int]                    # length = num_joints (+1 or -1)
+    motor_torque_constant_nm_per_amp: List[float]   # length = num_joints
+    motor_gear_ratio: List[float]                   # length = num_joints
+    motor_direction: List[int]                      # length = num_joints (+1 or -1)
 
     # -----------------------------
     # Estimation scaling parameters
@@ -68,6 +74,10 @@ class GoatModelConfig:
     # -----------------------------
     torque_lpf_alpha_per_joint: Optional[List[float]] = None     # length = num_joints
     max_torque_per_joint: Optional[List[float]] = None           # length = num_joints
+    joint_pos_limit: Optional[List[float]] = None
+    joint_pos_limit_margin: float = 0.0
+    joint_vel_limit: Optional[List[float]] = None
+    joint_vel_limit_margin: float = 0.0
 
     # -----------------------------
     # Optional filtering in state_manager
@@ -75,6 +85,11 @@ class GoatModelConfig:
     joint_velocity_lpf_alpha: Optional[float] = None
     joint_effort_like_lpf_alpha: Optional[float] = None
 
+    # -----------------------------
+    # Calibratioin parameters
+    # -----------------------------
+    joint_offsets: Optional[float] = None
+    imu_offsets: Optional[float] = None
 
 class GoatModel:
     """GOAT model: builds configs for estimation/control from a single config block."""
@@ -86,6 +101,8 @@ class GoatModel:
         self.joint_indices = list(config.joint_indices)
         self.wheel_indices = list(config.wheel_indices)
         self.knee_indices = list(config.knee_indices)
+
+        self.natural_joint_position = list(config.natural_joint_position)
 
         self.num_joints = len(self.joint_names)
         self._validate_lengths()
@@ -140,6 +157,12 @@ class GoatModel:
             motor_gear_ratio=list(self.config.motor_gear_ratio),
             motor_direction=list(self.config.motor_direction),
         )
+    
+    def build_calibration_manager_config(self) -> CalibrationManagerConfig:
+        return CalibrationManagerConfig(
+            joint_offsets=np.asarray(self.config.joint_offsets, dtype=float),
+            imu_offsets=np.asarray(self.config.imu_offsets, dtype=float)
+        )
 
     def build_pd_controller_config(self) -> PDControllerConfig:
         if self.config.pd_proportional_gain is None or self.config.pd_derivative_gain is None:
@@ -163,13 +186,16 @@ class GoatModel:
             output_limit_per_joint=self.config.wheel_output_limit_per_joint,
         )
 
-    def build_torque_safety_limiter_config(self) -> TorqueSafetyLimiterConfig:
-        return TorqueSafetyLimiterConfig(
+    def build_safety_limiter_config(self) -> SafetyLimiterConfig:
+        return SafetyLimiterConfig(
             num_joints=self.num_joints,
             lpf_alpha_per_joint=self.config.torque_lpf_alpha_per_joint,
             max_torque_per_joint=self.config.max_torque_per_joint,
+            joint_pos_limit=self.config.joint_pos_limit,
+            joint_pos_limit_margin=self.config.joint_pos_limit_margin,
+            joint_vel_limit=self.config.joint_vel_limit,
+            joint_vel_limit_margin=self.config.joint_vel_limit_margin
         )
-
 
 
     def convert_joint_torque_to_motor_current(self, joint_torque_nm: np.ndarray) -> np.ndarray:

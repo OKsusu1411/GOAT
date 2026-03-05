@@ -16,7 +16,7 @@ class LatestLog:
     vector: Optional[np.ndarray] = None
 
 
-class MotorTorqueLogViewer(Node):
+class LogViewer(Node):
     """
     Subscribe:  goat/torque_log (Float32MultiArray)
       - data (supported layouts):
@@ -32,7 +32,7 @@ class MotorTorqueLogViewer(Node):
     """
 
     def __init__(self):
-        super().__init__("torque_log_viewer")
+        super().__init__("log_viewer")
 
         # Params
         self.declare_parameter("log_topic", "goat/torque_log")
@@ -42,10 +42,14 @@ class MotorTorqueLogViewer(Node):
         self.declare_parameter("num_joints", 8)
         self.declare_parameter(
             "joint_names",
-            ["hip_L_Joint",  "hip_R_Joint",
-             "thigh_L_Joint","thigh_R_Joint",
-             "knee_L_Joint", "knee_R_Joint",
-             "wheel_L_Joint","wheel_R_Joint",]
+            ["hip_L",
+             "hip_R",
+             "thigh_L",
+             "thigh_R",
+             "knee_L", 
+             "knee_R",
+             "wheel_L",
+             "wheel_R"]
         )
 
         # For nicer ref printing (ref is position for joints, speed for wheels)
@@ -55,7 +59,6 @@ class MotorTorqueLogViewer(Node):
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("command_unit", "torque_nm")  # torque_nm or amp
         self.declare_parameter("precision", 3)
-        self.declare_parameter("header_every", 20)
 
         self.log_topic = str(self.get_parameter("log_topic").value)
         self.joint_state_topic = str(self.get_parameter("joint_state_topic").value)
@@ -69,7 +72,6 @@ class MotorTorqueLogViewer(Node):
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.command_unit = str(self.get_parameter("command_unit").value)
         self.precision = int(self.get_parameter("precision").value)
-        self.header_every = int(self.get_parameter("header_every").value)
 
         if len(self.joint_names) != self.num_joints:
             self.get_logger().warn(
@@ -112,17 +114,19 @@ class MotorTorqueLogViewer(Node):
         vector = self.latest.vector
 
         # Layout parsing (ONLY accept 4N, 3N support removed)
-        expected_4n = 4 * self.num_joints
-        if vector.size != expected_4n:
+        expected_len = 5 * self.num_joints
+        if vector.size != expected_len:
             self.get_logger().warn(
-                f"log length mismatch: got {vector.size}, expected {expected_4n} (4N only)"
+                f"log length mismatch: got {vector.size}, expected {expected_len}"
             )
             return
 
+        # Data slicing
         joint_position_rad = vector[0 : self.num_joints]
         joint_velocity_rad_per_sec = vector[self.num_joints : 2 * self.num_joints]
         command_value = vector[2 * self.num_joints : 3 * self.num_joints]
-        ref_vector = vector[3 * self.num_joints : 4 * self.num_joints]
+        safe_joint_targets = vector[3 * self.num_joints : 4 * self.num_joints]
+        ref_vector = vector[4 * self.num_joints : 5 * self.num_joints]
 
         if self.print_degrees:
             joint_position = np.rad2deg(joint_position_rad)
@@ -138,34 +142,39 @@ class MotorTorqueLogViewer(Node):
         command_unit = "Nm" if self.command_unit == "torque_nm" else "A"
 
         # Print rows (batch: all joints in ONE log block)
-        fmt = (
-            f"{{:>3}}  {{:<12}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}  "
-            f"{{:>12.{self.precision}f}}  {{:>12.{self.precision}f}}"
+        header_str = (
+            f"{'ID':>3}  {'NAME':<12}  "
+            f"{'POS':>15}  {'VEL':>15}  {'CMD':>15}  {'SAFE':>15}  {'REF':>15}"
         )
+        div_str = "-" * len(header_str)
 
-        lines = []
+        lines = [header_str, div_str]
+
+        # Print log data
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
-            # ref: position ref for joints, speed ref for wheels
-            ref_value = float(ref_vector[joint_index])
+            raw_ref = float(ref_vector[joint_index])
+            raw_safe = float(safe_joint_targets[joint_index])
             if joint_index in self.wheel_indices:
-                # wheel ref is speed
-                ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
+                # Wheel: Reference is Speed
+                ref_val = float(np.rad2deg(raw_ref)) if self.print_degrees else raw_ref
+                ref_safe = float(np.rad2deg(raw_safe)) if self.print_degrees else raw_safe
+                ref_unit = velocity_unit
             else:
-                # joint ref is position
-                ref_print = float(np.rad2deg(ref_value)) if self.print_degrees else ref_value
+                # Joint: Reference is Position
+                ref_val = float(np.rad2deg(raw_ref)) if self.print_degrees else raw_ref
+                ref_safe = float(np.rad2deg(raw_safe)) if self.print_degrees else raw_safe
+                ref_unit = position_unit
 
+            # Integrate data
             lines.append(
-                fmt.format(
-                    joint_index,
-                    name[:12],
-                    float(joint_position[joint_index]),
-                    float(joint_velocity[joint_index]),
-                    float(command_value[joint_index]),
-                    float(ref_print),
-                )
+                f"{joint_index:>3}  {name[:12]:<12}  "
+                f"{float(joint_position[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
+                f"{float(joint_velocity[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
+                f"{float(command_value[joint_index]):>9.{self.precision}f} {command_unit:<5}  "
+                f"{float(ref_safe):>9.{self.precision}f} {ref_unit:<5}  "
+                f"{float(ref_val):>9.{self.precision}f} {ref_unit:<5}"
             )
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
@@ -175,7 +184,7 @@ class MotorTorqueLogViewer(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = MotorTorqueLogViewer()
+    node = LogViewer()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

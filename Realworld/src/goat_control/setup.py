@@ -41,12 +41,12 @@ setup(
         'console_scripts': [
             'goat_control_node = goat_control.nodes.control_node:main',
             'state_estimation_node = goat_control.nodes.state_estimation_node:main',
-            'motor_command_node = goat_control.nodes.motor_command_node:main',
             'motor_io_node = goat_control.nodes.motor_io_node:main',
-            'policy_node = goat_control.nodes.policy_node:main',
+            'agent_node = goat_control.nodes.agent_node:main',
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',
             'plot_node = goat_control.nodes.plot_node:main',
+            'calibration_node = calibration_node.nodes.calibration_node:main',
         ],
     },
 )

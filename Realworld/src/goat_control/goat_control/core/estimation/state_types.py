@@ -36,33 +36,31 @@ class ImuState:
       - accel: m/s^2 or g depends on your sensor output.
       - magnetometer: uT or arbitrary, depends on your sensor output.
 
-    If you later standardize units (recommended), rename fields accordingly.
     """
 
-    # Quaternion (unitless)
+    # Quaternion [unitless]
     orientation_quat_w: float
     orientation_quat_x: float
     orientation_quat_y: float
     orientation_quat_z: float
 
-    # Angular velocity
-    angular_velocity_x: float
-    angular_velocity_y: float
-    angular_velocity_z: float
+    # Angular velocity [degree per second]
+    gyroscope_x: float
+    gyroscope_y: float
+    gyroscope_z: float
 
-    # Linear acceleration
-    linear_acceleration_x: float
-    linear_acceleration_y: float
-    linear_acceleration_z: float
+    # Base acceleration [g?]
+    acceleration_x: float
+    acceleration_y: float
+    acceleration_z: float
 
-    # Magnetic field
+    # Magnetic field [uT]
     magnetic_field_x: float
     magnetic_field_y: float
     magnetic_field_z: float
 
-    # Sensor timestamp from IMU packet
+    # Sensor timestamp from IMU packet [ms]
     sensor_time_ms: float
-
 
 @dataclass
 class RobotState:
@@ -76,6 +74,7 @@ class RobotState:
 
     joint_position_rad: List[float]                    # [rad]
     joint_velocity_rad_per_sec: List[float]            # [rad/s]
+    natural_joint_position: List[float]                # Natural standing position
     joint_effort_like: List[float]                     # [A] or [Nm] depending on your convention
 
     motor_temperature_c: List[float]                   # [degC]

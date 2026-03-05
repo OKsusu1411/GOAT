@@ -19,7 +19,7 @@ JOINT_COUNT = 6  # 0~5
 WHEEL_COUNT = 2  # 6~7
 STEP = 20.0      # joint: deg, wheel: deg/s
 PUBLISH_HZ = 100.0
-TOPIC = "goat/action"
+TOPIC = "goat/actions"
 
 
 def _read_int_0_7() -> int:

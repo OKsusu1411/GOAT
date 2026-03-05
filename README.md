@@ -1,5 +1,18 @@
 # G.O.A.T. (Getting Over All Things)
 Wheeled Bipedal Robot(WBR) Project by *Hansu Kim*, *Sangjun Moon*, *Haechan Lee*, *Hongryeol Yoon* in AISL Chung-ang university    
+## Getting Started
+Clone repository recursively with AISL-RL submodule.   
+```bash
+git clone --recurse-submodules https://github.com/DiligentYoon/AISL-RL.git
+```  
+if you already clone GOAT repository without recursively try recurse pull.   
+```bash
+git pull
+git submodule update --init --recursive
+```
+
+- On progress - 
+
 ## Description  
 ### File Structure
 ```
