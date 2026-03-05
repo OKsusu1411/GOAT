@@ -74,6 +74,7 @@ class RobotState:
 
     joint_position_rad: List[float]                    # [rad]
     joint_velocity_rad_per_sec: List[float]            # [rad/s]
+    natural_joint_position: List[float]                # Natural standing position
     joint_effort_like: List[float]                     # [A] or [Nm] depending on your convention
 
     motor_temperature_c: List[float]                   # [degC]

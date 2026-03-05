@@ -23,6 +23,11 @@ robot:
                     1,1,
                     1,1,
                     1,1]
+                    
+  natural_joint_position: [0.0,0.0,                 # Natural standing configuration
+                           0.25,-0.25,
+                           0.6,-0.6,
+                           0.0,0.0]
 
 pd:
   proportional_gain: [0.300,0.300,

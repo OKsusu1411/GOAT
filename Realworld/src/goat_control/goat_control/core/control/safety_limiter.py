@@ -113,7 +113,8 @@ class JointSafetyLimiter:
         self.joint_pos_upper_limits = self.joint_pos_limit[1::2] - joint_pos_limit_margin
         self.joint_vel_limit -= joint_vel_limit_margin
 
-        
+        # Violation boolean
+        self.has_violation = False
 
     def apply(self,
               robot_state: RobotState,
@@ -125,9 +126,11 @@ class JointSafetyLimiter:
         safe_delta_pos = target_joint_delta_position.copy()
         safe_vel = target_joint_velocity.copy()
 
-        pos_lower_violation_mask = (current_joint_pos <= self.joint_pos_lower_limits) & (safe_delta_pos < 0)
-        pos_upper_violation_mask = (current_joint_pos >= self.joint_pos_upper_limits) & (safe_delta_pos > 0)
+        # Examine violation
+        pos_lower_violation_mask = (current_joint_pos <= self.joint_pos_lower_limits)# & (safe_delta_pos < 0)
+        pos_upper_violation_mask = (current_joint_pos >= self.joint_pos_upper_limits)# & (safe_delta_pos > 0)
         vel_stop_mask = pos_lower_violation_mask | pos_upper_violation_mask         # Currently not used
+        self.has_violation = bool(pos_lower_violation_mask | pos_upper_violation_mask.any())
 
         # Clipping
         safe_delta_pos[pos_lower_violation_mask] = 0.0
@@ -135,7 +138,7 @@ class JointSafetyLimiter:
         safe_vel = np.clip(safe_vel, -self.joint_vel_limit, self.joint_vel_limit)
         safe_vel[vel_stop_mask] = 0.0                                               # Currently not used
         
-        return safe_delta_pos, safe_vel
+        return safe_delta_pos, safe_vel, self.has_violation
         
 
 # ---------------------------------------------------------------------

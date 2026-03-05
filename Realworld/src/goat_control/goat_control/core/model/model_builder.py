@@ -63,11 +63,11 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
     joint_indices = _as_list(robot_section.get("joint_indices", list(range(0, 6))))
     wheel_indices = _as_list(robot_section.get("wheel_indices", [6, 7]))
     knee_indices = _as_list(robot_section.get("knee_indices", []))
+    natural_joint_position = robot_section.get("natural_joint_position", None)
 
     motor_torque_constant_nm_per_amp = _as_list(_require(robot_section, "motor_torque_constant_nm_per_amp"))
     motor_gear_ratio = _as_list(_require(robot_section, "motor_gear_ratio"))
     motor_direction = _as_list(_require(robot_section, "motor_direction"))
-
 
     pd_proportional_gain = pd_section.get("proportional_gain", None)
     pd_derivative_gain = pd_section.get("derivative_gain", None)
@@ -105,6 +105,7 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
         joint_indices=[int(index) for index in joint_indices],
         wheel_indices=[int(index) for index in wheel_indices],
         knee_indices=[int(index) for index in knee_indices],
+        natural_joint_position = [int(index) for index in natural_joint_position],
         motor_torque_constant_nm_per_amp=[float(value) for value in motor_torque_constant_nm_per_amp],
         motor_gear_ratio=[float(value) for value in motor_gear_ratio],
         motor_direction=[int(value) for value in motor_direction],

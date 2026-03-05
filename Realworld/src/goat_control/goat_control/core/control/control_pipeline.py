@@ -170,15 +170,16 @@ class ControlPipeline:
         if desired_wheel_speed_rad_per_sec.size != self.num_joints:
             raise ValueError("targets.desired_wheel_speed_rad_per_sec must have length == num_joints.")
 
+        natural_joint_position = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
         current_joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
 
-        safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec = self.joint_safety_limiter.apply(robot_state,
-                                                                                                      desired_joint_delta_position_rad,
-                                                                                                      desired_wheel_speed_rad_per_sec)
+        safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec, has_violation = self.joint_safety_limiter.apply(robot_state,
+                                                                                                                     desired_joint_delta_position_rad,
+                                                                                                                     desired_wheel_speed_rad_per_sec)
         
-
-        desired_joint_position_rad = current_joint_position_rad + safe_joint_delta_position_rad
+        # Delta position action space
+        desired_joint_position_rad = natural_joint_position + safe_joint_delta_position_rad
         desired_wheel_speed_rad_per_sec = safe_wheel_speed_rad_per_sec
         
         safe_joint_targets = np.array([desired_joint_position_rad, desired_wheel_speed_rad_per_sec])
@@ -204,4 +205,4 @@ class ControlPipeline:
         # 4) Safety limiter (LPF + clipping)
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
-        return safe_torque_command, safe_joint_targets, raw_torque_command
+        return safe_torque_command, safe_joint_targets, has_violation

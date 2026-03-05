@@ -98,6 +98,10 @@ class GoatControlNode(Node):
         self.control_pipeline.reset()
         self.num_joints = int(self.goat_model.num_joints)
         self.action_dim = 0
+        self.natural_joint_position = self.goat_model.natural_joint_position
+
+        # Violation boolean for emergency stop
+        self.has_position_limit_violation = False
 
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
@@ -205,6 +209,7 @@ class GoatControlNode(Node):
             joint_names=joint_state_msg.name,
             joint_position_rad=np.array(joint_state_msg.position),
             joint_velocity_rad_per_sec=np.array(joint_state_msg.velocity),
+            natural_joint_position=np.array(self.natural_joint_position),
             joint_effort_like=np.array(joint_state_msg.effort),
             motor_temperature_c=[],
             motor_error_flags=[],
@@ -218,14 +223,16 @@ class GoatControlNode(Node):
         action_timed_out = self._is_action_timed_out(now_time)
 
 
-        ###### =========================== Safety stop =========================== ###### 
-        if (robot_state.joint_velocity_rad_per_sec[0:6] >= 0.436).any():
+        ###### ======================================= Safety stop ======================================= ###### 
+        has_joint_velocity_violation = (robot_state.joint_velocity_rad_per_sec[0:6] >= 0.436).any()
+        
+        if has_joint_velocity_violation | self.has_position_limit_violation:
             self.get_logger().info("!!!!Emergency Stopped!!!!")
             if self._is_csv_logging_active:
                 self._close_csv_logger()
             self.control_timer.cancel()
             self.control_timer.cancel()
-        ###### =========================== Safety stop =========================== ###### 
+        ###### ======================================= Safety stop ======================================= ###### 
 
         current_action = np.zeros(self.action_dim)
 
@@ -246,7 +253,7 @@ class GoatControlNode(Node):
         )
         
         # 3. Compute command torque
-        safe_command, safe_joint_targets, _ = self.control_pipeline.compute_control(
+        safe_command, safe_joint_targets, self.has_position_limit_violation = self.control_pipeline.compute_control(
             robot_state=robot_state,
             targets=targets,
             dt_sec=dt_sec

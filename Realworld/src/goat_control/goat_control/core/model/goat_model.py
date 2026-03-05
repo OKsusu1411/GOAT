@@ -34,6 +34,11 @@ class GoatModelConfig:
     knee_indices: Sequence[int]             # subset of joint_indices (if any)
 
     # -----------------------------
+    # Natural configuration joint position
+    # -----------------------------
+    natural_joint_position: List[float]
+
+    # -----------------------------
     # Motor -> joint mapping params
     # -----------------------------
     motor_torque_constant_nm_per_amp: List[float]   # length = num_joints
@@ -96,6 +101,8 @@ class GoatModel:
         self.joint_indices = list(config.joint_indices)
         self.wheel_indices = list(config.wheel_indices)
         self.knee_indices = list(config.knee_indices)
+
+        self.natural_joint_position = list(config.natural_joint_position)
 
         self.num_joints = len(self.joint_names)
         self._validate_lengths()
