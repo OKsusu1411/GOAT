@@ -6,6 +6,8 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
+from sensor_msgs.msg import JointState
+from motor_interfaces.msg import BaseStates
 from ..estimation.state_manager import MotorStateCollector, StateManager
 from ..estimation.state_types import MotorStatesData, RobotState
 from ..estimation.calibration_manager import CalibrationManager
@@ -56,6 +58,7 @@ class ControlPipeline:
         self,
         motor_state_collector: MotorStateCollector,
         state_manager: StateManager,
+        calibration_manager: CalibrationManager,
         pd_joint_controller: PDJointController,
         wheel_pi_controller: WheelPIController,
         torque_safety_limiter: TorqueSafetyLimiter,
@@ -65,6 +68,7 @@ class ControlPipeline:
     ):
         self.motor_state_collector = motor_state_collector
         self.state_manager = state_manager
+        self.calibration_manager = calibration_manager
         self.pd_joint_controller = pd_joint_controller
 
         self.wheel_pi_controller = wheel_pi_controller
@@ -137,6 +141,16 @@ class ControlPipeline:
     #         safe_torque_command=safe_torque_command,
     #     )
 
+    def apply_calibrated_offset(self, joint_msg: JointState = None, imu_msg: BaseStates = None):
+        """Apply calibrated offset to raw sensor data"""
+        if joint_msg is not None:
+            joint_msg = self.calibration_manager.apply_joint_offset(joint_msg)
+
+        if imu_msg is not None:
+            imu_msg = self.calibration_manager.apply_imu_offset(imu_msg)
+        
+        return joint_msg, imu_msg
+    
     def compute_control(
         self,
         robot_state: RobotState,

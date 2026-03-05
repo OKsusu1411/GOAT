@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Sequence
+from sensor_msgs.msg import JointState
+from motor_interfaces.msg import BaseStates
 
 import numpy as np
 
@@ -28,45 +30,25 @@ class CalibrationManager:
     def __init__(self, config: CalibrationManagerConfig):
         self.config = config
 
-        self.p_gain = np.asarray(config.proportional_gain, dtype=float).flatten()
-        self.d_gain = np.asarray(config.derivative_gain, dtype=float).flatten()
-        self.joint_indices = list(config.joint_indices)
+        # Load offset
+        self.joint_offsets = np.asarray(config.joint_offsets, dtype=float).flatten()
+        self.imu_offsets = np.asarray(config.imu_offsets, dtype=float).flatten()
 
-        if self.p_gain.shape != self.d_gain.shape:
-            raise ValueError("p_gain and d_gain must have the same shape.")
+    def apply_joint_offset(self, joint_state_msg: JointState):
+        """"Execute in JointState topic subscriber"""
+        joint_position_rad=np.array(joint_state_msg.position)
+        joint_position_rad -= self.joint_offsets
 
-    def compute(
-        self,
-        target_position_rad: np.ndarray,
-        current_position_rad: np.ndarray,
-        current_velocity_rad_per_sec: np.ndarray,
-        desired_velocity_rad_per_sec: Optional[np.ndarray] = None,
-    ) -> np.ndarray:
-        """Compute PD output torque/effort for the configured joint indices."""
-        target_position_rad = np.asarray(target_position_rad, dtype=float).flatten()
-        current_position_rad = np.asarray(current_position_rad, dtype=float).flatten()
-        current_velocity_rad_per_sec = np.asarray(current_velocity_rad_per_sec, dtype=float).flatten()
+        # Overload msg
+        joint_state_msg.position = joint_position_rad
+        return joint_state_msg
+    
+    def apply_imu_offset(self, imu_msg: BaseStates):
+        """Execute in BaseStates(imu) topic subscriber"""
+        orientation_quat_w=float(imu_msg.quat.w)
+        orientation_quat_x=float(imu_msg.quat.x)
+        orientation_quat_y=float(imu_msg.quat.y)
+        orientation_quat_z=float(imu_msg.quat.z)
 
-        if desired_velocity_rad_per_sec is None:
-            desired_velocity_rad_per_sec = np.zeros_like(current_velocity_rad_per_sec)
-        else:
-            desired_velocity_rad_per_sec = np.asarray(desired_velocity_rad_per_sec, dtype=float).flatten()
-
-        if not (
-            target_position_rad.shape == current_position_rad.shape == current_velocity_rad_per_sec.shape
-            == desired_velocity_rad_per_sec.shape == self.p_gain.shape
-        ):
-            raise ValueError("All input arrays and gain arrays must have the same shape (num_joints,).")
-
-        position_error_rad = target_position_rad - current_position_rad
-        velocity_error_rad_per_sec = desired_velocity_rad_per_sec - current_velocity_rad_per_sec
-
-        torque_command = np.zeros_like(target_position_rad, dtype=float)
-
-        # Apply PD only to selected joint indices (e.g., 0~5)
-        torque_command[self.joint_indices] = (
-            self.p_gain[self.joint_indices] * position_error_rad[self.joint_indices]
-            + self.d_gain[self.joint_indices] * velocity_error_rad_per_sec[self.joint_indices]
-        )
-
-        return torque_command
+        # NOTE: currently not used 
+        return None

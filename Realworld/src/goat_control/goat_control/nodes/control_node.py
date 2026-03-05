@@ -144,10 +144,10 @@ class GoatControlNode(Node):
         self.last_action_time = now_time
 
     def _on_joint_state_msg(self, msg: JointState):
-        self.buffers.joint_state_msg = msg
+        self.buffers.joint_state_msg = self.control_pipeline.apply_calibrated_offset(joint_msg=msg)
 
     def _on_imu_msg(self, msg: BaseStates):
-        self.buffers.imu_msg = msg
+        self.buffers.imu_msg = self.control_pipeline.apply_calibrated_offset(imu_msg=msg)
 
     def _is_action_timed_out(self, now_time) -> bool:
         if self.last_action_time is None:

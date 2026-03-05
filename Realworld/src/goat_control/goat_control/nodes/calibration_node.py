@@ -139,8 +139,8 @@ class CalibrationNode(Node):
         # 2. Calculate Average
         avg_positions = np.mean(position_samples, axis=0)
 
-        # 3. Calculate offsets (Zero - Average)
-        joint_offsets = -avg_positions
+        # 3. Calculate offsets (Average)
+        joint_offsets = avg_positions
 
         self.get_logger().info(f"Averaged Positions ({self.sample_count} samples): {avg_positions}")
         self.get_logger().info(f"Calculated Joint Offsets: {joint_offsets}")
