@@ -156,7 +156,7 @@ class ControlPipeline:
         robot_state: RobotState,
         targets: ControlTargets,
         dt_sec: float,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute (safe_torque, raw_torque) without polling (useful for testing)."""
         dt_sec = float(dt_sec)
         if dt_sec <= 0.0:
@@ -179,7 +179,7 @@ class ControlPipeline:
                                                                                                                      desired_wheel_speed_rad_per_sec)
         
         # Delta position action space
-        desired_joint_position_rad = natural_joint_position + safe_joint_delta_position_rad
+        desired_joint_position_rad = natural_joint_position + safe_joint_delta_position_rad             # Reference = Default(Natural) + action
         desired_wheel_speed_rad_per_sec = safe_wheel_speed_rad_per_sec
         
         safe_joint_targets = np.array([desired_joint_position_rad, desired_wheel_speed_rad_per_sec])
@@ -206,3 +206,37 @@ class ControlPipeline:
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
         return safe_torque_command, safe_joint_targets, has_violation
+
+    def compute_natural_torque(
+        self,
+        robot_state: RobotState,
+        dt_sec: float,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Natural standing configuration controller"""
+
+        # Exception
+        dt_sec = float(dt_sec)
+        if dt_sec <= 0.0:
+            raise ValueError("dt_sec must be > 0.")
+        
+        ## ================================ Joint control ================================ ##
+        # Reference input
+        target_joint_pos = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
+        target_joint_vel = np.zeros_like(target_joint_pos).flatten()
+
+        # Current state
+        current_joint_position_rad = np.asarray(robot_state.joint_position_rad[0:-2], dtype=float).flatten()
+        current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+
+        safe_joint_delta_position_rad, safe_wheel_speed_rad_per_sec, has_violation = self.joint_safety_limiter.apply(robot_state,
+                                                                                                                     desired_joint_delta_position_rad,
+                                                                                                                     desired_wheel_speed_rad_per_sec)
+        
+        ## ================================ Wheel control ================================ ##
+        # Reference input
+        target_pitch = 0
+        target_wheel_position = 0
+
+        # Current state
+        current_pitch = 
+        current_wheel_position_rad = np.asarray(robot_state.joint_position_rad[-2:], dtype=float).flatten()
