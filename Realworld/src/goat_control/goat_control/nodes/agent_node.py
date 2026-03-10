@@ -7,6 +7,11 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 
+import sys
+import tty
+import termios
+import threading
+
 JOINT_SCALE = 3.5
 WHEEL_SCALE = 6.0
 
@@ -46,10 +51,64 @@ class AgentNode(Node):
         # Action publisher
         self.action_publisher = self.create_publisher(Float32MultiArray, action_topic, 10)
 
+        self.publish_mode = 'none'  # Starts in 'none' mode for safety
+        self.settings = termios.tcgetattr(sys.stdin)
+        self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
+        self.input_thread.start()
+
         self.get_logger().info(f"!! Agent Node started on device '{self.torch_device}' !!")
+        print("\n" + "="*50)
+        print(" [AGENT CONTROLS]")
+        print("  'a': Action Mode (Publish policy actions)")
+        print("  'n': Natural Standing Configuration(NSC) Mode (Publish empty actions)")
+        print("  'q': Quit")
+        print("="*50 + "\n")
+
+    def _get_key(self):
+        """Read a single character from the terminal immediately (Blocking)."""
+        try:
+            tty.setraw(sys.stdin.fileno())
+            key = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+        return key
+
+    def _keyboard_listener_loop(self):
+        """Main loop to monitor keyboard input."""
+        while rclpy.ok():
+            key = self._get_key()
+            
+            if key == 'a':
+                self.publish_mode = 'active'
+                self.get_logger().info("Mode changed: [ACTION] - Publishing policy actions.")
+                
+            elif key == 'n':
+                self.publish_mode = 'nsc'
+                self.get_logger().info("Mode changed: [NSC] - Publishing empty actions.")
+                
+            elif key == 'q':
+                self.get_logger().info("Shutting down Agent Node...")
+                rclpy.shutdown()
+                break
+            
+            elif key == '\x03': # Ctrl+C
+                rclpy.shutdown()
+                break
 
     def _on_observation(self, msg: Float32MultiArray) -> None:
         """Observation subscriber"""
+
+        if self.publish_mode == 'none':
+            # Do nothing
+            return
+
+        if self.publish_mode == 'nsc':
+            # Publish an empty array
+            empty_msg = Float32MultiArray()
+            empty_msg.data = []
+            self.action_publisher.publish(empty_msg)
+            return
+        
         obs_array = np.asarray(msg.data, dtype=np.float32).flatten()
 
         # 1. Extract time info
@@ -171,6 +230,10 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        node.get_logger().error(f"Node exception: {e}")
     finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, node.settings)
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()

@@ -129,7 +129,6 @@ class CalibrationNode(Node):
                 joint_names = self.latest_joint_state.name
             
             # 1. Store current positions
-            
             current_pos = np.array(self.latest_joint_state.position, dtype=float)
             position_samples.append(current_pos)
             
