@@ -46,7 +46,7 @@ setup(
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',
             'plot_node = goat_control.nodes.plot_node:main',
-            'calibration_node = calibration_node.nodes.calibration_node:main',
+            'calibration_node = goat_control.nodes.calibration_node:main',
         ],
     },
 )
