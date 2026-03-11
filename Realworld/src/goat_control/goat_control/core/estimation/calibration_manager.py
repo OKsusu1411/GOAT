@@ -51,4 +51,4 @@ class CalibrationManager:
         orientation_quat_z=float(imu_msg.quat.z)
 
         # NOTE: currently not used 
-        return None
+        return imu_msg
