@@ -18,7 +18,7 @@ class CalibrationNode(Node):
         super().__init__('calibration_node')
         
         # Parameters
-        self.declare_parameter("yaml_path", "config/goat_config.yaml")
+        self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
         self.declare_parameter("sample_count", 20)
 
         self.yaml_path = str(self.get_parameter("yaml_path").value)
@@ -46,12 +46,12 @@ class CalibrationNode(Node):
         # Print UI
         self.get_logger().info("Calibration Node Started.")
         self.get_logger().info(f"Target YAML: {self.yaml_path}")
-        print("\n" + "="*50)
+        print("\n" + "="*30)
         print(" [CONTROLS]")
         print("  'j': Joint Calibration")
         print("  'i': IMU Calibration")
         print("  'q': Quit")
-        print("="*50 + "\n")
+        print("="*30 + "\n")
 
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
@@ -153,7 +153,6 @@ class CalibrationNode(Node):
         pass
 
     def _save_joint_offsets_to_yaml(self, offsets):
-        """Update Joint Offsets in the YAML file."""
         # 1. Read existing file
         data = {}
         if os.path.exists(self.yaml_path):
@@ -165,15 +164,12 @@ class CalibrationNode(Node):
                 return
         
         # 2. Update data structure
-        offsets = []
-
-        for value in offsets:
-            offsets.append(float(value))
+        formatted_offsets = [float(val) for val in offsets]
         
         if 'calibration' not in data:
             data['calibration'] = {}
             
-        data['calibration']['joint_offsets'] = list(offsets)
+        data['calibration']['joint_offsets'] = formatted_offsets
 
         # 3. Write to file
         try:
@@ -187,7 +183,6 @@ class CalibrationNode(Node):
             self.get_logger().error(f"Failed to write YAML file: {e}")
 
     def _save_imu_offsets_to_yaml(self, offsets):
-        """Update Joint Offsets in the YAML file."""
         # 1. Read existing file
         data = {}
         if os.path.exists(self.yaml_path):
@@ -199,14 +194,12 @@ class CalibrationNode(Node):
                 return
         
         # 2. Update data structure
-        offsets = []
-        for value in offsets:
-            offsets.append(float(value))
+        formatted_offsets = [float(val) for val in offsets]
         
         if 'calibration' not in data:
             data['calibration'] = {}
             
-        data['calibration']['imu_offsets'] = list(offsets)
+        data['calibration']['imu_offsets'] = formatted_offsets
 
         # 3. Write to file
         try:
@@ -214,7 +207,7 @@ class CalibrationNode(Node):
             with open(self.yaml_path, 'w') as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             
-            print(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
+            print(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
             
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
