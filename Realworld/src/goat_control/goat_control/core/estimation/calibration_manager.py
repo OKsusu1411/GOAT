@@ -40,7 +40,7 @@ class CalibrationManager:
         joint_position_rad -= self.joint_offsets
 
         # Overload msg
-        joint_state_msg.position = joint_position_rad
+        joint_state_msg.position = joint_position_rad.tolist()
         return joint_state_msg
     
     def apply_imu_offset(self, imu_msg: BaseStates):
