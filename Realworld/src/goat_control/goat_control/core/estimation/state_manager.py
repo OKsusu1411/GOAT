@@ -367,6 +367,7 @@ class StateManager:
             joint_names=self.config.joint_names,
             joint_position_rad=list(joint_position_rad),
             joint_velocity_rad_per_sec=list(joint_velocity_rad_per_sec),
+            natural_joint_position=None,
             joint_effort_like=list(joint_effort_like),
             motor_temperature_c=motor_states_data.motor_temperature_c,
             motor_error_flags=motor_states_data.motor_error_flags,
