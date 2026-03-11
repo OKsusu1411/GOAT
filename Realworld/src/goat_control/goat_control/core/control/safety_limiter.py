@@ -130,7 +130,7 @@ class JointSafetyLimiter:
         pos_lower_violation_mask = (current_joint_pos <= self.joint_pos_lower_limits)# & (safe_delta_pos < 0)
         pos_upper_violation_mask = (current_joint_pos >= self.joint_pos_upper_limits)# & (safe_delta_pos > 0)
         vel_stop_mask = pos_lower_violation_mask | pos_upper_violation_mask         # Currently not used
-        self.has_violation = bool(pos_lower_violation_mask | pos_upper_violation_mask.any())
+        self.has_violation = bool((pos_lower_violation_mask | pos_upper_violation_mask).any())
 
         # Clipping
         safe_delta_pos[pos_lower_violation_mask] = 0.0
