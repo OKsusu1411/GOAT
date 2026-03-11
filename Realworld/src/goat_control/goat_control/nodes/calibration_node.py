@@ -169,8 +169,11 @@ class CalibrationNode(Node):
 
         for value in offsets:
             offsets.append(float(value))
-
-        data['calibration']['joint_offsets'] = offsets
+        
+        if 'calibration' not in data:
+            data['calibration'] = {}
+            
+        data['calibration']['joint_offsets'] = list(offsets)
 
         # 3. Write to file
         try:
@@ -183,7 +186,7 @@ class CalibrationNode(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
 
-    def _save_imu_offsets_to_yaml(self, joint_names, offsets):
+    def _save_imu_offsets_to_yaml(self, offsets):
         """Update Joint Offsets in the YAML file."""
         # 1. Read existing file
         data = {}
@@ -196,11 +199,14 @@ class CalibrationNode(Node):
                 return
         
         # 2. Update data structure
-        offset_dict = {}
-        for name, value in zip(joint_names, offsets):
-            offset_dict[name] = float(value)
-
-        data['calibration']['joint_offsets'] = offset_dict
+        offsets = []
+        for value in offsets:
+            offsets.append(float(value))
+        
+        if 'calibration' not in data:
+            data['calibration'] = {}
+            
+        data['calibration']['imu_offsets'] = list(offsets)
 
         # 3. Write to file
         try:
