@@ -46,7 +46,7 @@
     <link name="base_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="-9.521E-03 0.016E-03 -72.346E-03"/>
-            <mass value="2.818"/>
+            <mass value="3.075"/>
             <inertia ixx="20284.45E-06" ixy="-5.647E-06" ixz="6404.633E-06"
                     iyy="23476.973E-06" iyz="0.541E-06" izz="21206.204E-06"/>
         </inertial>
@@ -60,7 +60,7 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/>
+            <origin xyz="-23E-03 0 -15E-03" rpy="0 0 0"/>
             <geometry>
                 <box size="0.214 0.200 0.190"/>
             </geometry>
@@ -71,7 +71,7 @@
         <inertial>
             <!-- C_rel_mirror = [-48.092, -38.296, -0.162] mm -->
             <origin rpy="0 0 0" xyz="-48.092E-03 -38.296E-03 -0.162E-03"/>
-            <mass value="0.32"/>
+            <mass value="0.316"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="143.701E-06" ixy="-12.808E-06" ixz="-1.53E-06"
                     iyy="215.732E-06" iyz="-0.447E-06" izz="197.705E-06"/>
@@ -97,7 +97,7 @@
         <inertial>
             <!-- C_rel = [-48.092, 38.296, -0.162] mm -->
             <origin rpy="0 0 0" xyz="-48.092E-03 38.296E-03 -0.162E-03"/>
-            <mass value="0.32"/>
+            <mass value="0.316"/>
             <!-- I_C_new -->
             <inertia ixx="143.701E-06" ixy="12.808E-06" ixz="-1.53E-06"
                     iyy="215.732E-06" iyz="0.447E-06" izz="197.705E-06"/>
@@ -123,7 +123,7 @@
         <inertial>
             <!-- C_rel_mirror = [-2.292, 44.134, -32.074] mm -->
             <origin rpy="0 0 0" xyz="-2.292E-03 44.134E-03 -32.074E-03"/>
-            <mass value="0.429"/>
+            <mass value="0.473"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="2141.33E-06" ixy="-25.21E-06" ixz="-67.863E-06"
                     iyy="2065.884E-06" iyz="-348.977E-06" izz="345.531E-06"/>
@@ -138,7 +138,7 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0 -41E-03 94E-03" rpy="0 0 0"/>
+            <origin xyz="0 41E-03 -94E-03" rpy="0 0 0"/>
             <geometry>
                 <cylinder length="266E-03" radius="41E-03"/>
             </geometry>
@@ -149,7 +149,7 @@
         <inertial>
             <!-- C_rel = [-2.292, -44.134, -32.074] mm -->
             <origin rpy="0 0 0" xyz="-2.292E-03 -44.134E-03 -32.074E-03"/>
-            <mass value="0.429"/>
+            <mass value="0.473"/>
             <!-- I_C_new -->
             <inertia ixx="2141.33E-06" ixy="25.21E-06" ixz="-67.863E-06"
                     iyy="2065.884E-06" iyz="348.977E-06" izz="345.531E-06"/>
@@ -164,7 +164,7 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0 -41E-03 94E-03" rpy="0 0 0"/>
+            <origin xyz="0 -41E-03 -94E-03" rpy="0 0 0"/>
             <geometry>
                 <cylinder length="266E-03" radius="41E-03"/>
             </geometry>
@@ -175,7 +175,7 @@
         <inertial>
             <!-- C_rel_mirror = [1.922, 0.564, -169.664] mm -->
             <origin rpy="0 0 0" xyz="1.922E-03 0.564E-03 -169.664E-03"/>
-            <mass value="0.287"/>
+            <mass value="0.321"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="1163.053E-06" ixy="0.554E-06" ixz="-35.747E-06"
                     iyy="1199.643E-06" iyz="1.349E-06" izz="92.01E-06"/>
@@ -201,7 +201,7 @@
         <inertial>
             <!-- C_rel = [1.922, -0.564, -169.664] mm -->
             <origin rpy="0 0 0" xyz="1.922E-03 -0.564E-03 -169.664E-03"/>
-            <mass value="0.287"/>
+            <mass value="0.321"/>
             <!-- I_C_new -->
             <inertia ixx="1163.053E-06" ixy="-0.554E-06" ixz="-35.747E-06"
                     iyy="1199.643E-06" iyz="-1.349E-06" izz="92.01E-06"/>
@@ -241,7 +241,7 @@
         <inertial>
             <!-- C_rel_mirror = [0, 7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 7.264E-03 -0.002E-03" />
-            <mass value="0.212" />
+            <mass value="0.238" />
             <!-- I_C_new_mirror -->
             <inertia ixx="338.788E-06" ixy="-0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="0.001E-06" izz="338.791E-06" />
@@ -266,21 +266,13 @@
         <inertial>
             <!-- C_rel = [0, -7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 -7.264E-03 -0.002E-03" />
-            <mass value="0.212" />
+            <mass value="0.238" />
             <!-- I_C_new -->
             <inertia ixx="338.788E-06" ixy="0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="-0.001E-06" izz="338.791E-06" />
         </inertial>
     </link>
 
-    <link name="imu_link">
-        <!-- <visual>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.02 0.02 0.01"/> </geometry>
-            <material name="red"/>
-        </visual> -->
-    </link>
 
     <!-- ****************************************** Joint ******************************************************** -->
     
@@ -356,12 +348,6 @@
         <limit effort="2.5" lower="-1000000" upper="1000000" velocity="40" />
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
-    </joint>
-
-    <joint name="imu_joint" type="fixed">
-        <parent link="base_Link"/>
-        <child link="imu_link"/>
-        <origin xyz="0 0 0.1" rpy="0 0 0"/>
     </joint>
     
     <!-- ****************************************** D435 Camera ******************************************************** -->
