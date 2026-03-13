@@ -25,8 +25,8 @@ robot:
                     1,1]
                     
   natural_joint_position: [0.0,0.0,                 # Natural standing configuration
-                           0.25,-0.25,
-                           0.6,-0.6,
+                           0.7382,-0.7382,
+                           1.4626,-1.4626,
                            0.0,0.0]
 
 pd:
@@ -62,10 +62,10 @@ safety:
   #                        4.5,4.5,
   #                        2.5,2.5]
 
-  max_torque_per_joint: [0.5,0.5,
-                         0.5,0.5, 
-                         0.5,0.5,
-                         0.5,0.5]
+  max_torque_per_joint: [0.0,0.0,
+                         0.0,0.0, 
+                         0.0,0.0,
+                         0.0,0.0]
 
   joint_pos_limit: [-1.22173, 0.750492,       # rad
                     -0.750492, 1.22173,
