@@ -270,12 +270,14 @@ class ControlPipeline:
         wheel_position_error = target_wheel_position - current_wheel_position
         wheel_velocity_error = target_wheel_velocity - current_wheel_velocity
 
-        target_pitch = kp * wheel_position_error + kd * wheel_velocity_error
+        # target_pitch = kp * wheel_position_error + kd * wheel_velocity_error
+        target_pitch = np.zeros_like(wheel_position_error)                      # NOTE: test
 
         # Torque controller
         pitch_error = current_pitch - target_pitch
         pitch_velocity_error = gyroscope_y - target_pitch_velocity
-        pd_wheel_toque = kp * pitch_error + kd * pitch_velocity_error
+        # pd_wheel_toque = kp * pitch_error + kd * pitch_velocity_error
+        pd_wheel_toque = np.zeros_like(pitch_error)                             # NOTE: test
 
         # Safety limiter
         raw_torque_command = pd_torque_command + pd_wheel_toque
