@@ -47,10 +47,10 @@ class CalibrationNode(Node):
         self.get_logger().info("Calibration Node Started.")
         self.get_logger().info(f"Target YAML: {self.yaml_path}")
         print("\n" + "="*30)
-        print(" [CONTROLS]")
-        print("  'j': Joint Calibration")
-        print("  'i': IMU Calibration")
-        print("  'q': Quit")
+        print(" [CONTROLS]\n")
+        print("  'j': Joint Calibration\n")
+        print("  'i': IMU Calibration\n")
+        print("  'q': Quit\n")
         print("="*30 + "\n")
 
     def _on_joint_state_msg(self, msg: JointState):
@@ -94,12 +94,12 @@ class CalibrationNode(Node):
             # Execption
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
-                print("\n" + "="*50)
-                print(" [CONTROLS]")
-                print("  'j': Joint Calibration")
-                print("  'i': IMU Calibration")
-                print("  'q': Quit")
-                print("="*50 + "\n")
+                print("\n" + "="*30)
+                print(" [CONTROLS]\n")
+                print("  'j': Joint Calibration\n")
+                print("  'i': IMU Calibration\n")
+                print("  'q': Quit\n")
+                print("="*30 + "\n")
                 continue
 
     def _joint_calibration(self):
