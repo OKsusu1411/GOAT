@@ -231,6 +231,7 @@ class ControlPipeline:
         ## ================================ Joint control ================================ ##
         # Reference input
         target_joint_pos = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
+        target_joint_pos *= 2                                               # Reference joint position 
         target_joint_vel = np.zeros_like(target_joint_pos).flatten()
 
         # Current state
@@ -283,4 +284,4 @@ class ControlPipeline:
         raw_torque_command = np.hstack((pd_torque_command[:-2], pd_wheel_toque))
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
-        return safe_torque_command
+        return safe_torque_command, target_joint_pos
