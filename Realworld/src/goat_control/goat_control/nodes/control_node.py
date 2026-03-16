@@ -259,7 +259,6 @@ class GoatControlNode(Node):
         if self.nsc_mode:
             safe_command = self.control_pipeline.compute_natural_torque(
                 robot_state=robot_state,
-                targets=targets,
                 dt_sec=dt_sec
             )
         

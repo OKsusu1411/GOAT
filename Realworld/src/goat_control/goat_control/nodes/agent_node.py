@@ -57,12 +57,12 @@ class AgentNode(Node):
         self.input_thread.start()
 
         self.get_logger().info(f"!! Agent Node started on device '{self.torch_device}' !!")
-        print("\n" + "="*50)
-        print(" [AGENT CONTROLS]")
-        print("  'a': Action Mode (Publish policy actions)")
-        print("  'n': Natural Standing Configuration(NSC) Mode (Publish empty actions)")
-        print("  'q': Quit")
-        print("="*50 + "\n")
+        print("="*50)
+        print("[AGENT CONTROLS]")
+        print("'a': Action Mode (Publish policy actions)")
+        print("'n': Natural Standing Configuration(NSC) Mode (Publish empty actions)")
+        print("'q': Quit")
+        print("="*50)
 
     def _get_key(self):
         """Read a single character from the terminal immediately (Blocking)."""
@@ -94,6 +94,16 @@ class AgentNode(Node):
             elif key == '\x03': # Ctrl+C
                 rclpy.shutdown()
                 break
+            
+            else:
+                self.get_logger().info("Wrong key! Please enter the right key")
+                print("="*50)
+                print("[AGENT CONTROLS]")
+                print("'a': Action Mode (Publish policy actions)")
+                print("'n': Natural Standing Configuration(NSC) Mode (Publish empty actions)")
+                print("'q': Quit")
+                print("="*50)
+                continue
 
     def _on_observation(self, msg: Float32MultiArray) -> None:
         """Observation subscriber"""
