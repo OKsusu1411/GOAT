@@ -285,4 +285,5 @@ class ControlPipeline:
         raw_torque_command = np.hstack((pd_torque_command[:-2], pd_wheel_toque))
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
-        return safe_torque_command, target_joint_pos
+        safe_joint_targets = np.array([target_joint_pos, target_joint_vel])
+        return safe_torque_command, safe_joint_targets
