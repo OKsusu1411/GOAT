@@ -46,12 +46,13 @@ class CalibrationNode(Node):
         # Print UI
         self.get_logger().info("Calibration Node Started.")
         self.get_logger().info(f"Target YAML: {self.yaml_path}")
-        print("\n" + "="*30)
-        print(" [CONTROLS]\n")
-        print("  'j': Joint Calibration\n")
-        print("  'i': IMU Calibration\n")
-        print("  'q': Quit\n")
-        print("="*30 + "\n")
+        print("="*30)
+        print("[CONTROLS]")
+        print("'j': All Joint Position Calibration")
+        print("'w': Wheel Position Calibration")
+        print("'i': IMU Calibration")
+        print("'q': Quit")
+        print("="*30)
 
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
@@ -77,7 +78,7 @@ class CalibrationNode(Node):
                 self.get_logger().info("Key 'j' pressed: Starting Joint Calibration")
                 self._joint_calibration()
             
-            if key == 'w':
+            elif key == 'w':
                 self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration")
                 self._joint_calibration()
 
@@ -99,7 +100,7 @@ class CalibrationNode(Node):
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
                 print("="*30)
-                print(" [CONTROLS]")
+                print("[CONTROLS]")
                 print("'j': All Joint Position Calibration")
                 print("'w': Wheel Position Calibration")
                 print("'i': IMU Calibration")
