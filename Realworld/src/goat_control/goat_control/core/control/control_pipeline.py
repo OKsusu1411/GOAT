@@ -230,11 +230,11 @@ class ControlPipeline:
 
         ## ================================ Joint control ================================ ##
         # Reference input
-        target_joint_pos = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
+        target_joint_pos = np.asarray(robot_state.natural_joint_position[:-2], dtype=float).flatten()
         target_joint_vel = np.zeros_like(target_joint_pos).flatten()
 
         # Current state
-        current_joint_position_rad = np.asarray(robot_state.joint_position_rad[0:-2], dtype=float).flatten()
+        current_joint_position_rad = np.asarray(robot_state.joint_position_rad[:-2], dtype=float).flatten()
         current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
 
         # PD controller

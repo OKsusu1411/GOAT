@@ -57,12 +57,12 @@ class AgentNode(Node):
         self.input_thread.start()
 
         self.get_logger().info(f"!! Agent Node started on device '{self.torch_device}' !!")
-        print("="*50)
+        print("="*30)
         print("[AGENT CONTROLS]")
         print("'a': Action Mode (Publish policy actions)")
         print("'n': Natural Standing Configuration(NSC) Mode (Publish empty actions)")
         print("'q': Quit")
-        print("="*50)
+        print("="*30)
 
     def _get_key(self):
         """Read a single character from the terminal immediately (Blocking)."""
