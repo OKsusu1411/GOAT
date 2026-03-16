@@ -231,8 +231,7 @@ class ControlPipeline:
         ## ================================ Joint control ================================ ##
         # Reference input
         target_joint_pos = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
-        print(target_joint_pos)
-        target_joint_pos *= 2                                               # Reference joint position 
+        target_joint_pos *= 0                                               # Reference joint position 
         target_joint_vel = np.zeros_like(target_joint_pos).flatten()
 
         # Current state
