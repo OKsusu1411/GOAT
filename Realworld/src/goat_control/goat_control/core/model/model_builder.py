@@ -105,7 +105,7 @@ def build_goat_model_from_yaml(yaml_path: str) -> GoatModel:
         joint_indices=[int(index) for index in joint_indices],
         wheel_indices=[int(index) for index in wheel_indices],
         knee_indices=[int(index) for index in knee_indices],
-        natural_joint_position = [int(index) for index in natural_joint_position],
+        natural_joint_position = [float(value) for value in natural_joint_position],
         motor_torque_constant_nm_per_amp=[float(value) for value in motor_torque_constant_nm_per_amp],
         motor_gear_ratio=[float(value) for value in motor_gear_ratio],
         motor_direction=[int(value) for value in motor_direction],
