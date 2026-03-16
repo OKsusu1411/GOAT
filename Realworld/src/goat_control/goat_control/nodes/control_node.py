@@ -298,7 +298,7 @@ class GoatControlNode(Node):
     
     # Refining action vector
     def _decode_action_to_targets(self, action_msg: Float32MultiArray, robot_state: RobotState) -> Tuple[np.ndarray, np.ndarray]:
-        if len(action_msg) == 0:
+        if len(action_msg.data) == 0:
             self.get_logger().info("Natural Standing Configuration(NSC) mode")
             self.nsc_mode = True
         

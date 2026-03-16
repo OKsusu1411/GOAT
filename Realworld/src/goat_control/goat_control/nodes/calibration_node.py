@@ -76,7 +76,11 @@ class CalibrationNode(Node):
             if key == 'j':
                 self.get_logger().info("Key 'j' pressed: Starting Joint Calibration")
                 self._joint_calibration()
-                
+            
+            if key == 'w':
+                self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration")
+                self._joint_calibration()
+
             elif key == 'i':
                 self.get_logger().info("Key 'i' pressed: Starting IMU Calibration")
                 self._imu_calibration()
@@ -94,15 +98,16 @@ class CalibrationNode(Node):
             # Execption
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
-                print("\n" + "="*30)
-                print(" [CONTROLS]\n")
-                print("  'j': Joint Calibration\n")
-                print("  'i': IMU Calibration\n")
-                print("  'q': Quit\n")
-                print("="*30 + "\n")
+                print("="*30)
+                print(" [CONTROLS]")
+                print("'j': All Joint Position Calibration")
+                print("'w': Wheel Position Calibration")
+                print("'i': IMU Calibration")
+                print("'q': Quit")
+                print("="*30)
                 continue
 
-    def _joint_calibration(self):
+    def _joint_calibration(self, is_wheel_mode:bool = False):
         """Collect N samples, calculate average, and save offsets to YAML."""
         if self.latest_joint_state is None:
             self.get_logger().warn("No joint states received yet! Cannot calibrate joints.")
