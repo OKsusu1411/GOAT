@@ -230,11 +230,11 @@ class ControlPipeline:
 
         ## ================================ Joint control ================================ ##
         # Reference input
-        target_joint_pos = np.asarray(robot_state.natural_joint_position[:-2], dtype=float).flatten()
+        target_joint_pos = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
         target_joint_vel = np.zeros_like(target_joint_pos).flatten()
 
         # Current state
-        current_joint_position_rad = np.asarray(robot_state.joint_position_rad[:-2], dtype=float).flatten()
+        current_joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
 
         # PD controller
@@ -280,7 +280,7 @@ class ControlPipeline:
         pd_wheel_toque = np.zeros_like(pitch_error)                             # NOTE: test
 
         # Safety limiter
-        raw_torque_command = pd_torque_command + pd_wheel_toque
+        raw_torque_command = np.hstack((pd_torque_command[:-2], pd_wheel_toque))
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
         return safe_torque_command
