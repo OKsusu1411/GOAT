@@ -46,14 +46,14 @@
     <link name="base_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="-9.521E-03 0.016E-03 -72.346E-03"/>
-            <mass value="2.818"/>
+            <mass value="3.075"/>
             <inertia ixx="20284.45E-06" ixy="-5.647E-06" ixz="6404.633E-06"
                     iyy="23476.973E-06" iyz="0.541E-06" izz="21206.204E-06"/>
         </inertial>
         <visual>
             <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/base_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/base_Link.stl"/>
             </geometry>
             <material name="black">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -71,7 +71,7 @@
         <inertial>
             <!-- C_rel_mirror = [-48.092, -38.296, -0.162] mm -->
             <origin rpy="0 0 0" xyz="-48.092E-03 -38.296E-03 -0.162E-03"/>
-            <mass value="0.32"/>
+            <mass value="0.316"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="143.701E-06" ixy="-12.808E-06" ixz="-1.53E-06"
                     iyy="215.732E-06" iyz="-0.447E-06" izz="197.705E-06"/>
@@ -79,7 +79,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/hip_L_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/hip_L_Link.stl"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -97,7 +97,7 @@
         <inertial>
             <!-- C_rel = [-48.092, 38.296, -0.162] mm -->
             <origin rpy="0 0 0" xyz="-48.092E-03 38.296E-03 -0.162E-03"/>
-            <mass value="0.32"/>
+            <mass value="0.316"/>
             <!-- I_C_new -->
             <inertia ixx="143.701E-06" ixy="12.808E-06" ixz="-1.53E-06"
                     iyy="215.732E-06" iyz="0.447E-06" izz="197.705E-06"/>
@@ -105,7 +105,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/hip_R_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/hip_R_Link.stl"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -123,7 +123,7 @@
         <inertial>
             <!-- C_rel_mirror = [-2.292, 44.134, -32.074] mm -->
             <origin rpy="0 0 0" xyz="-2.292E-03 44.134E-03 -32.074E-03"/>
-            <mass value="0.429"/>
+            <mass value="0.473"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="2141.33E-06" ixy="-25.21E-06" ixz="-67.863E-06"
                     iyy="2065.884E-06" iyz="-348.977E-06" izz="345.531E-06"/>
@@ -131,7 +131,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/thigh_L_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/thigh_L_Link.stl"/>
             </geometry>
             <material name="">
                 <color rgba="1 1 1 1"/>
@@ -149,7 +149,7 @@
         <inertial>
             <!-- C_rel = [-2.292, -44.134, -32.074] mm -->
             <origin rpy="0 0 0" xyz="-2.292E-03 -44.134E-03 -32.074E-03"/>
-            <mass value="0.429"/>
+            <mass value="0.473"/>
             <!-- I_C_new -->
             <inertia ixx="2141.33E-06" ixy="25.21E-06" ixz="-67.863E-06"
                     iyy="2065.884E-06" iyz="348.977E-06" izz="345.531E-06"/>
@@ -157,7 +157,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/thigh_R_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/thigh_R_Link.stl"/>
             </geometry>
             <material name="">
                 <color rgba="1 1 1 1"/>
@@ -175,7 +175,7 @@
         <inertial>
             <!-- C_rel_mirror = [1.922, 0.564, -169.664] mm -->
             <origin rpy="0 0 0" xyz="1.922E-03 0.564E-03 -169.664E-03"/>
-            <mass value="0.287"/>
+            <mass value="0.321"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="1163.053E-06" ixy="0.554E-06" ixz="-35.747E-06"
                     iyy="1199.643E-06" iyz="1.349E-06" izz="92.01E-06"/>
@@ -183,7 +183,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/calf_L_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/calf_L_Link.stl"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -201,7 +201,7 @@
         <inertial>
             <!-- C_rel = [1.922, -0.564, -169.664] mm -->
             <origin rpy="0 0 0" xyz="1.922E-03 -0.564E-03 -169.664E-03"/>
-            <mass value="0.287"/>
+            <mass value="0.321"/>
             <!-- I_C_new -->
             <inertia ixx="1163.053E-06" ixy="-0.554E-06" ixz="-35.747E-06"
                     iyy="1199.643E-06" iyz="-1.349E-06" izz="92.01E-06"/>
@@ -209,7 +209,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/calf_R_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/calf_R_Link.stl"/>
             </geometry>
             <material name="">
                 <color rgba="0.79216 0.81961 0.93333 1"/>
@@ -227,7 +227,7 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="package://goat_description/meshes/wheel_L_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/wheel_L_Link.stl"/>
             </geometry>
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
@@ -235,13 +235,13 @@
         <collision>
             <origin rpy="1.5707963267948966 0 0" xyz="0 7E-03 0" />
             <geometry>
-                <cylinder length="32E-03" radius="73E-03" />
+                <cylinder length="32E-03" radius="72.75E-03" />
             </geometry>
         </collision>
         <inertial>
             <!-- C_rel_mirror = [0, 7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 7.264E-03 -0.002E-03" />
-            <mass value="0.212" />
+            <mass value="0.238" />
             <!-- I_C_new_mirror -->
             <inertia ixx="338.788E-06" ixy="-0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="0.001E-06" izz="338.791E-06" />
@@ -252,7 +252,7 @@
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="package://goat_description/meshes/wheel_R_Link.stl" scale="1 1 1"/>
+                <mesh filename="../meshes/wheel_R_Link.stl"/>
             </geometry>
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
@@ -260,27 +260,19 @@
         <collision>
             <origin rpy="1.5707963267948966 0 0" xyz="0 -7E-03 0" />
             <geometry>
-                <cylinder length="32E-03" radius="73E-03" />
+                <cylinder length="32E-03" radius="72.75E-03" />
             </geometry>
         </collision>
         <inertial>
             <!-- C_rel = [0, -7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 -7.264E-03 -0.002E-03" />
-            <mass value="0.212" />
+            <mass value="0.238" />
             <!-- I_C_new -->
             <inertia ixx="338.788E-06" ixy="0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="-0.001E-06" izz="338.791E-06" />
         </inertial>
     </link>
 
-    <link name="imu_link">
-        <!-- <visual>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.02 0.02 0.01"/> </geometry>
-            <material name="red"/>
-        </visual> -->
-    </link>
 
     <!-- ****************************************** Joint ******************************************************** -->
     
@@ -357,13 +349,7 @@
         <dynamics damping="100.0" stiffness="10000.0"/>
         <dynamics friction="0.01" />
     </joint>
-
-    <joint name="imu_joint" type="fixed">
-        <parent link="base_Link"/>
-        <child link="imu_link"/>
-        <origin xyz="0 0 0.1" rpy="0 0 0"/>
-    </joint>
-
+    
     <!-- ****************************************** D435 Camera ******************************************************** -->
     <!--
     <joint name="d435_joint" type="fixed">
@@ -384,7 +370,7 @@
                 <box size="0.02505 0.09 0.025"/>
             </geometry>
         </collision>
-    </li
+    </link>
     -->
     <!-- ****************************************** D435 Camera END ******************************************************** -->
 </robot>

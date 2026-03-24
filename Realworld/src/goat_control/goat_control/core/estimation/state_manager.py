@@ -254,8 +254,6 @@ class StateManager:
     def __init__(self, config: StateManagerConfig):
         self.config = config
 
-        # --- (2) joint_names 순서대로 motor_states_data의 몇 번 모터를 쓸지 "YAML 기반"으로 결정
-        # joint_indices + wheel_indices를 이어 붙여서 joint_names 길이와 맞춰줌
         mapped: List[int] = []
         if config.joint_indices:
             mapped.extend(list(config.joint_indices))
@@ -285,9 +283,6 @@ class StateManager:
             raise ValueError("motor_direction is required for torque_nm output mode.")
 
         torque_constant_nm_per_amp = float(self.config.motor_torque_constant_nm_per_amp[motor_index])
-        # gear_ratio = float(self.config.motor_gear_ratio[motor_index])
-        # direction = float(self.config.motor_direction[motor_index])  # +1/-1
-
         motor_shaft_torque_nm = motor_current_amp * torque_constant_nm_per_amp
         joint_torque_nm = motor_shaft_torque_nm
         return joint_torque_nm
@@ -300,7 +295,7 @@ class StateManager:
         motor_count = len(motor_states_data.motor_temperature_c)
         joint_count = len(self.config.joint_names)
 
-        # --- (3) 매핑 검증 (joint_indices+wheel_indices 사용 시)
+        # Index mapping validation
         if self.motor_index_for_joint is not None:
             if len(self.motor_index_for_joint) != joint_count:
                 raise ValueError(
@@ -308,14 +303,13 @@ class StateManager:
                     f"must match joint_names length({joint_count})."
                 )
         else:
-            # 매핑이 없으면 joint_count==motor_count라고 가정하고 0..joint_count-1 사용
             if joint_count != motor_count:
                 raise ValueError(
                     f"joint_names length({joint_count}) != motor_count({motor_count}). "
                     "Provide joint_indices/wheel_indices in YAML."
                 )
 
-        # --- (4) gear/direction list 길이 검증
+        # gear, direction index validation
         if self.config.motor_gear_ratio is None or len(self.config.motor_gear_ratio) != motor_count:
             raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
         if self.config.motor_direction is None or len(self.config.motor_direction) != motor_count:
@@ -329,21 +323,17 @@ class StateManager:
         joint_velocity_rad_per_sec: List[float] = [0.0] * joint_count
         joint_effort_like: List[float] = [0.0] * joint_count  # current[A] or torque[Nm]
 
-        # --- (5) 핵심 변경:
-        # "knee만 따로" 같은 하드코딩 제거
-        # 모든 관절에 대해: (motor angle/speed) * motor_gear_ratio * motor_direction 적용
+        # Main state computation logic
         for joint_i in range(joint_count):
             motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
 
             gear = float(self.config.motor_gear_ratio[motor_i])
             direction = float(self.config.motor_direction[motor_i])
 
-            # Position: multi-turn 우선, (필요하면 single-turn로 fallback)
-            # NOTE: 0도도 정상값일 수 있어서 "!=0" 센티넬은 위험함.
-            # 일단은 multi-turn을 기본으로 쓰고, 둘 다 0이면 0으로 둠.
             raw_multi = motor_states_data.motor_multi_turn_angle_raw_0p001deg[motor_i]
             raw_single = motor_states_data.motor_single_turn_angle_raw_0p001deg[motor_i]
 
+            # Encoder fail safe logic
             if raw_multi != 0:
                 motor_angle_deg = raw_multi * self.config.angle_deg_per_lsb
             elif raw_single != 0:
@@ -351,13 +341,14 @@ class StateManager:
             else:
                 motor_angle_deg = 0.0
 
+            # Convert motor position into joint position
             joint_angle_deg = motor_angle_deg * gear * direction
-            joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
+            joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
 
-            # Velocity: deg/s -> rad/s, gear+direction 적용
+            # Convert motor velocity into joint velocity
             motor_speed_deg_s = motor_states_data.motor_speed_deg_per_sec[motor_i]
             joint_speed_deg_s = motor_speed_deg_s * gear * direction
-            joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
+            joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0       # degree to radian
 
             # Effort-like
             motor_current_amp = motor_states_data.motor_phase_current_amp[motor_i]
@@ -376,6 +367,7 @@ class StateManager:
             joint_names=self.config.joint_names,
             joint_position_rad=list(joint_position_rad),
             joint_velocity_rad_per_sec=list(joint_velocity_rad_per_sec),
+            natural_joint_position=None,
             joint_effort_like=list(joint_effort_like),
             motor_temperature_c=motor_states_data.motor_temperature_c,
             motor_error_flags=motor_states_data.motor_error_flags,

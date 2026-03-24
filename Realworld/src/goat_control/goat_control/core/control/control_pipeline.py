@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
+import math
 
 from sensor_msgs.msg import JointState
 from motor_interfaces.msg import BaseStates
@@ -156,7 +157,7 @@ class ControlPipeline:
         robot_state: RobotState,
         targets: ControlTargets,
         dt_sec: float,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute (safe_torque, raw_torque) without polling (useful for testing)."""
         dt_sec = float(dt_sec)
         if dt_sec <= 0.0:
@@ -179,7 +180,7 @@ class ControlPipeline:
                                                                                                                      desired_wheel_speed_rad_per_sec)
         
         # Delta position action space
-        desired_joint_position_rad = natural_joint_position + safe_joint_delta_position_rad
+        desired_joint_position_rad = natural_joint_position + safe_joint_delta_position_rad             # Reference = Default(Natural) + action
         desired_wheel_speed_rad_per_sec = safe_wheel_speed_rad_per_sec
         
         safe_joint_targets = np.array([desired_joint_position_rad, desired_wheel_speed_rad_per_sec])
@@ -206,3 +207,82 @@ class ControlPipeline:
         safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
 
         return safe_torque_command, safe_joint_targets, has_violation
+
+    def compute_natural_torque(
+        self,
+        robot_state: RobotState,
+        dt_sec: float,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Natural standing configuration controller"""
+
+        # Exception
+        dt_sec = float(dt_sec)
+        if dt_sec <= 0.0:
+            raise ValueError("dt_sec must be > 0.")
+        
+        # Extract quaternion
+        quat_w = robot_state.imu_state.orientation_quat_w
+        quat_x = robot_state.imu_state.orientation_quat_x
+        quat_y = robot_state.imu_state.orientation_quat_y
+        quat_z = robot_state.imu_state.orientation_quat_z
+        
+        gyroscope_y=float(robot_state.imu_state.gyroscope_y)
+
+        ## ================================ Joint control ================================ ##
+        # Reference input
+        target_joint_pos = np.asarray(robot_state.natural_joint_position, dtype=float).flatten()
+        target_joint_pos *= 0                                               # Reference joint position 
+        target_joint_vel = np.zeros_like(target_joint_pos).flatten()
+
+        # Current state
+        current_joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
+        current_joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+
+        # PD controller
+        pd_torque_command = self.pd_joint_controller.compute(
+            target_joint_pos,
+            current_joint_position_rad,
+            current_joint_velocity_rad_per_sec,
+            target_joint_vel
+        )
+        
+        ## ================================ Wheel control ================================ ##
+        # Reference input
+        target_wheel_position = 0
+        target_wheel_velocity = 0
+        target_pitch_velocity = 0
+
+        # Pitch calculation
+        pitch_sin = 2.0 * (quat_w * quat_y - quat_z * quat_x)
+
+        if abs(pitch_sin) >= 1.0:
+            # clipping
+            pitch_rad = math.copysign(math.pi / 2.0, pitch_sin)
+        else:
+            # arcsin
+            pitch_rad = math.asin(pitch_sin)
+
+        # Current state
+        current_pitch = pitch_rad
+        current_wheel_position = np.asarray(robot_state.joint_position_rad[-2:], dtype=float).flatten()
+        current_wheel_velocity = np.asarray(robot_state.joint_velocity_rad_per_sec[-2:], dtype=float).flatten()
+
+        # Pitch controller
+        wheel_position_error = target_wheel_position - current_wheel_position
+        wheel_velocity_error = target_wheel_velocity - current_wheel_velocity
+
+        # target_pitch = kp * wheel_position_error + kd * wheel_velocity_error
+        target_pitch = np.zeros_like(wheel_position_error)                      # NOTE: test
+
+        # Torque controller
+        pitch_error = current_pitch - target_pitch
+        pitch_velocity_error = gyroscope_y - target_pitch_velocity
+        # pd_wheel_toque = kp * pitch_error + kd * pitch_velocity_error
+        pd_wheel_toque = np.zeros_like(pitch_error)                             # NOTE: test
+
+        # Safety limiter
+        raw_torque_command = np.hstack((pd_torque_command[:-2], pd_wheel_toque))
+        safe_torque_command = self.torque_safety_limiter.apply(raw_torque_command)
+
+        safe_joint_targets = np.array([target_joint_pos, target_joint_vel])
+        return safe_torque_command, safe_joint_targets

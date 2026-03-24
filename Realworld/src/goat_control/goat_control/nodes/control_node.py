@@ -103,6 +103,9 @@ class GoatControlNode(Node):
         # Violation boolean for emergency stop
         self.has_position_limit_violation = False
 
+        # Natural Standing Configuration control mode boolean
+        self.nsc_mode = False
+
         # Default targets
         self.default_desired_joint_position_rad = np.zeros(self.num_joints, dtype=float)
         self.default_desired_joint_velocity_rad_per_sec = np.zeros(self.num_joints, dtype=float)
@@ -148,10 +151,10 @@ class GoatControlNode(Node):
         self.last_action_time = now_time
 
     def _on_joint_state_msg(self, msg: JointState):
-        self.buffers.joint_state_msg = self.control_pipeline.apply_calibrated_offset(joint_msg=msg)
+        self.buffers.joint_state_msg, _ = self.control_pipeline.apply_calibrated_offset(joint_msg=msg)
 
     def _on_imu_msg(self, msg: BaseStates):
-        self.buffers.imu_msg = self.control_pipeline.apply_calibrated_offset(imu_msg=msg)
+        _, self.buffers.imu_msg = self.control_pipeline.apply_calibrated_offset(imu_msg=msg)
 
     def _is_action_timed_out(self, now_time) -> bool:
         if self.last_action_time is None:
@@ -224,13 +227,12 @@ class GoatControlNode(Node):
 
 
         ###### ======================================= Safety stop ======================================= ###### 
-        has_joint_velocity_violation = (robot_state.joint_velocity_rad_per_sec[0:6] >= 0.436).any()
-        
-        if has_joint_velocity_violation | self.has_position_limit_violation:
+        has_joint_velocity_violation = (robot_state.joint_velocity_rad_per_sec[0:6] >= 0.6).any()
+
+        if has_joint_velocity_violation: #| self.has_position_limit_violation:
             self.get_logger().info("!!!!Emergency Stopped!!!!")
             if self._is_csv_logging_active:
                 self._close_csv_logger()
-            self.control_timer.cancel()
             self.control_timer.cancel()
         ###### ======================================= Safety stop ======================================= ###### 
 
@@ -238,6 +240,7 @@ class GoatControlNode(Node):
 
         # Action timeout exception
         if (action_msg is None) or action_timed_out:
+            self.nsc_mode = False
             desired_joint_position_rad = self.default_desired_joint_position_rad.copy()
             desired_joint_delta_position_rad = self.default_desired_joint_position_rad.copy()
             desired_wheel_speed_rad_per_sec = self.default_desired_joint_velocity_rad_per_sec.copy()
@@ -253,12 +256,19 @@ class GoatControlNode(Node):
         )
         
         # 3. Compute command torque
-        safe_command, safe_joint_targets, self.has_position_limit_violation = self.control_pipeline.compute_control(
-            robot_state=robot_state,
-            targets=targets,
-            dt_sec=dt_sec
-        )
+        if self.nsc_mode:
+            safe_command, safe_joint_targets = self.control_pipeline.compute_natural_torque(
+                robot_state=robot_state,
+                dt_sec=dt_sec
+            )
         
+        else:
+            safe_command, safe_joint_targets, self.has_position_limit_violation = self.control_pipeline.compute_control(
+                robot_state=robot_state,
+                targets=targets,
+                dt_sec=dt_sec
+            )
+
         # 4. Apply action watchdog
         if action_timed_out:
             safe_command[:] = 0.0
@@ -287,6 +297,13 @@ class GoatControlNode(Node):
     
     # Refining action vector
     def _decode_action_to_targets(self, action_msg: Float32MultiArray, robot_state: RobotState) -> Tuple[np.ndarray, np.ndarray]:
+        if len(action_msg.data) == 0:
+            self.get_logger().info("Natural Standing Configuration(NSC) mode")
+            self.nsc_mode = True
+        
+        else:
+            self.nsc_mode = False
+
         # Delta pos action
         action_array = np.asarray(action_msg.data, dtype=float).flatten()
         # current_joint_pos = robot_state.joint_position_rad

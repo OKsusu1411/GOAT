@@ -18,7 +18,7 @@ class CalibrationNode(Node):
         super().__init__('calibration_node')
         
         # Parameters
-        self.declare_parameter("yaml_path", "config/goat_config.yaml")
+        self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
         self.declare_parameter("sample_count", 20)
 
         self.yaml_path = str(self.get_parameter("yaml_path").value)
@@ -46,12 +46,13 @@ class CalibrationNode(Node):
         # Print UI
         self.get_logger().info("Calibration Node Started.")
         self.get_logger().info(f"Target YAML: {self.yaml_path}")
-        print("\n" + "="*50)
-        print(" [CONTROLS]")
-        print("  'j': Joint Calibration")
-        print("  'i': IMU Calibration")
-        print("  'q': Quit")
-        print("="*50 + "\n")
+        print("="*30)
+        print("[CONTROLS]")
+        print("'j': All Joint Position Calibration")
+        print("'w': Wheel Position Calibration")
+        print("'i': IMU Calibration")
+        print("'q': Quit")
+        print("="*30)
 
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
@@ -76,7 +77,11 @@ class CalibrationNode(Node):
             if key == 'j':
                 self.get_logger().info("Key 'j' pressed: Starting Joint Calibration")
                 self._joint_calibration()
-                
+            
+            elif key == 'w':
+                self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration")
+                self._joint_calibration()
+
             elif key == 'i':
                 self.get_logger().info("Key 'i' pressed: Starting IMU Calibration")
                 self._imu_calibration()
@@ -94,15 +99,16 @@ class CalibrationNode(Node):
             # Execption
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
-                print("\n" + "="*50)
-                print(" [CONTROLS]")
-                print("  'j': Joint Calibration")
-                print("  'i': IMU Calibration")
-                print("  'q': Quit")
-                print("="*50 + "\n")
+                print("="*30)
+                print("[CONTROLS]")
+                print("'j': All Joint Position Calibration")
+                print("'w': Wheel Position Calibration")
+                print("'i': IMU Calibration")
+                print("'q': Quit")
+                print("="*30)
                 continue
 
-    def _joint_calibration(self):
+    def _joint_calibration(self, is_wheel_mode:bool = False):
         """Collect N samples, calculate average, and save offsets to YAML."""
         if self.latest_joint_state is None:
             self.get_logger().warn("No joint states received yet! Cannot calibrate joints.")
@@ -129,7 +135,6 @@ class CalibrationNode(Node):
                 joint_names = self.latest_joint_state.name
             
             # 1. Store current positions
-            
             current_pos = np.array(self.latest_joint_state.position, dtype=float)
             position_samples.append(current_pos)
             
@@ -154,7 +159,6 @@ class CalibrationNode(Node):
         pass
 
     def _save_joint_offsets_to_yaml(self, offsets):
-        """Update Joint Offsets in the YAML file."""
         # 1. Read existing file
         data = {}
         if os.path.exists(self.yaml_path):
@@ -166,12 +170,12 @@ class CalibrationNode(Node):
                 return
         
         # 2. Update data structure
-        offsets = []
-
-        for value in offsets:
-            offsets.append(float(value))
-
-        data['calibration']['joint_offsets'] = offsets
+        formatted_offsets = [float(val) for val in offsets]
+        
+        if 'calibration' not in data:
+            data['calibration'] = {}
+            
+        data['calibration']['joint_offsets'] = formatted_offsets
 
         # 3. Write to file
         try:
@@ -184,8 +188,7 @@ class CalibrationNode(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
 
-    def _save_imu_offsets_to_yaml(self, joint_names, offsets):
-        """Update Joint Offsets in the YAML file."""
+    def _save_imu_offsets_to_yaml(self, offsets):
         # 1. Read existing file
         data = {}
         if os.path.exists(self.yaml_path):
@@ -197,11 +200,12 @@ class CalibrationNode(Node):
                 return
         
         # 2. Update data structure
-        offset_dict = {}
-        for name, value in zip(joint_names, offsets):
-            offset_dict[name] = float(value)
-
-        data['calibration']['joint_offsets'] = offset_dict
+        formatted_offsets = [float(val) for val in offsets]
+        
+        if 'calibration' not in data:
+            data['calibration'] = {}
+            
+        data['calibration']['imu_offsets'] = formatted_offsets
 
         # 3. Write to file
         try:
@@ -209,7 +213,7 @@ class CalibrationNode(Node):
             with open(self.yaml_path, 'w') as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             
-            print(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
+            print(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
             
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
