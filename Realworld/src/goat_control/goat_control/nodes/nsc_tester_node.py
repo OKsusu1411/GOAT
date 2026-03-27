@@ -31,12 +31,16 @@ class FloatingBaseController():
         # State variables
         self.q_curr = np.zeros(self.nq)
         self.v_curr = np.zeros(self.nv)
-        self.joint_q_curr = np.zeros(self.nq)
-        self.joint_v_curr = np.zeros(self.nq)
-        self.base_q_curr = np.zeros(7)
-        self.base_v_curr = np.zeros(6)
-        self.q_ref = np.zeros(self.nq)
-        self.a_ref = np.zeros(self.nv)
+        self.joint_q_curr = np.zeros(self.nq)           # Joint position
+        self.joint_v_curr = np.zeros(self.nq)           # Joint velocity
+        self.base_q_curr = np.zeros(7)                  # Base position state
+        self.base_quat_curr = np.zeros(4)               # Base quaternion
+        self.base_v_curr = np.zeros(6)                  # Base velocity state
+        self.base_linear_v_curr = np.zeros(3)           # Base linear velocity
+        self.base_w_curr = np.zeros(3)                  # Base angular velocity
+        self.base_a_curr = np.zeros(3)                  # Base linear acceleration
+        self.q_ref = np.zeros(self.nq)                  # Reference joint position
+        self.a_ref = np.zeros(self.nv)                  # Reference joint acceleration
         
         self.tau_cmd = np.zeros(self.n_joints)
         self.tau_applied = np.zeros(self.n_joints)
@@ -67,12 +71,14 @@ class FloatingBaseController():
         self.torque_applied = np.array(msg.effort)
 
     def imu_callback(self, msg):
-        self.base_q_curr = np.array(msg.angular_velocity)
-        self.base_v_curr = np.array(msg.orientation)
+        self.base_a_curr = np.array(msg.linear_acceleration)
+        self.base_w_curr = np.array(msg.angular_velocity)
+        self.base_quat_curr = np.array(msg.orientation)
 
     def control_loop(self):
-
         # Stack base + joint state
+        self.base_q_curr = np.vstack(np.zeros(3), self.base_quat_curr)                      # XYZ position fixed to 0
+        self.base_v_curr = np.vstack(self.base_linear_v_curr,self.base_w_curr)
         self.q_curr = np.vstack(self.base_q_curr, self.joint_q_curr)
         self.v_curr = np.vstack(self.base_v_curr, self.joint_v_curr)
 
@@ -93,22 +99,6 @@ class FloatingBaseController():
         p_curr = M @ self.v_curr
         self.tau_external = self.Ko @ (p_curr - self.mob_integral)              # External torque for each joints
         
-        # --- [Step 3] 외력 투영 (Contact Jacobian Mapping) ---
-        # Residual을 순수 지면 반력(Contact Force) 공간으로 맵핑한 뒤 다시 관절 토크로 변환합니다.
-        # (원치 않을 경우 단순하게 r_joint = self.tau_external[6:] 로 사용해도 무방합니다)
-        # pin.computeJointJacobians(self.model, self.data, self.q_curr)
-        # pin.updateFramePlacements(self.model, self.data)
-        
-        # J_L_wheel = pin.getJointJacobian(self.model, self.data, 6, pin.LOCAL_WORLD_ALIGNED)
-        # J_R_wheel = pin.getJointJacobian(self.model, self.data, 7, pin.LOCAL_WORLD_ALIGNED)
-
-        # # Pseudo-inverse로 F_c 추정 후 관절 토크 공간으로 매핑
-        # J_c_pinv = np.linalg.pinv(J_c.T)
-        # F_c_hat = J_c_pinv @ self.tau_external
-        
-        # J_c_joint = J_c[:, 6:] # 조인트 부분 야코비안만 추출
-        # tau_ext_hat = J_c_joint.T @ F_c_hat
-        
         # Error Feedback torque 
         q_err = self.q_ref[7:] - self.q_curr[7:]
         v_err = -self.v_curr[6:]
@@ -127,7 +117,7 @@ class FloatingBaseController():
         joint_command.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
         ]
-        joint_command.effort = 
+        joint_command.effort = _
         self.command_publisher.publish(joint_command)
 
 def main(args=None):
