@@ -9,9 +9,9 @@ import pinocchio as pin
 import math
 
 
-class NSCController(Node):
+class NSCTesterNode(Node):
     def __init__(self):
-        super().__init__('nsc_controller')
+        super().__init__('nsc_tester_node')
 
         # Pinocchio
         urdf_path = '/home/oksusu/Repos/GOAT/Realworld/src/goat_description/urdf/WF_GOAT.urdf'
@@ -31,7 +31,7 @@ class NSCController(Node):
         self.dt = 0.01
         self.Kp = np.eye(self.n_joints) * 3.0
         self.Kd = np.eye(self.n_joints) * 1.0
-        self.Ko = np.eye(self.nv) * 20.0                # MOB gain (Base 6 + Joints n)
+        self.Ko = np.eye(self.nv) * 20.0                                    # MOB gain (Base 6 + Joints n)
         self.wheel_Kp_att = 0
         self.wheel_Kd_att = 0
         self.wheel_Kp_pos = 0
@@ -40,23 +40,23 @@ class NSCController(Node):
         # State variables
         self.q_curr = np.zeros(self.nq)
         self.v_curr = np.zeros(self.nv)
-        self.joint_q_curr = np.zeros(self.n_joints)     # Joint position
-        self.joint_v_curr = np.zeros(self.n_joints)     # Joint velocity
-        self.base_q_curr = np.zeros(7)                  # Base position state
-        self.base_quat_curr = np.zeros(4)               # Base quaternion
-        self.base_v_curr = np.zeros(6)                  # Base velocity state
-        self.base_linear_v_curr = np.zeros(3)           # Base linear velocity
-        self.base_w_curr = np.zeros(3)                  # Base angular velocity
-        self.base_a_curr = np.zeros(3)                  # Base linear acceleration
-        self.q_ref = np.zeros(self.nq)                  # Reference joint position
-        self.a_ref = np.zeros(self.nv)                  # Reference joint acceleration
+        self.joint_q_curr = np.zeros(self.n_joints)                         # Joint position
+        self.joint_v_curr = np.zeros(self.n_joints)                         # Joint velocity
+        self.base_q_curr = np.zeros(7)                                      # Base position state
+        self.base_quat_curr = np.array([0.0, 0.0, 0.0, 1.0])                # Base quaternion
+        self.base_v_curr = np.zeros(6)                                      # Base velocity state
+        self.base_linear_v_curr = np.zeros(3)                               # Base linear velocity
+        self.base_w_curr = np.zeros(3)                                      # Base angular velocity
+        self.base_a_curr = np.zeros(3)                                      # Base linear acceleration
+        self.q_ref = np.zeros(self.nq)                                      # Reference joint position
+        self.a_ref = np.zeros(self.nv)                                      # Reference joint acceleration
         
         self.tau_cmd = np.zeros(self.n_joints)
         self.tau_applied = np.zeros(self.n_joints)
 
         # MOB(Momentum Observer) parameters
         self.mob_integral = np.zeros(self.nv)
-        self.tau_external = np.zeros(self.nv)           # Residual
+        self.tau_external = np.zeros(self.nv)                               # Residual
 
         # TF subscriber
         self.tf_buffer = Buffer()
@@ -78,9 +78,9 @@ class NSCController(Node):
 
     def imu_callback(self, msg):
         self.base_linear_v_curr = np.zeros(3)               # NOTE: Linear velocity 받아와야됨
-        self.base_a_curr = np.array(msg.linear_acceleration)
-        self.base_w_curr = np.array(msg.angular_velocity)
-        self.base_quat_curr = np.array(msg.orientation)
+        self.base_a_curr = np.array([msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z])
+        self.base_w_curr = np.array([msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z])
+        self.base_quat_curr = np.array([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
 
     def control_loop(self):
         # Stack base + joint state
@@ -106,7 +106,7 @@ class NSCController(Node):
         
         p_curr = M @ self.v_curr
         self.tau_external = self.Ko @ (p_curr - self.mob_integral)              # External torque for each joints
-        self.tau_external = self.tau_external[6:]                               # Extract joint torque
+        self.joint_tau_external = self.tau_external[6:]                         # Extract joint torque
         
         # Error Feedback torque 
         q_err = self.q_ref[7:] - self.q_curr[7:]
@@ -114,7 +114,7 @@ class NSCController(Node):
         tau_pd = self.Kp @ q_err + self.Kd @ v_err
 
         # Total torque (RNEA + Feedback + External)
-        self.tau_cmd = tau_rnea_joint + tau_pd - self.tau_external
+        self.tau_cmd = tau_rnea_joint + tau_pd - self.joint_tau_external
 
         # Clipping
         self.tau_cmd = np.clip(self.tau_cmd, -self.joint_tau_limit, self.joint_tau_limit)
@@ -139,7 +139,7 @@ class NSCController(Node):
         joint_command.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
         ]
-        joint_command.effort = self.tau_cmd
+        joint_command.effort = self.tau_cmd.tolist()
         self.command_publisher.publish(joint_command)
 
 
@@ -209,7 +209,7 @@ class NSCController(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = NSCController()
+    node = NSCTesterNode()
 
     node.control_loop()
     try:

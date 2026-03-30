@@ -47,6 +47,7 @@ setup(
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',
             'plot_node = goat_control.nodes.plot_node:main',
             'calibration_node = goat_control.nodes.calibration_node:main',
+            'nsc_tester_node = goat_control.nodes.nsc_tester_node:main'
         ],
     },
 )
