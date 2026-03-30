@@ -211,7 +211,6 @@ def main(args=None):
     rclpy.init(args=args)
     node = NSCTesterNode()
 
-    node.control_loop()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
