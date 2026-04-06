@@ -369,11 +369,11 @@ class ControlPipeline:
         wheel_tau = self.wheel_attitude_control(theta, theta_dot, self.cur_theta_ref)
 
         ## ================================ Joint control ================================ ##
-        q_ref = np.zeros(self.nq)
-        q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
+        q_ref = np.zeros(self.num_joints)
+        q_ref = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
         
         # Error Feedback acceleration
-        q_err = q_ref[7:] - self.q_curr[7:]
+        q_err = q_ref - self.q_curr[7:]
         v_err = -self.v_curr[6:]
         a_ref = np.zeros(self.nv)
         a_ref[6:] = self.Kp @ q_err + self.Kd @ v_err
@@ -398,7 +398,7 @@ class ControlPipeline:
 
         self.count_tick += 1
         q_ref = q_ref[self.pin_to_ros_ids]
-        safe_joint_targets = np.array([q_ref[7:], np.zeros(self.num_joints)])             # Zero velocity reference
+        safe_joint_targets = np.array([q_ref, np.zeros(self.num_joints)])             # Zero velocity reference
         return safe_torque_command, safe_joint_targets
     
     ### =============================== Auxilary Functions =============================== ###
