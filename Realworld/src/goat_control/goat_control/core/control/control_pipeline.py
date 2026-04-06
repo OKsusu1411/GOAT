@@ -397,6 +397,7 @@ class ControlPipeline:
         safe_torque_command = self.torque_safety_limiter.apply(self.tau_cmd)
 
         self.count_tick += 1
+        q_ref = q_ref[self.pin_to_ros_ids]
         safe_joint_targets = np.array([q_ref[7:], np.zeros(self.num_joints)])             # Zero velocity reference
         return safe_torque_command, safe_joint_targets
     
