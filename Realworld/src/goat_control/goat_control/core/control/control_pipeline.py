@@ -248,8 +248,8 @@ class ControlPipeline:
             self.theta_cmd_limit = math.radians(5.0)
             
             # State variables
-            self.q_ref = np.concatenate((np.zeros(7), robot_state.natural_joint_position))  # Reference position
-            self.q_ref = self.q_ref[self.ros_to_pin_ids]
+            self.joint_q_ref = robot_state.natural_joint_position[self.ros_to_pin_ids]
+            self.q_ref = np.concatenate((np.zeros(7), self.joint_q_ref))                    # Reference position
             self.q_ref_traj = np.zeros((self.num_traj_points, self.n_joints))               # Reference joint position trajectory
             self.a_ref = np.zeros(self.nv)                                                  # Reference joint acceleration
             self.phi_ref = 0.0
