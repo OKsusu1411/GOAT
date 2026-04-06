@@ -259,10 +259,10 @@ class ControlPipeline:
             self.Kp = np.eye(self.n_joints) * 100.0
             self.Kd = np.eye(self.n_joints) * 1.0
             # self.Ko = np.eye(self.nv) * 1.0                                             # MOB gain (Base 6 + Joints n)
-            self.wheel_Kp_att = 8.0
-            self.wheel_Kd_att = 1.5
+            self.wheel_Kp_att = 7.0
+            self.wheel_Kd_att = 2.0
             self.wheel_Kp_pos = 0.1
-            self.wheel_Kd_pos = 0.05
+            self.wheel_Kd_pos = 0.1
             self.alpha = 1.0
             self.cascade_ratio = 1
 
