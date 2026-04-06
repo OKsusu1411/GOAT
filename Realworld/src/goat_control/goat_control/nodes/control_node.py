@@ -334,7 +334,7 @@ class GoatControlNode(Node):
         expected_len = len(joint_indices) + len(wheel_indices)
 
         # Only 8 bytes
-        if action_array.size != expected_len:
+        if action_array.size != expected_len & (not self.nsc_mode):
             if not hasattr(self, "_warned_action_len"):
                 self._warned_action_len = False
             if not self._warned_action_len:
