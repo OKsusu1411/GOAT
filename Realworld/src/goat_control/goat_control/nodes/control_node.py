@@ -334,7 +334,7 @@ class GoatControlNode(Node):
         expected_len = len(joint_indices) + len(wheel_indices)
 
         # Only 8 bytes
-        if action_array.size != expected_len & (not self.nsc_mode):
+        if action_array.size != expected_len:
             if not hasattr(self, "_warned_action_len"):
                 self._warned_action_len = False
             if not self._warned_action_len:
@@ -409,17 +409,38 @@ class GoatControlNode(Node):
 
         return obs
 
+    # def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, safe_joint_targets: np.ndarray, targets: ControlTargets):
+    #     joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
+    #     joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+    #     command_vector = np.asarray(command_vector, dtype=float).flatten()
+    #     safe_joint_targets = np.asarray(safe_joint_targets, dtype=float).flatten()
+
+    #     # Ref vector convention:
+    #     #   - joints: position reference [rad]
+    #     #   - wheels: speed reference [rad/s]
+    #     ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
+    #     wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
+
+    #     # Safe target command
+    #     safe_joint_pos_targets = np.asarray(safe_joint_targets[:self.num_joints], dtype=float).flatten()
+    #     safe_joint_vel_targets = np.asarray(safe_joint_targets[self.num_joints:], dtype=float).flatten()
+        
+    #     for wi in getattr(self.goat_model, "wheel_indices", []):
+    #         wi = int(wi)
+    #         if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
+    #             ref_vector[wi] = float(wheel_ref[wi])
+    #             safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])              # Combine into one vector
+
+    #     log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, safe_joint_pos_targets, ref_vector], axis=0)
+    #     msg = Float32MultiArray()
+    #     msg.data = log_vector.astype(np.float32).tolist()
+    #     self.motor_torque_log_publisher.publish(msg)
+    
     def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, safe_joint_targets: np.ndarray, targets: ControlTargets):
         joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         command_vector = np.asarray(command_vector, dtype=float).flatten()
         safe_joint_targets = np.asarray(safe_joint_targets, dtype=float).flatten()
-
-        # Ref vector convention:
-        #   - joints: position reference [rad]
-        #   - wheels: speed reference [rad/s]
-        ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
-        wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
 
         # Safe target command
         safe_joint_pos_targets = np.asarray(safe_joint_targets[:self.num_joints], dtype=float).flatten()
@@ -427,9 +448,22 @@ class GoatControlNode(Node):
         
         for wi in getattr(self.goat_model, "wheel_indices", []):
             wi = int(wi)
-            if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
-                ref_vector[wi] = float(wheel_ref[wi])
-                safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])              # Combine into one vector
+            if 0 <= wi < safe_joint_pos_targets.size and 0 <= wi < safe_joint_vel_targets.size:
+                safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])
+
+        # Ref vector
+        if self.nsc_mode:
+            # NSC mode
+            ref_vector = safe_joint_pos_targets.copy()
+        else:
+            # Policy mode
+            ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
+            wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
+            
+            for wi in getattr(self.goat_model, "wheel_indices", []):
+                wi = int(wi)
+                if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
+                    ref_vector[wi] = float(wheel_ref[wi])
 
         log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, safe_joint_pos_targets, ref_vector], axis=0)
         msg = Float32MultiArray()
