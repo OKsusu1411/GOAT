@@ -72,22 +72,22 @@ class GoatControlNode(Node):
         # Buffer for observation, action
         self.buffers = LatestBuffers()
 
-        # Pub/Sub
-        self.joint_state_subscriber = Subscriber(self, JointState, "joint_states", 10)
-        self.imu_subscriber = Subscriber(self, BaseStates, "/goat/imu_data", 10)
+        # # Pub/Sub
+        # self.joint_state_subscriber = Subscriber(self, JointState, "joint_states", 10)
+        # self.imu_subscriber = Subscriber(self, BaseStates, "/goat/imu_data", 10)
         
-        self.time_sync = ApproximateTimeSynchronizer([self.joint_state_subscriber, self.imu_subscriber], 10, 0.01)
-        self.time_sync.registerCallback(self._on_sync)
+        # self.time_sync = ApproximateTimeSynchronizer([self.joint_state_subscriber, self.imu_subscriber], 10, 0.01)
+        # self.time_sync.registerCallback(self._on_sync)
 
         self.action_subscriber = self.create_subscription(
             Float32MultiArray, action_topic, self._on_action_msg, 10
         )
-        # self.joint_state_subscriber = self.create_subscription(
-        #     JointState, "joint_states", self._on_joint_state_msg, 10
-        # )
-        # self.imu_subscriber = self.create_subscription(
-        #     BaseStates, "/goat/imu_data", self._on_imu_msg, 10
-        # )
+        self.joint_state_subscriber = self.create_subscription(
+            JointState, "joint_states", self._on_joint_state_msg, 10
+        )
+        self.imu_subscriber = self.create_subscription(
+            BaseStates, "/goat/imu_data", self._on_imu_msg, 10
+        )
         self.observation_publisher = self.create_publisher(
             Float32MultiArray, observation_topic, 10
         )
