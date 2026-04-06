@@ -73,16 +73,15 @@ class GoatControlNode(Node):
         self.buffers = LatestBuffers()
 
         # Pub/Sub
-        self.action_subscriber = Subscriber(self, Float32MultiArray, action_topic, 10)
         self.joint_state_subscriber = Subscriber(self, JointState, "joint_states", 10)
         self.imu_subscriber = Subscriber(self, BaseStates, "/goat/imu_data", 10)
         
-        self.time_sync = ApproximateTimeSynchronizer([self.action_subscriber, self.joint_state_subscriber, self,self.imu_subscriber], 10, 0.01)
+        self.time_sync = ApproximateTimeSynchronizer([self.joint_state_subscriber, self.imu_subscriber], 10, 0.01)
         self.time_sync.registerCallback(self._on_sync)
 
-        # self.action_subscriber = self.create_subscription(
-        #     Float32MultiArray, action_topic, self._on_action_msg, 10
-        # )
+        self.action_subscriber = self.create_subscription(
+            Float32MultiArray, action_topic, self._on_action_msg, 10
+        )
         # self.joint_state_subscriber = self.create_subscription(
         #     JointState, "joint_states", self._on_joint_state_msg, 10
         # )
@@ -144,8 +143,7 @@ class GoatControlNode(Node):
 
         self.get_logger().info("GoatControlNode started.")
 
-    def _on_sync(self, action_msg, joint_msg, imu_msg):
-        self._on_action_msg(action_msg)
+    def _on_sync(self, joint_msg, imu_msg):
         self._on_joint_state_msg(joint_msg)
         self._on_imu_msg(imu_msg)
 
