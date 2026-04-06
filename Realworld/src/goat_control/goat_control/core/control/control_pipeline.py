@@ -239,6 +239,8 @@ class ControlPipeline:
             self.data = self.model.createData()
 
             # Robot parameters
+            self.ros_to_pin_ids = [0, 2, 4, 6, 1, 3, 5, 7]                              # ROS[self.ros_to_pin_ids] = Pin Ids
+            self.pin_to_ros_ids = [0, 4, 1, 5, 2, 6, 3, 7]                              # Pin[self.pin_to_ros_ids] = ROS Ids
             self.wheel_radius = 72.75E-03
             self.nv = self.model.nv                                                         # Velocity dim (6 + n)
             self.nq = self.model.nq                                                         # Position dim (7 + n)
@@ -278,8 +280,6 @@ class ControlPipeline:
             self.ros_name_to_idx = {name: i for i, name in enumerate(self.ros_joint_names)}
             self.pin_name_to_idx = {name: i for i, name in enumerate(self.pin_joint_names)}
 
-            self.ros_to_pin_ids = [0, 2, 4, 6, 1, 3, 5, 7]                              # ROS[self.ros_to_pin_ids] = Pin Ids
-            self.pin_to_ros_ids = [0, 4, 1, 5, 2, 6, 3, 7]                              # Pin[self.pin_to_ros_ids] = ROS Ids
 
             self.wheel_L_joint_id = self.pin_name_to_idx['wheel_L_Joint']               # 3 : Left wheel index in pinocchio-actuator-order
             self.wheel_R_joint_id = self.pin_name_to_idx['wheel_R_Joint']               # 7 : Right wheel index in pinocchio-actuator-order
