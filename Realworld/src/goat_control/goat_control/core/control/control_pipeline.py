@@ -233,10 +233,10 @@ class ControlPipeline:
 
         # Lazy initialization: Load model and parameters only once
         if not self._nsc_initialized:
+            print("NSC controller initialized!!")
             self.model = pin.buildModelFromUrdf(urdf_path, pin.JointModelFreeFlyer())
             self.model_names = list(self.model.names)
             self.data = self.model.createData()
-
 
             # Robot parameters
             self.wheel_radius = 72.75E-03
