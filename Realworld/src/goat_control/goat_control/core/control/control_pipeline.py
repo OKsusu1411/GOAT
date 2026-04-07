@@ -370,7 +370,7 @@ class ControlPipeline:
 
         ## ================================ Joint control ================================ ##
         q_ref = np.zeros(self.num_joints)
-        q_ref = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
+        q_ref = self.q_ref_traj[min(self.count_tick, self.num_traj_points - 1), :]
         
         # Error Feedback acceleration
         q_err = q_ref - self.q_curr[7:]
