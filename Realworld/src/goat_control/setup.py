@@ -21,9 +21,9 @@ setup(
         (os.path.join('share', package_name, 'config'),
          glob(os.path.join('config', '*.yaml')) + glob(os.path.join('config', '*.yml'))),
 
-        # assets (existing)
-        (os.path.join('share', package_name, 'assets', 'WF_GOAT', 'urdf'),
-         glob('../../../lib/assets/GOAT/WF_GOAT/urdf/*.urdf')),
+        # URDF
+        (os.path.join("share", package_name, "urdf"),
+         glob(os.path.join("urdf/*"))),
 
     ],
     install_requires=['setuptools'],
@@ -47,6 +47,7 @@ setup(
             'policy_keyboard_tester = goat_control.nodes.policy_keyboard_tester:main',
             'plot_node = goat_control.nodes.plot_node:main',
             'calibration_node = goat_control.nodes.calibration_node:main',
+            'nsc_tester_node = goat_control.nodes.nsc_tester_node:main'
         ],
     },
 )

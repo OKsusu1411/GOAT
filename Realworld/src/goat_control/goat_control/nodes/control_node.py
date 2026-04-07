@@ -12,6 +12,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
+from message_filters import Subscriber, ApproximateTimeSynchronizer
 
 from motor_interfaces.msg import BaseStates
 from goat_control.core.control.control_pipeline import ControlTargets
@@ -43,6 +44,7 @@ class GoatControlNode(Node):
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("policy_decimation", 2.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
+        self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("debug_print_period_sec", 0.2)
         # self.declare_parameter("action_space_len", 8)
@@ -57,6 +59,7 @@ class GoatControlNode(Node):
         control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         policy_decimation = float(self.get_parameter("policy_decimation").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
+        urdf_path = str(self.get_parameter("urdf_path").value)
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
         self.debug_print_period_sec = float(self.get_parameter("debug_print_period_sec").value)
         log_topic = str(self.get_parameter("log_topic").value)
@@ -69,7 +72,13 @@ class GoatControlNode(Node):
         # Buffer for observation, action
         self.buffers = LatestBuffers()
 
-        # Pub/Sub
+        # # Pub/Sub
+        # self.joint_state_subscriber = Subscriber(self, JointState, "joint_states", 10)
+        # self.imu_subscriber = Subscriber(self, BaseStates, "/goat/imu_data", 10)
+        
+        # self.time_sync = ApproximateTimeSynchronizer([self.joint_state_subscriber, self.imu_subscriber], 10, 0.01)
+        # self.time_sync.registerCallback(self._on_sync)
+
         self.action_subscriber = self.create_subscription(
             Float32MultiArray, action_topic, self._on_action_msg, 10
         )
@@ -92,12 +101,13 @@ class GoatControlNode(Node):
         # Build core system (Model + Pipeline)
         self.goat_model, self.control_pipeline = build_control_pipeline_from_yaml(
             yaml_path=yaml_path,
-            motor_drivers=[],
+            motor_drivers=[], 
             effort_output_mode="torque_nm", # Use current output for sim control
         )
+        self.urdf_path = urdf_path
         self.control_pipeline.reset()
         self.num_joints = int(self.goat_model.num_joints)
-        self.action_dim = 0
+        self.action_dim = 8                                                     # Hard coded
         self.natural_joint_position = self.goat_model.natural_joint_position
 
         # Violation boolean for emergency stop
@@ -133,6 +143,10 @@ class GoatControlNode(Node):
 
         self.get_logger().info("GoatControlNode started.")
 
+    def _on_sync(self, joint_msg, imu_msg):
+        self._on_joint_state_msg(joint_msg)
+        self._on_imu_msg(imu_msg)
+
     def _on_action_msg(self, msg: Float32MultiArray):
         """Action msg subscriber"""
         now_time = self.get_clock().now()
@@ -141,7 +155,6 @@ class GoatControlNode(Node):
         if self.agent_start_time is None:
             self.agent_start_time = now_time
             self.agent_timestep = 0
-            self.action_dim = len(msg.data)
             self.get_logger().info("Agent node's first action detected! Starting policy timer.")
 
             if self.enable_csv_log and not self._is_csv_logging_active:
@@ -258,6 +271,7 @@ class GoatControlNode(Node):
         # 3. Compute command torque
         if self.nsc_mode:
             safe_command, safe_joint_targets = self.control_pipeline.compute_natural_torque(
+                urdf_path = self.urdf_path,
                 robot_state=robot_state,
                 dt_sec=dt_sec
             )
@@ -394,17 +408,38 @@ class GoatControlNode(Node):
 
         return obs
 
+    # def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, safe_joint_targets: np.ndarray, targets: ControlTargets):
+    #     joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
+    #     joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
+    #     command_vector = np.asarray(command_vector, dtype=float).flatten()
+    #     safe_joint_targets = np.asarray(safe_joint_targets, dtype=float).flatten()
+
+    #     # Ref vector convention:
+    #     #   - joints: position reference [rad]
+    #     #   - wheels: speed reference [rad/s]
+    #     ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
+    #     wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
+
+    #     # Safe target command
+    #     safe_joint_pos_targets = np.asarray(safe_joint_targets[:self.num_joints], dtype=float).flatten()
+    #     safe_joint_vel_targets = np.asarray(safe_joint_targets[self.num_joints:], dtype=float).flatten()
+        
+    #     for wi in getattr(self.goat_model, "wheel_indices", []):
+    #         wi = int(wi)
+    #         if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
+    #             ref_vector[wi] = float(wheel_ref[wi])
+    #             safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])              # Combine into one vector
+
+    #     log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, safe_joint_pos_targets, ref_vector], axis=0)
+    #     msg = Float32MultiArray()
+    #     msg.data = log_vector.astype(np.float32).tolist()
+    #     self.motor_torque_log_publisher.publish(msg)
+    
     def _publish_motor_torque_log(self, robot_state, command_vector: np.ndarray, safe_joint_targets: np.ndarray, targets: ControlTargets):
         joint_position_rad = np.asarray(robot_state.joint_position_rad, dtype=float).flatten()
         joint_velocity_rad_per_sec = np.asarray(robot_state.joint_velocity_rad_per_sec, dtype=float).flatten()
         command_vector = np.asarray(command_vector, dtype=float).flatten()
         safe_joint_targets = np.asarray(safe_joint_targets, dtype=float).flatten()
-
-        # Ref vector convention:
-        #   - joints: position reference [rad]
-        #   - wheels: speed reference [rad/s]
-        ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
-        wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
 
         # Safe target command
         safe_joint_pos_targets = np.asarray(safe_joint_targets[:self.num_joints], dtype=float).flatten()
@@ -412,9 +447,22 @@ class GoatControlNode(Node):
         
         for wi in getattr(self.goat_model, "wheel_indices", []):
             wi = int(wi)
-            if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
-                ref_vector[wi] = float(wheel_ref[wi])
-                safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])              # Combine into one vector
+            if 0 <= wi < safe_joint_pos_targets.size and 0 <= wi < safe_joint_vel_targets.size:
+                safe_joint_pos_targets[wi] = float(safe_joint_vel_targets[wi])
+
+        # Ref vector
+        if self.nsc_mode:
+            # NSC mode
+            ref_vector = safe_joint_pos_targets.copy()
+        else:
+            # Policy mode
+            ref_vector = np.asarray(targets.desired_joint_delta_position_rad + robot_state.joint_position_rad, dtype=float).flatten().copy()
+            wheel_ref = np.asarray(targets.desired_wheel_speed_rad_per_sec, dtype=float).flatten()
+            
+            for wi in getattr(self.goat_model, "wheel_indices", []):
+                wi = int(wi)
+                if 0 <= wi < ref_vector.size and 0 <= wi < wheel_ref.size:
+                    ref_vector[wi] = float(wheel_ref[wi])
 
         log_vector = np.concatenate([joint_position_rad, joint_velocity_rad_per_sec, command_vector, safe_joint_pos_targets, ref_vector], axis=0)
         msg = Float32MultiArray()
@@ -439,7 +487,7 @@ class GoatControlNode(Node):
             
             # Observation headers
             obs_headers = []
-            obs_headers += ["acc_x", "acc_y", "acc_z"]
+            obs_headers += ["vel_x", "vel_y", "vel_z"]
             obs_headers += ["gyro_x", "gyro_y", "gyro_z"]
             obs_headers += ["quat_w", "quat_x", "quat_y", "quat_z"]
             # obs_headers += ["mag_x", "mag_y", "mag_z"] # Uncomment if mag is used in obs
