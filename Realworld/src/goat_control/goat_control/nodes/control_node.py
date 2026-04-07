@@ -101,13 +101,13 @@ class GoatControlNode(Node):
         # Build core system (Model + Pipeline)
         self.goat_model, self.control_pipeline = build_control_pipeline_from_yaml(
             yaml_path=yaml_path,
-            motor_drivers=[],
+            motor_drivers=[], 
             effort_output_mode="torque_nm", # Use current output for sim control
         )
         self.urdf_path = urdf_path
         self.control_pipeline.reset()
         self.num_joints = int(self.goat_model.num_joints)
-        self.action_dim = 0
+        self.action_dim = 8                                                     # Hard coded
         self.natural_joint_position = self.goat_model.natural_joint_position
 
         # Violation boolean for emergency stop
@@ -155,7 +155,6 @@ class GoatControlNode(Node):
         if self.agent_start_time is None:
             self.agent_start_time = now_time
             self.agent_timestep = 0
-            self.action_dim = len(msg.data)
             self.get_logger().info("Agent node's first action detected! Starting policy timer.")
 
             if self.enable_csv_log and not self._is_csv_logging_active:
@@ -286,9 +285,9 @@ class GoatControlNode(Node):
 
         # 4. Apply action watchdog
         if action_timed_out:
-            safe_command[:] = 0.0
             now_sec = now_time.nanoseconds * 1e-9
             if now_sec - self._last_timeout_warn_time_sec > 1.0:
+                safe_command[:] = 0.0
                 self.get_logger().warn(
                     f"Policy action timeout (> {self.action_timeout_sec:.3f}s) -> FORCE ZERO TORQUE"
                 )
@@ -488,7 +487,7 @@ class GoatControlNode(Node):
             
             # Observation headers
             obs_headers = []
-            obs_headers += ["acc_x", "acc_y", "acc_z"]
+            obs_headers += ["vel_x", "vel_y", "vel_z"]
             obs_headers += ["gyro_x", "gyro_y", "gyro_z"]
             obs_headers += ["quat_w", "quat_x", "quat_y", "quat_z"]
             # obs_headers += ["mag_x", "mag_y", "mag_z"] # Uncomment if mag is used in obs
