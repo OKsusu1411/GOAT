@@ -285,9 +285,12 @@ class GoatControlNode(Node):
 
         # 4. Apply action watchdog
         if action_timed_out:
+            self.get_logger().warn(
+                f"Policy action timeout!!"
+            )
+            safe_command[:] = 0.0
             now_sec = now_time.nanoseconds * 1e-9
             if now_sec - self._last_timeout_warn_time_sec > 1.0:
-                safe_command[:] = 0.0
                 self.get_logger().warn(
                     f"Policy action timeout (> {self.action_timeout_sec:.3f}s) -> FORCE ZERO TORQUE"
                 )
