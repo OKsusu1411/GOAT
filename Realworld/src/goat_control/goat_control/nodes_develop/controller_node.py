@@ -227,6 +227,7 @@ class ControllerNode(Node):
         elif self.publish_mode == 'nominal':
             raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, imu_msg, dt_sec)
             self.q_ref[:] = q_ref
+            self.v_ref[-2:] = 0 # Only for wheel
 
         else:
             # None (wait) or unknown mode -> zero torque, skip safety/publish
@@ -244,7 +245,7 @@ class ControllerNode(Node):
             safe_torque = np.zeros(self.num_joints)
 
         # Publish torque command
-        self._publish_torque_command(safe_torque)
+        self._publish_torque_command(self.q_ref.copy(), self.v_ref.copy(), safe_torque)
 
     def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish torque command to /torque topic."""
