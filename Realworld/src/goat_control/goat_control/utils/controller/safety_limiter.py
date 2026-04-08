@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 
 import numpy as np
 
@@ -29,9 +29,11 @@ class SafetyLimiter:
         joint_vel_estop_threshold    : float [rad/s]
     """
 
-    def __init__(self, cfg: dict) -> None:
+    def __init__(self, cfg: dict, logger: Any | None) -> None:
         joint_indices: List[int] = list(cfg["joint_indices"])
         self.num_joints: int = len(cfg["joint_names"])
+
+        self.logger = logger
 
         # --- LPF alpha ---
         alpha_raw = np.asarray(cfg["torque_lpf_alpha_per_joint"], dtype=float).flatten()

@@ -2,14 +2,32 @@ import numpy as np
 import pinocchio as pin
 import math
 
+from typing import Any
+
 from .base_controller import BaseController
 
 from motor_interfaces.msg import ImuState
 from sensor_msgs.msg import JointState
 
 class NominalController(BaseController):
-    def __init__(self, cfg:dict):
-        
+    """PD (legs) + PI (wheels) torque controller driven by policy actions.
+
+    Action space (set via set_targets()):
+        delta_pos:    Delta joint position [rad], shape (num_joints,).
+                      Added to natural_joint_position to form the PD reference.
+        wheel_speed:  Desired wheel speed [rad/s], shape (num_joints,).
+                      PI controller tracks this on wheel_indices only.
+
+    YAML keys consumed:
+        joint_names, joint_indices, wheel_indices, natural_joint_position,
+        policy_leg_proportional_gain, policy_leg_derivative_gain,
+        policy_wheel_proportional_gain, policy_wheel_integral_gain,
+        integrator_state_limit
+    """
+    def __init__(self, cfg:dict, logger: Any | None):
+        # Logger
+        self.logger = logger
+
         # Config
         self.cfg = cfg
         self.urdf_path = self.cfg.get("nsc_urdf_path", None)
@@ -22,16 +40,6 @@ class NominalController(BaseController):
         self.data = self.model.createData()
 
         # ========== Pinocchio Name Index ========== #
-        print("[Nominal Controller] Model Names:")
-        for i, name in enumerate(self.model.names):
-            print(i, name)
-
-        print("\nidx_qs:", self.model.idx_qs)
-        print("idx_vs:", self.model.idx_vs)
-
-        print("\nJoint list:")
-        for i, j in enumerate(self.model.joints):
-            print(i, j)
 
         # model.names:
             # universe

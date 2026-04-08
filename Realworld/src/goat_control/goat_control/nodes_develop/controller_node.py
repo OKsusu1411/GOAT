@@ -66,10 +66,13 @@ class ControllerNode(Node):
         if self.checkpoint_path is not None:
             self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path) # Default is None
 
+        # Logger
+        self.logger = self.get_logger()
+
         # Controller
-        self.nominal_controller = NominalController(self.cfg)
-        self.policy_controller = PolicyController(self.cfg)
-        self.safety_limiter = SafetyLimiter(self.cfg)
+        self.nominal_controller = NominalController(self.cfg, self.logger)
+        self.policy_controller = PolicyController(self.cfg, self.logger)
+        self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
 
         # Subscriber
         self.joint_state_subscriber = Subscriber(self, JointState, '/joint_states', 10)
@@ -86,7 +89,19 @@ class ControllerNode(Node):
         # Mode switch (None = idle, no torque until keyboard selects a mode)
         self.publish_mode = None
         self._prev_mode = None
-        self.settings = termios.tcgetattr(sys.stdin)
+
+
+        self.logger.info("Main Controller Node started")
+        self.logger.info("===========================================")
+        self.logger.info("[Keydown Menu]")
+        self.logger.info("'p': Policy Control Mode")
+        self.logger.info("'n': Nominal Control Mode")
+        self.logger.info("'q': Quit")
+        self.logger.info("===========================================\r")
+
+        # NOTE: 이전 버전 코드와 달라진 점 : Launch file로 한번에 운용하기 때문에, 키보드 입력을 받기 위해선 추가 설정이 필요함
+        self.tty = open("/dev/tty", "rb+", buffering=0)
+        self.settings = termios.tcgetattr(self.tty.fileno())
         self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
         self.input_thread.start()
 
@@ -98,15 +113,6 @@ class ControllerNode(Node):
         control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
 
-        self.get_logger().info("!! Main Controller Node started !!")
-        print("="*30)
-        print("[Keydown Menu]")
-        print("'p': Policy Control Mode")
-        print("'n': Nominal Control Mode")
-        print("'q': Quit")
-        print("="*30)
-
-
     # ---------------------------------------------------------------------
     # Callback Functions
     # ---------------------------------------------------------------------
@@ -114,10 +120,12 @@ class ControllerNode(Node):
     def _get_key(self):
         """Read a single character from the terminal immediately (Blocking)."""
         try:
-            tty.setraw(sys.stdin.fileno())
-            key = sys.stdin.read(1)
+            # NOTE: stdin -> tty
+            tty.setraw(self.tty.fileno())
+            key = self.tty.read(1).decode(errors="ignore")
         finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+            # NOTE: stdin -> tty
+            termios.tcsetattr(self.tty.fileno(), termios.TCSADRAIN, self.settings)
         return key
 
     def _keyboard_listener_loop(self):
@@ -127,14 +135,14 @@ class ControllerNode(Node):
             
             if key == 'p':
                 self.publish_mode = 'policy'
-                self.get_logger().info("Mode changed: [Policy]")
+                self.logger.info("Mode changed: [Policy]\r")
                 
             elif key == 'n':
                 self.publish_mode = 'nominal'
-                self.get_logger().info("Mode changed: [Nominal]")
+                self.logger.info("Mode changed: [Nominal]\r")
                 
             elif key == 'q':
-                self.get_logger().info("Shutting down Agent Node...")
+                self.logger.info("Shutting down Agent Node...\r")
                 rclpy.shutdown()
                 break
             
@@ -143,13 +151,13 @@ class ControllerNode(Node):
                 break
             
             else:
-                self.get_logger().info("Wrong key! Please enter the right key")
-                print("="*30)
-                print("[Keydown Menu]")
-                print("'p': Policy Control Mode")
-                print("'n': Nominal Control Mode")
-                print("'q': Quit")
-                print("="*30)
+                self.logger.info("Wrong key! Please enter the right key")
+                self.logger.info("===========================================")
+                self.logger.info("[Keydown Menu]")
+                self.logger.info("'p': Policy Control Mode")
+                self.logger.info("'n': Nominal Control Mode")
+                self.logger.info("'q': Quit")
+                self.logger.info("===========================================\r")
                 continue
 
     def sync_callback(self, joint_msg, imu_msg):
@@ -186,7 +194,7 @@ class ControllerNode(Node):
         # Reset LPF to prevent torque jump on mode switch
         self.safety_limiter.reset()
 
-        self.get_logger().info(f"Controller switched: {self._prev_mode} -> {new_mode}")
+        self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
 
     # ---------------------------------------------------------------------
@@ -238,7 +246,7 @@ class ControllerNode(Node):
 
         # Block handling (latching kill switch)
         if is_blocked:
-            self.get_logger().error("SafetyLimiter BLOCKED! Publishing zero torque.")
+            self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.")
             self.control_timer.cancel()
             safe_torque = np.zeros(self.num_joints)
         tau[:] = safe_torque
@@ -268,7 +276,11 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, node.settings)
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        try:
+            if hasattr(node, "tty"):
+                termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
+                node.tty.close()
+        finally:
+            node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()
