@@ -54,7 +54,6 @@ natural_joint_position:
 - -1.4626
 - 0.0
 - 0.0
-wheel_radius: 0.07275
 
 # ===========================================================
 
@@ -92,16 +91,7 @@ nsc_theta_cmd_limit: 5.0
 # ===========================================================
 
 # Policy: Default
-policy_checkpoint_path: null
 policy_decimation: 2.0
-policy_device: "cuda"
-policy_observation_info:
-  gravity: 3
-  base_ang_vel: 3
-  base_quat: 4
-  joint_pos: 6
-  joint_vel: 8
-
 
 # Policy: Leg PD Controller
 policy_leg_proportional_gain:
@@ -157,14 +147,14 @@ torque_lpf_alpha_per_joint:
 - 0.951
 - 0.951
 max_torque_per_joint:
-- 4.5
-- 4.5
-- 4.5
-- 4.5
-- 4.5
-- 4.5
-- 2.5
-- 2.5
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
 joint_pos_limit:
 - -1.22173
 - 0.750492
@@ -182,9 +172,36 @@ joint_pos_limit:
 - .inf
 - -.inf
 - .inf
+output_limit_per_joint:
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 2.5
+- 2.5
 joint_pos_limit_margin: 0.087267
-joint_pos_soft_limit_coeff: 0.95
-joint_vel_estop_threshold: 0.6
+joint_vel_limit:
+- 33.510322
+- 33.510322
+- 33.510322
+- 33.510322
+- 33.510322
+- 33.510322
+- 33.510322
+- 33.510322
+joint_vel_limit_margin: 1.047198
+
+output_limit_per_joint:
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 2.5
+- 2.5
 
 # ===========================================================
 
