@@ -6,10 +6,9 @@ import struct
 import time
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Literal
+from typing import List, Optional, Sequence
 
 from goat_control.util_develop.motor.motor_driver import MotorDriver
-from goat_control.util_develop.motor.state_types import MotorStatesData, ImuState, RobotState
 from goat_control.util_develop.motor.filters import FirstOrderLowPassFilter
 
 
@@ -23,6 +22,25 @@ DEFAULT_ANGLE_DEG_PER_LSB = 0.001
 # Speed scaling: if already in deg/s, keep 1.0. If 0.01 deg/s per LSB, set 0.01.
 DEFAULT_SPEED_DEG_PER_SEC_PER_LSB = 0.01
 
+@dataclass
+class MotorStatesData:
+    """Motor state snapshot (ROS-independent equivalent of your MotorStates message).
+
+    Naming rules:
+      - Use explicit physical meaning whenever possible.
+      - Include units in the field name when it helps clarity.
+    """
+    joint_names: List[str]
+
+    joint_position_rad: List[float]                    # [rad]
+    joint_velocity_rad_per_sec: List[float]            # [rad/s]
+    joint_effort_like: List[float]                     # [A] or [Nm] depending on your convention
+
+    motor_temperature_c: List[float]                   # [degC]
+    motor_error_flags: List[int]                       # bitfield / error codes (device-defined)
+    motor_operating_state: List[int]                   # motor mode/state (device-defined)
+
+    timestamp_sec: Optional[float] = None
 
 def format_motor_states(
     motor_states_data: MotorStatesData,
