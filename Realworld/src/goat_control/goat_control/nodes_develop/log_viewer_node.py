@@ -9,7 +9,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
-
+# TODO: 이거 마무리해야됨
 
 @dataclass
 class LatestLog:

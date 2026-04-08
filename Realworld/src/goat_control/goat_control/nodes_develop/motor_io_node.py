@@ -9,7 +9,6 @@ import rclpy
 import yaml
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float32MultiArray
 
 from goat_control.util_develop.motor import CanInterface, MotorDriver, MotorParams
 from goat_control.util_develop.motor.motor_manager import MotorStateManager
