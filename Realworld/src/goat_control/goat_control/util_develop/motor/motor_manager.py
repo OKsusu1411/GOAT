@@ -143,6 +143,8 @@ class MotorStateManager:
         self.motor_torque_constant_nm_per_amp = self.cfg.get("motor_torque_constant_nm_per_amp")
         self.angle_deg_per_lsb = self.cfg.get("angle_deg_per_lsb", None)
         self.joint_names = self.cfg.get("joint_names", None)
+        joint_offsets = self.cfg.get("joint_offsets")
+        self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten
 
         mapped: List[int] = []
         if self.cfg.get("joint_indices"):
@@ -325,6 +327,9 @@ class MotorStateManager:
             # Convert motor position into joint position
             joint_angle_deg = motor_angle_deg * gear * direction
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
+            
+            # Apply joint position offset
+            joint_position_rad = np.array(joint_position_rad) - self.joint_offsets
 
             # Convert motor velocity into joint velocity
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]

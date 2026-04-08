@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 import threading
 import logging
+import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 
@@ -28,23 +29,23 @@ class ImuConfig:
 @dataclass
 class ImuPacket:
     """Decoded IMU packet (same semantic fields as your split_packet)."""
-    # Quaternion
+    # Quaternion - unitless
     quat_w: float
     quat_x: float
     quat_y: float
     quat_z: float
 
-    # Gyroscope(Angular velocity)
+    # Gyroscope(Angular velocity) - rad/s
     gyro_x: float
     gyro_y: float
     gyro_z: float
     
-    # Linear velocity
+    # Linear velocity - m/s
     vel_x: float
     vel_y: float
     vel_z: float
 
-    # Magnetometer
+    # Magnetometer(not used) - ?
     mag_x: float
     mag_y: float
     mag_z: float
@@ -147,10 +148,12 @@ class ImuSerialReader:
             return None
 
         quat_w, quat_x, quat_y, quat_z = data_list[0:4]
-        gyro_x, gyro_y, gyro_z = data_list[4:7]
+        gyro_x, gyro_y, gyro_z = np.deg2rad(data_list[4:7])         # Convert into radian!!
         vel_x, vel_y, vel_z = data_list[7:10]
         mag_x, mag_y, mag_z = data_list[10:13]
         time_ms = data_list[13]
+
+        # TODO: IMU offset function
 
         return ImuPacket(
             quat_w=quat_w, quat_x=quat_x, quat_y=quat_y, quat_z=quat_z,

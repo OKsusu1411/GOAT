@@ -62,19 +62,23 @@ class IMUIONode(Node):
         msg = ImuState()
         msg.header.stamp = self.get_clock().now().to_msg()
 
+        # Quaternion - unitless
         msg.quat.w = float(packet.quat_w)
         msg.quat.x = float(packet.quat_x)
         msg.quat.y = float(packet.quat_y)
         msg.quat.z = float(packet.quat_z)
 
+        # Gyroscope(Angular velocity) - rad/s
         msg.gyro.x = float(packet.gyro_x)
         msg.gyro.y = float(packet.gyro_y)
         msg.gyro.z = float(packet.gyro_z)
 
+        # Linear velocity - m/s
         msg.vel.x = float(packet.vel_x)
         msg.vel.y = float(packet.vel_y)
         msg.vel.z = float(packet.vel_z)
 
+        # Magenometer - ?
         msg.mag.x = float(packet.mag_x)
         msg.mag.y = float(packet.mag_y)
         msg.mag.z = float(packet.mag_z)

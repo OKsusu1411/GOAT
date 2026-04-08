@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 
 import yaml
 import os
@@ -26,10 +26,10 @@ class CalibrationNode(Node):
 
         # Subscriber
         self.joint_state_subscriber = self.create_subscription(
-            JointState, "joint_states", self._on_joint_state_msg, 10
+            JointState, "/joint_states", self._on_joint_state_msg, 10
         )
         self.imu_subscriber = self.create_subscription(
-            BaseStates, "/goat/imu_data", self._on_imu_msg, 10
+            ImuState, "/imu", self._on_imu_msg, 10
         )
 
         # Data buffers
@@ -57,7 +57,7 @@ class CalibrationNode(Node):
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
 
-    def _on_imu_msg(self, msg: BaseStates):
+    def _on_imu_msg(self, msg: ImuState):
         self.latest_imu_state = msg
 
     def _get_key(self):
