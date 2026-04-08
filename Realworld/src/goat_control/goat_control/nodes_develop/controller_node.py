@@ -49,14 +49,12 @@ class ControllerNode(Node):
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("checkpoint_path", None)
         self.declare_parameter("action_timeout_sec", 0.05)
-        self.declare_parameter("debug_print_period_sec", 0.2)
 
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.checkpoint_path = str(self.get_parameter("checkpoint_path").value) or None # TODO: Launch file에서 checkpoint path 명시해야 함
+        self.checkpoint_path = None if self.get_parameter("checkpoint_path").value in (None, "") else self.get_parameter("checkpoint_path").value
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
-        self.debug_print_period_sec = float(self.get_parameter("debug_print_period_sec").value)
 
         # Parameters by Yaml File
         with open(self.yaml_path, "r", encoding="utf-8") as file_handle:
@@ -80,7 +78,7 @@ class ControllerNode(Node):
         self.time_sync.registerCallback(self.sync_callback)
 
         # Publisher
-        self.torque_command_publisher = self.create_publisher(Float32MultiArray, "/torque", 10)
+        self.torque_command_publisher = self.create_publisher(JointState, "/commands", 10)
 
         # Buffer for observation, action
         self.buffers = LatestBuffers()
@@ -213,13 +211,21 @@ class ControllerNode(Node):
         # Mode switch detection
         self._switch_mode(self.publish_mode)
 
+        # Commands
+        q_ref = np.zeros(self.num_joints, dtype=np.float32)
+        v_ref = np.zeros(self.num_joints, dtype=np.float32)
+        tau   = np.zeros(self.num_joints, dtype=np.float32)
+
         # Active controller execution
         if self.publish_mode == 'policy':
             raw_torque, q_ref, v_ref = self.policy_controller.compute(joint_msg, imu_msg, dt_sec)
+            q_ref[:] = q_ref
+            v_ref[-2:] = v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
             raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, imu_msg, dt_sec)
-
+            q_ref[:] = q_ref
+            v_ref[-2:] = 0 # Only for wheel
         else:
             # None (wait) or unknown mode -> zero torque, skip safety/publish
             return
@@ -234,14 +240,22 @@ class ControllerNode(Node):
             self.get_logger().error("SafetyLimiter BLOCKED! Publishing zero torque.")
             self.control_timer.cancel()
             safe_torque = np.zeros(self.num_joints)
+        tau[:] = safe_torque
 
         # Publish torque command
-        self._publish_torque_command(safe_torque)
+        self._publish_torque_command(q_ref, v_ref, tau)
 
-    def _publish_torque_command(self, torque: np.ndarray) -> None:
+    def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish torque command to /torque topic."""
-        msg = Float32MultiArray()
-        msg.data = torque.astype(np.float32).tolist()
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = [
+            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
+            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
+        ]
+        msg.position = position.tolist()
+        msg.velocity = velocity.tolist()
+        msg.effort = torque.tolist()
         self.torque_command_publisher.publish(msg)
 
 
