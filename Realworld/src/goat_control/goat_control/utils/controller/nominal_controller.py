@@ -4,7 +4,7 @@ import math
 
 from .base_controller import BaseController
 
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 from sensor_msgs.msg import JointState
 
 class NominalController(BaseController):
@@ -174,16 +174,15 @@ class NominalController(BaseController):
     
     def compute(self, 
                 joint_state: JointState, 
-                base_state: BaseStates, 
+                imu_state: ImuState, 
                 dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         # Data processing
         self.joint_q_curr = np.asarray(joint_state.position)[self.ros_to_pin_ids]
         self.joint_v_curr = np.asarray(joint_state.velocity)[self.ros_to_pin_ids]
-
-        # TODO: Base State 메시지 인터페이스 구성 논의
-        self.base_lin_v_curr    = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
-        self.base_ang_v_curr    = np.asarray([base_state.gyro.x, base_state.gyro.y, base_state.gyro.z])
-        self.base_quat_curr = np.asarray([base_state.quat.x, base_state.quat.y, base_state.quat.z, base_state.quat.w])
+        
+        self.base_lin_v_curr = np.asarray([imu_state.vel.x, imu_state.vel.y, imu_state.vel.z])
+        self.base_ang_v_curr = np.asarray([imu_state.gyro.x, imu_state.gyro.y, imu_state.gyro.z])
+        self.base_quat_curr  = np.asarray([imu_state.quat.x, imu_state.quat.y, imu_state.quat.z, imu_state.quat.w])
 
         # Lazy initialization
         if self.count_tick == 0:
