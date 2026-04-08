@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Sequence
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 
 import numpy as np
 

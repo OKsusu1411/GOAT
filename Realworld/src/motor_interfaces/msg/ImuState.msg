@@ -1,4 +1,4 @@
-# ImuStates.msg
+# ImuState.msg
 
 # Header
 std_msgs/Header header

@@ -110,7 +110,7 @@ class MotorStateManager:
         speed_deg_per_sec_per_lsb: float = DEFAULT_SPEED_DEG_PER_SEC_PER_LSB,
         single_turn_motor_indices: Optional[Sequence[int]] = None,
         multi_turn_motor_indices: Optional[Sequence[int]] = None,
-        cfg = None
+        cfg:dict = None
     ):
         self.motor_drivers = list(motor_drivers)
         self.motor_count = len(self.motor_drivers)

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import rclpy
 from rclpy.node import Node
-from motor_interfaces.msg import ImuStates
+from motor_interfaces.msg import ImuState
 
 from Realworld.src.goat_control.goat_control.util_develop.imu.imu_manager import ImuSerialReader, ImuConfig     # TODO: utils로 변경
 
@@ -38,7 +38,7 @@ class IMUIONode(Node):
         imu_timeout = float(self.get_parameter("imu_timeout").value)
 
         # Publisher
-        self.imu_publisher = self.create_publisher(ImuStates, "/imu", 10)
+        self.imu_publisher = self.create_publisher(ImuState, "/imu", 10)
 
         # IMU Reader
         imu_config = ImuConfig(port=imu_port, baudrate=imu_baudrate, timeout=imu_timeout)
@@ -59,7 +59,7 @@ class IMUIONode(Node):
         if packet is None:
             return
 
-        msg = ImuStates()
+        msg = ImuState()
         msg.header.stamp = self.get_clock().now().to_msg()
 
         msg.quat.w = float(packet.quat_w)
