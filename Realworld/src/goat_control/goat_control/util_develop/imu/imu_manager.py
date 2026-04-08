@@ -52,17 +52,6 @@ class ImuPacket:
 
     time_ms: float
 
-    def as_dict(self) -> Dict[str, Any]:
-        """Compatibility helper: returns the original dict-style structure."""
-        return {
-            "quat": {"w": self.quat_w, "x": self.quat_x, "y": self.quat_y, "z": self.quat_z},
-            "gyro": {"x": self.gyro_x, "y": self.gyro_y, "z": self.gyro_z},
-            "acc":  {"x": self.vel_x,  "y": self.vel_y,  "z": self.vel_z},
-            "mag":  {"x": self.mag_x,  "y": self.mag_y,  "z": self.mag_z},
-            "time_ms": self.time_ms,
-        }
-
-
 class ImuSerialReader:
     """
     IMU serial reader and decoder.
