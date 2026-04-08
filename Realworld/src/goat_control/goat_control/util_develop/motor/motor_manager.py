@@ -34,7 +34,7 @@ class MotorStatesData:
 
     joint_position_rad: List[float]                    # [rad]
     joint_velocity_rad_per_sec: List[float]            # [rad/s]
-    joint_effort_like: List[float]                     # [A] or [Nm] depending on your convention
+    joint_effort_like: List[float]                     # [Nm]
 
     motor_temperature_c: List[float]                   # [degC]
     motor_error_flags: List[int]                       # bitfield / error codes (device-defined)
