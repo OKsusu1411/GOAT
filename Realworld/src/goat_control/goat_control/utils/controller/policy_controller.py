@@ -49,7 +49,7 @@ class PolicyController(BaseController):
         # --- Policy-related information ---
         self.policy_observation_info = dict(cfg["policy_observation_info"])
         self.device = self._resolve_device(str(cfg["policy_device"]))
-        self.checkpoint_path = str(cfg["policy_checkpoint_path"])
+        self.checkpoint_path = cfg["policy_checkpoint_path"]
         self.decimation = int(cfg["policy_decimation"])
         self.agent = self._load_agent(self.checkpoint_path, self.device)
 

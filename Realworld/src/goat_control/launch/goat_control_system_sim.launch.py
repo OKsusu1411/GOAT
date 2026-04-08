@@ -102,8 +102,8 @@ def generate_launch_description():
 
     control_node = Node(
         package="goat_control",
-        executable="goat_control_node",
-        name="goat_control_node",
+        executable="controller_node",
+        name="controller_node",
         output="screen",
         parameters=[{
             "yaml_path": LaunchConfiguration("yaml_path"),

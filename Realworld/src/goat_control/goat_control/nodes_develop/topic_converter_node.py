@@ -8,7 +8,7 @@ from motor_interfaces.msg import ImuState
 
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
-class TopicConverter(Node):
+class TopicConverterNode(Node):
     """
     Virtual Topic Converter for HIL Test
 
@@ -25,6 +25,11 @@ class TopicConverter(Node):
     def __init__(self):
         super().__init__("topic_converter_node")
 
+        # Message
+        self.joint_msg = None
+        self.imu_msg = None
+        self.odom_msg = None
+
         # Subscriber
         self.sim_joint_state_subscriber = Subscriber(self, JointState, '/sim_joint_states', 10)
         self.sim_imu_state_subscriber = Subscriber(self, Imu, '/sim_imu', 10)
@@ -32,10 +37,10 @@ class TopicConverter(Node):
 
         # Publisher
         self.real_joint_state_publisher = self.create_publisher(JointState, '/joint_states', 10)
-        self.real_imu_state_publisher = self.ceate_publisher(ImuState, '/imu', 10)
+        self.real_imu_state_publisher = self.create_publisher(ImuState, '/imu', 10)
 
         # Syncronizer
-        self.time_sync = ApproximateTimeSynchronizer([self.sim_joint_state_subscriber, self.sim_imu_state_subscriber, self.sim_velocity_state_subscriber], 10, 0.001)
+        self.time_sync = ApproximateTimeSynchronizer([self.sim_joint_state_subscriber, self.sim_imu_state_subscriber, self.sim_velocity_state_subscriber], 10, 0.01)
         self.time_sync.registerCallback(self.sync_callback)
 
     def sync_callback(self, joint_msg, imu_msg, odom_msg):
@@ -68,8 +73,19 @@ class TopicConverter(Node):
         imu_msg.header.frame_id = 'imu'
         imu_msg.quat = self.imu_msg.orientation
         imu_msg.gyro = self.imu_msg.angular_velocity
-        imu_msg.mag  = self.imu_msg.magnetic_field
         imu_msg.vel  = self.odom_msg.twist.twist.linear
         # Publish
         self.real_joint_state_publisher.publish(joint_msg)
         self.real_imu_state_publisher.publish(imu_msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = TopicConverterNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()

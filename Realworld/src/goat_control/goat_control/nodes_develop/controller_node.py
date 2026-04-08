@@ -41,19 +41,19 @@ class ControllerNode(Node):
       5) Publish safe torque command
     """
     def __init__(self):
-        super().__init__("goat_control_node")
+        super().__init__("controller_node")
 
         # Parameters by Launch File
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
-        self.declare_parameter("checkpoint_path", None)
+        self.declare_parameter("checkpoint_path", "")
         self.declare_parameter("action_timeout_sec", 0.05)
 
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.checkpoint_path = None if self.get_parameter("checkpoint_path").value in (None, "") else self.get_parameter("checkpoint_path").value
+        self.checkpoint_path = self.get_parameter("checkpoint_path").value or None
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
 
         # Parameters by Yaml File
@@ -209,7 +209,8 @@ class ControllerNode(Node):
             return  # No sensor data yet -> skip
 
         # Mode switch detection
-        self._switch_mode(self.publish_mode)
+        if self.publish_mode is not None:
+            self._switch_mode(self.publish_mode)
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
