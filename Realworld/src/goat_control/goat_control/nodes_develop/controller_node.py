@@ -80,7 +80,7 @@ class ControllerNode(Node):
         self.time_sync.registerCallback(self.sync_callback)
 
         # Publisher
-        self.torque_command_publisher = self.create_publisher(Float32MultiArray, "/torque", 10)
+        self.torque_command_publisher = self.create_publisher(JointState, "/command", 10)
 
         # Buffer for observation, action
         self.buffers = LatestBuffers()
@@ -95,6 +95,11 @@ class ControllerNode(Node):
         # Timing
         self.num_joints = len(self.cfg["joint_names"])
         self.last_control_time = self.get_clock().now()
+
+        # Publish msg
+        self.q_ref = np.zeros(self.num_joints, dtype=np.float32)
+        self.v_ref = np.zeros(self.num_joints, dtype=np.float32)
+        self.tau_ref = np.zeros(self.num_joints, dtype=np.float32)
 
         # Control loop timer
         control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
@@ -216,9 +221,12 @@ class ControllerNode(Node):
         # Active controller execution
         if self.publish_mode == 'policy':
             raw_torque, q_ref, v_ref = self.policy_controller.compute(joint_msg, imu_msg, dt_sec)
+            self.q_ref[:] = q_ref
+            self.v_ref[-2:] = v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
             raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, imu_msg, dt_sec)
+            self.q_ref[:] = q_ref
 
         else:
             # None (wait) or unknown mode -> zero torque, skip safety/publish
@@ -238,10 +246,17 @@ class ControllerNode(Node):
         # Publish torque command
         self._publish_torque_command(safe_torque)
 
-    def _publish_torque_command(self, torque: np.ndarray) -> None:
+    def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish torque command to /torque topic."""
-        msg = Float32MultiArray()
-        msg.data = torque.astype(np.float32).tolist()
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = [
+            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
+            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
+        ]
+        msg.position = position.tolist()
+        msg.velocity = velocity.tolist()
+        msg.effort = torque.tolist()
         self.torque_command_publisher.publish(msg)
 
 

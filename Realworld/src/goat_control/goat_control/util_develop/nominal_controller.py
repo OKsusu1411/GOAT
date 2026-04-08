@@ -195,7 +195,10 @@ class NominalController(BaseController):
         self.base_q_curr = np.concatenate((np.zeros(3), self.base_quat_curr))        
         self.base_v_curr = np.concatenate((self.base_lin_v_curr, self.base_ang_v_curr))
         self.q_curr = np.concatenate((self.base_q_curr, self.joint_q_curr))
-        self.v_curr = np.concatenate((self.base_v_curr, self.joint_v_curr))   
+        self.v_curr = np.concatenate((self.base_v_curr, self.joint_v_curr))
+
+        # Computed torque
+        tau_cmd = np.zeros(self.num_joints, dtype=float)
 
         # Compute Dynamics matrix
         pin.computeAllTerms(self.model, self.data, self.q_curr, self.v_curr)
@@ -238,7 +241,7 @@ class NominalController(BaseController):
         tau_constrained_full = self.S_leg.T @ tau_constrained + self.S_wheel.T @ np.array([wheel_tau, -wheel_tau])
 
         # Index Mapping (Pin -> ROS)
-        tau_cmd = tau_constrained_full[self.pin_to_ros_ids]
+        tau_cmd[:] = tau_constrained_full[self.pin_to_ros_ids].reshape(-1)
 
         # Update tick
         self.count_tick += 1
