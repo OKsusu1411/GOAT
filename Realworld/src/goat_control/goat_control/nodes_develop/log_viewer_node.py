@@ -10,6 +10,9 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
 # TODO: 이거 마무리해야됨
+# TODO: gear 비 다시 되돌려서 logging
+# TODO: Ref position, vel 모두 logging
+# TODO: ApproximateTimeSynchronizer 이거 적용
 
 @dataclass
 class LatestLog:

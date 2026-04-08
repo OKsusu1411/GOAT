@@ -15,26 +15,26 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 from std_msgs.msg import Float32MultiArray
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
-from ..util_develop.nominal_controller import NominalController
-from ..util_develop.policy_controller import PolicyController
-from ..util_develop.safety_limiter import SafetyLimiter
+from goat_control.utils.controller.nominal_controller import NominalController
+from goat_control.utils.controller.policy_controller import PolicyController
+from goat_control.utils.controller.safety_limiter import SafetyLimiter
 
 @dataclass
 class LatestBuffers:
     """Thread-safe buffers for incoming messages."""
     joint_state_msg: Optional[JointState] = None
-    imu_msg: Optional[BaseStates] = None
+    imu_msg: Optional[ImuState] = None
 
 
 class ControllerNode(Node):
     """ROS2 control node: sensor reception -> controller selection -> torque publishing.
 
     Flow:
-      1) Receive JointState + BaseStates via time-synced subscribers
+      1) Receive JointState + ImuState via time-synced subscribers
       2) Keyboard selects active controller (policy / nominal)
       3) Active controller computes raw torque
       4) SafetyLimiter applies LPF + clipping + kill switch
@@ -75,7 +75,7 @@ class ControllerNode(Node):
 
         # Subscriber
         self.joint_state_subscriber = Subscriber(self, JointState, '/joint_states', 10)
-        self.imu_subscriber = Subscriber(self, BaseStates, '/imu', 10) # TODO: BaseStates ----> BaseState로 변경 (Topic명 일치) + 메시지 구성 논의
+        self.imu_subscriber = Subscriber(self, ImuState, '/imu', 10)
         self.time_sync = ApproximateTimeSynchronizer([self.joint_state_subscriber, self.imu_subscriber], 10, 0.01)
         self.time_sync.registerCallback(self.sync_callback)
 
@@ -161,7 +161,7 @@ class ControllerNode(Node):
     def joint_callback(self, msg: JointState):
         self.buffers.joint_state_msg = msg
 
-    def imu_callback(self, msg: BaseStates):
+    def imu_callback(self, msg: ImuState):
         self.buffers.imu_msg = msg
 
     def reset(self) -> None:

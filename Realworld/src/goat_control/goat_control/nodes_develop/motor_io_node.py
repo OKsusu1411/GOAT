@@ -10,8 +10,8 @@ import yaml
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 
-from goat_control.util_develop.motor import CanInterface, MotorDriver, MotorParams
-from goat_control.util_develop.motor.motor_manager import MotorStateManager
+from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
+from goat_control.utils.motor.motor_manager import MotorStateManager
 
 
 class MotorIONode(Node):

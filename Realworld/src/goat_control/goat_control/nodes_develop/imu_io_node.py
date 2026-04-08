@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 from motor_interfaces.msg import ImuState
 
-from Realworld.src.goat_control.goat_control.util_develop.imu.imu_manager import ImuSerialReader, ImuConfig     # TODO: utils로 변경
+from goat_control.utils.imu.imu_manager import ImuSerialReader, ImuConfig
 
 
 class IMUIONode(Node):

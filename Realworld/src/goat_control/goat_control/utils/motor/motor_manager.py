@@ -8,8 +8,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
-from goat_control.util_develop.motor.motor_driver import MotorDriver
-from goat_control.util_develop.motor.filters import FirstOrderLowPassFilter
+from goat_control.utils.motor.motor_driver import MotorDriver
+from goat_control.utils.motor.filters import FirstOrderLowPassFilter
 
 
 # Motor current resolution used previously:

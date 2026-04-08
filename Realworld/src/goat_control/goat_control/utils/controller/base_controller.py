@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import numpy as np
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 from sensor_msgs.msg import JointState
 
 
@@ -14,7 +14,7 @@ class BaseController(ABC):
         - compute() receives ROS2 sensor messages directly from the node callback
           and returns a raw torque command (num_joints,).
         - Each controller is responsible for extracting the fields it needs
-          from JointState and BaseStates internally.
+          from JointState and ImuState internally.
         - Raw torque must NOT have any safety filtering applied inside.
           SafetyLimiter is the sole owner of all post-computation safety checks.
         - reset() clears all internal state (integrators, session flags, etc.).
@@ -25,7 +25,7 @@ class BaseController(ABC):
     def compute(
         self,
         joint_state: JointState,
-        base_state: BaseStates,
+        base_state: ImuState,
         dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """Compute raw torque command for the current control cycle.
 

@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 import torch
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 from sensor_msgs.msg import JointState
 
 from .base_controller import BaseController
@@ -153,7 +153,7 @@ class PolicyController(BaseController):
 
     def compute(self,
                 joint_state: JointState,
-                base_state: BaseStates,
+                base_state: ImuState,
                 dt_sec: float,) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """Compute raw torque: PD on legs + PI on wheels."""
         # Data processing
