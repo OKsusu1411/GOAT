@@ -75,6 +75,9 @@ class PolicyController(BaseController):
         self._delta_pos = np.zeros(self.num_joints, dtype=float)
         self._wheel_speed_ref = np.zeros(self.num_joints, dtype=float)
 
+        # --- Count for decimation processing ---
+        self.decimation_count = 0
+
 
     # ------------------------------------------------------------------
     # Initialization Functions
@@ -117,6 +120,7 @@ class PolicyController(BaseController):
         self._integrator[:] = 0.0
         self._delta_pos[:] = 0.0
         self._wheel_speed_ref[:] = 0.0
+        self.decimation_count = 0
 
     def set_targets(self, 
                     base_lin_vel: np.ndarray,
@@ -165,8 +169,9 @@ class PolicyController(BaseController):
         if self.agent is None:
             return tau_cmd
         
-        # --- Reference Generation ---
-        self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
+        # --- Reference Generation (decimation) ---
+        if self.decimation_count % self.decimation == 0:
+            self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
 
         # --- Leg PD ---
         target_pos = self._natural_pos + self._delta_pos
@@ -176,7 +181,7 @@ class PolicyController(BaseController):
         for idx in self._joint_indices:
             tau_cmd[idx] = self._kp[idx] * pos_err[idx] + self._kd[idx] * vel_err[idx]
 
-        # --- Wheel PI --- TODO: Policy쪽 PI 제어기 계속 쓸건지 논의
+        # --- Wheel PI --- TODO: Policy의 바퀴 제어에 PI 제어기 계속 쓸건지 논의
         speed_err = self._wheel_speed_ref - joint_vel
 
         for idx in self._wheel_indices:
@@ -199,16 +204,15 @@ class PolicyController(BaseController):
             # further into saturation, freeze the integrator.
             tau_limit = self.wheel_tau_limit
             if abs(candidate_output) > tau_limit:
-                pushing_further = (
-                    (candidate_output > tau_limit and err > 0.0)
-                    or (candidate_output < -tau_limit and err < 0.0)
-                )
+                pushing_further = ((candidate_output > tau_limit and err > 0.0) or 
+                                   (candidate_output < -tau_limit and err < 0.0))
                 if pushing_further:
                     candidate_integrator = self._integrator[idx]
 
             self._integrator[idx] = candidate_integrator
-            tau_cmd[idx] = (
-                p_term + self._ki_wheel[idx] * self._integrator[idx]
-            )
+            tau_cmd[idx] = (p_term + self._ki_wheel[idx] * self._integrator[idx])
+
+            # Update decimation step
+            self.decimation_count += 1
 
         return tau_cmd, target_pos.copy(), self._wheel_speed_ref.copy()
