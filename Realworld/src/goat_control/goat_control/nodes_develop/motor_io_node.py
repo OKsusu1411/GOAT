@@ -88,7 +88,7 @@ class MotorIONode(Node):
         
         # ROS pubs/subs
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
-        self.torque_sub = self.create_subscription(JointState, "/joint_commands", self._on_command, 10)
+        self.torque_sub = self.create_subscription(JointState, "/commands", self._on_command, 10)
 
         # IO loop
         period_sec = 1.0 / max(io_rate_hz, 1.0)
