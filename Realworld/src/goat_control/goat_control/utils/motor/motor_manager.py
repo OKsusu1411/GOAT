@@ -162,7 +162,7 @@ class MotorStateManager:
         self.angle_deg_per_lsb = self.cfg["angle_deg_per_lsb"]
         self.joint_names = self.cfg["joint_names"]
         joint_offsets = self.cfg["joint_offsets"]
-        self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten
+        self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten()
 
         mapped: List[int] = []
         if self.cfg["joint_indices"]:
