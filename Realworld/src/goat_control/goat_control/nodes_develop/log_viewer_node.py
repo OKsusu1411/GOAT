@@ -9,9 +9,7 @@ import rclpy
 import yaml
 from rclpy.node import Node
 from message_filters import Subscriber, ApproximateTimeSynchronizer
-from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
-# TODO: gear 비 다시 되돌려서 logging
 
 @dataclass
 class LatestLog:
@@ -58,6 +56,7 @@ class LogViewerNode(Node):
         self.num_joints = self.cfg.get("num_joints")
         self.joint_names = self.cfg.get("joint_names")
         self.wheel_indices = self.cfg.get("wheel_indices")
+        self.gear_ratio = self.cfg.get("motor_gear_ratio")
 
         self.joint_current: Optional[JointState] = None
         self.joint_ref: Optional[JointState] = None
@@ -115,6 +114,14 @@ class LogViewerNode(Node):
         joint_effort_ref = self.joint_ref.effort
         joint_effort_current = self.joint_current.effort
 
+        # Gear ratio
+        motor_pos_current = joint_pos_current * self.gear_ratio
+        motor_vel_current = joint_vel_current * self.gear_ratio
+        motor_effort_current = joint_effort_current * self.gear_ratio
+        motor_pos_ref = joint_pos_ref * self.gear_ratio
+        motor_vel_ref = joint_vel_ref * self.gear_ratio
+        motor_effort_ref = joint_effort_ref * self.gear_ratio
+
         # Print rows (batch: all joints in ONE log block)
         header_str = (
             f"{'ID':>3}  {'NAME':<12}  "
@@ -127,14 +134,14 @@ class LogViewerNode(Node):
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
-            # Integrate data
+            # Integrate data (all data is !!motor!! based)
             lines.append(
                 f"{joint_index:>3}  {name[:12]:<12}  "
-                f"{float(joint_pos_current[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
-                f"{float(joint_vel_current[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
-                f"{float(joint_effort_ref[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
-                f"{float(joint_pos_ref[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
-                f"{float(joint_vel_ref[joint_index]):>9.{self.precision}f} {velocity_unit:<5}"
+                f"{float(motor_pos_current[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
+                f"{float(motor_vel_current[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
+                f"{float(motor_effort_ref[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
+                f"{float(motor_pos_ref[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
+                f"{float(motor_vel_ref[joint_index]):>9.{self.precision}f} {velocity_unit:<5}"
             )
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
