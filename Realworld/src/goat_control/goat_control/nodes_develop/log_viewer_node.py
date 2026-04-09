@@ -53,10 +53,10 @@ class LogViewerNode(Node):
         self.precision = int(self.get_parameter("precision").value)
         
         # YAML parameters
-        self.num_joints = self.cfg.get("num_joints")
-        self.joint_names = self.cfg.get("joint_names")
-        self.wheel_indices = self.cfg.get("wheel_indices")
-        self.gear_ratio = self.cfg.get("motor_gear_ratio")
+        self.num_joints = self.cfg["num_joints"]
+        self.joint_names = self.cfg["joint_names"]
+        self.wheel_indices = self.cfg["wheel_indices"]
+        self.gear_ratio = self.cfg["motor_gear_ratio"]
 
         self.joint_current: Optional[JointState] = None
         self.joint_ref: Optional[JointState] = None

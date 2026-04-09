@@ -119,7 +119,7 @@ def generate_launch_description():
         control_rate_arg,
         imu_port_arg,
         imu_baudrate_arg,
-        # imu_io_node,
+        imu_io_node,
         # controller_node,
         motor_io_node,
     ])
