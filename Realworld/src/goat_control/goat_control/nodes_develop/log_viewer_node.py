@@ -92,8 +92,11 @@ class LogViewerNode(Node):
 
     def _tick(self) -> None:
         # No subscription
-        if self.joint_current is None or self.joint_ref is None:
+        if self.joint_current is None:
             return
+        
+        if self.joint_ref is None:
+            self.joint_ref = self.joint_current
 
         # Decode JointState msg
         if self.print_degrees:
