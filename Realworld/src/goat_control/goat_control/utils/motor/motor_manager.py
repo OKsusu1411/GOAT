@@ -335,9 +335,9 @@ class MotorStateManager:
             raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
 
             # Encoder fail safe logic
-            if raw_multi != 0:
-                motor_angle_deg = raw_multi * self.angle_deg_per_lsb
-            elif raw_single != 0:
+            # if raw_multi != 0:
+            #     motor_angle_deg = raw_multi * self.angle_deg_per_lsb
+            if raw_single != 0:
                 motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else:
                 motor_angle_deg = 0.0
