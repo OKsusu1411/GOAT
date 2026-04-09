@@ -128,7 +128,7 @@ class NominalController(BaseController):
         self.wheel_outer_Kd = self.cfg.get("nsc_wheel_outer_derivative_gain")  
         self.wheel_inner_Kp = self.cfg.get("nsc_wheel_inner_proportional_gain")  
         self.wheel_inner_Kd = self.cfg.get("nsc_wheel_inner_derivative_gain")
-        self.theta_cmd_limit = self.cfg.get("nsc_theta_cmd_limit")  
+        self.theta_cmd_limit = math.radians(self.cfg.get("nsc_theta_cmd_limit"))  
         self.num_traj_points = self.cfg.get("nsc_num_traj_points")
         self.q_target = np.asarray(self.cfg.get("natural_joint_position"))[self.ros_to_pin_ids]  # Final target joint position
 
@@ -225,8 +225,8 @@ class NominalController(BaseController):
         ## ============= Joint control ================ ##
 
         # Update reference
-        self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
-        # self.q_ref[7:] = np.array(TARGET_JOINT_ANGLE)
+        # self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
+        self.q_ref[7:] = self.q_target
 
         # Error Feedback for desired generalized acceleration
         q_err = self.q_ref[7:] - self.q_curr[7:]
@@ -248,7 +248,7 @@ class NominalController(BaseController):
         tau_constrained_full = self.S_leg.T @ tau_constrained + self.S_wheel.T @ np.array([wheel_tau, -wheel_tau])
 
         # Index Mapping (Pin -> ROS)
-        tau_cmd[:] = tau_constrained_full[self.pin_to_ros_ids]
+        tau_cmd[:] = tau_constrained_full[6:][self.pin_to_ros_ids]
 
         # Update tick
         self.count_tick += 1

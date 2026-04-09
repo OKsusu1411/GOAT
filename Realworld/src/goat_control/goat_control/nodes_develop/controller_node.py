@@ -99,7 +99,7 @@ class ControllerNode(Node):
         self.logger.info("'q': Quit")
         self.logger.info("===========================================\r")
 
-        # NOTE: 이전 버전 코드와 달라진 점 : Launch file로 한번에 운용하기 때문에, 키보드 입력을 받기 위해선 추가 설정이 필요함
+        # NOTE: 이전 버전 코드와 달라진 점 : Launch file로 한번에 운용하기 때문에, 키보드 입력을 받기 위해선 터미널 추가 설정이 필요함
         self.tty = open("/dev/tty", "rb+", buffering=0)
         self.settings = termios.tcgetattr(self.tty.fileno())
         self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
@@ -246,7 +246,7 @@ class ControllerNode(Node):
 
         # Block handling (latching kill switch)
         if is_blocked:
-            self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.")
+            self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.\r")
             self.control_timer.cancel()
             safe_torque = np.zeros(self.num_joints)
         tau[:] = safe_torque
@@ -255,7 +255,7 @@ class ControllerNode(Node):
         self._publish_torque_command(q_ref, v_ref, tau)
 
     def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
-        """Publish torque command to /torque topic."""
+        """Publish torque command to /commands topic."""
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = [
