@@ -23,11 +23,11 @@ def generate_launch_description():
         "WF_GOAT.urdf",
     ])
 
-    default_ckeckpoint_path = PathJoinSubstitution([
-        FindPackageShare("goat_control"),
-        "checkpoint",
-        "?",                    # TODO: fill it out
-    ])
+    # default_ckeckpoint_path = PathJoinSubstitution([
+    #     FindPackageShare("goat_control"),
+    #     "checkpoint",
+    #     "?",                    # TODO: fill it out
+    # ])
 
     # Arguments
     yaml_path_arg = DeclareLaunchArgument(
@@ -40,11 +40,11 @@ def generate_launch_description():
         default_value=default_urdf_path,
         description="Path to goat URDF (default: package share/urdf/WF_GOAT.urdf).",
     )
-    checkpoint_path_arg = DeclareLaunchArgument(
-        "checkpoint_path",
-        default_value=default_ckeckpoint_path,
-        description="Path to goat policy checkpoint (default: package share/checkpoint/).",
-    )
+    # checkpoint_path_arg = DeclareLaunchArgument(
+    #     "checkpoint_path",
+    #     default_value=default_ckeckpoint_path,
+    #     description="Path to goat policy checkpoint (default: package share/checkpoint/).",
+    # )
     can_channel_arg = DeclareLaunchArgument(
         "can_channel",
         default_value="can0",
@@ -93,7 +93,7 @@ def generate_launch_description():
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
             "yaml_path": LaunchConfiguration("yaml_path"),
             "urdf_path": LaunchConfiguration("urdf_path"),
-            "checkpoint_path": LaunchConfiguration("checkpoint_path"),
+            # "checkpoint_path": LaunchConfiguration("checkpoint_path"),
         }],
     )
 
@@ -113,7 +113,7 @@ def generate_launch_description():
     return LaunchDescription([
         yaml_path_arg,
         urdf_path_arg,
-        checkpoint_path_arg,
+        # checkpoint_path_arg,
         can_channel_arg,
         can_interface_arg,
         control_rate_arg,
