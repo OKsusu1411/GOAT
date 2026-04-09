@@ -97,7 +97,7 @@ class MotorIONode(Node):
 
         self.get_logger().info(
             "MotorIONode started. Owns CAN (read+write). "
-            f"Publishing '/joint_states', subscribing '/joint_commands'."
+            f"Publishing '/joint_states', subscribing '/commands'."
         )
 
     def _on_command(self, msg: JointState) -> None:
