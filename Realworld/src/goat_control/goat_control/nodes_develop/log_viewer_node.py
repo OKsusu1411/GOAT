@@ -56,7 +56,7 @@ class LogViewerNode(Node):
         self.num_joints = self.cfg["num_joints"]
         self.joint_names = self.cfg["joint_names"]
         self.wheel_indices = self.cfg["wheel_indices"]
-        self.gear_ratio = self.cfg["motor_gear_ratio"]
+        self.gear_ratio = np.array(self.cfg["motor_gear_ratio"], dtype=float)
 
         self.joint_current: Optional[JointState] = None
         self.joint_ref: Optional[JointState] = None
@@ -107,15 +107,15 @@ class LogViewerNode(Node):
             position_unit = "deg"
             velocity_unit = "deg/s"
         else:
-            joint_pos_current = self.joint_current.position
-            joint_vel_current = self.joint_current.velocity
-            joint_pos_ref = self.joint_ref.position
-            joint_vel_ref = self.joint_ref.velocity
+            joint_pos_current = np.array(self.joint_current.position, dtype=float)
+            joint_vel_current = np.array(self.joint_current.velocity, dtype=float)
+            joint_pos_ref = np.array(self.joint_ref.position, dtype=float)
+            joint_vel_ref = np.array(self.joint_ref.velocity, dtype=float)
             position_unit = "rad"
             velocity_unit = "rad/s"
 
-        joint_effort_ref = self.joint_ref.effort
-        joint_effort_current = self.joint_current.effort
+        joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
+        joint_effort_current = np.array(self.joint_current.effort, dtype=float)
 
         # Gear ratio
         motor_pos_current = joint_pos_current * self.gear_ratio
