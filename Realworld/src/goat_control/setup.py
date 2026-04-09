@@ -48,7 +48,6 @@ setup(
             'plot_node = goat_control.nodes.plot_node:main',
             'calibration_node = goat_control.nodes.calibration_node:main',
             'nsc_tester_node = goat_control.nodes.nsc_tester_node:main',
-
             'calibration_node = goat_control.nodes_develop.calibration_node:main',
             'controller_node = goat_control.nodes_develop.controller_node:main',
             'imu_io_node = goat_control.nodes_develop.imu_io_node:main',
