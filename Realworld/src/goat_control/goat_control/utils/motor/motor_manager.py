@@ -347,7 +347,7 @@ class MotorStateManager:
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
             
             # Apply joint position offset
-            joint_position_rad = np.array(joint_position_rad) + np.asarray(self.joint_offsets, dtype=float)
+            joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
 
             # Convert motor velocity into joint velocity
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]

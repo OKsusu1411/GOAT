@@ -32,6 +32,12 @@ class CalibrationNode(Node):
             ImuState, "/imu", self._on_imu_msg, 10
         )
 
+        # YAML file
+        with open(self.yaml_path, 'r', encoding='utf-8') as file_handle:
+            self.cfg = yaml.safe_load(file_handle)
+
+        self.old_offsets = self.cfg["joint_offsets"]
+
         # Data buffers
         self.latest_joint_state = None
         self.latest_imu_state = None
@@ -136,6 +142,7 @@ class CalibrationNode(Node):
             
             # 1. Store current positions
             current_pos = np.array(self.latest_joint_state.position, dtype=float)
+            current_pos += self.old_offsets                                         # Restore original position
             position_samples.append(current_pos)
             
             # Wait for next update
