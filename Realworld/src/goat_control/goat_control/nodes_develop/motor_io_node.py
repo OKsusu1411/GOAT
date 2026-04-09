@@ -52,7 +52,8 @@ class MotorIONode(Node):
         self.can_tx_timeout_sec = float(self.get_parameter("can_tx_timeout_sec").value)
 
         # YAML file
-        self.cfg = yaml.safe_load(yaml_path)
+        with open(yaml_path, 'r', encoding='utf-8') as file_handle:
+            self.cfg = yaml.safe_load(file_handle)
         self.num_joints = self.cfg["num_joints"]
         self.joint_names = self.cfg["joint_names"]
 
