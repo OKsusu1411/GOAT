@@ -23,6 +23,12 @@ def generate_launch_description():
         "WF_GOAT.urdf",
     ])
 
+    default_ckeckpoint_path = PathJoinSubstitution([
+        FindPackageShare("goat_control"),
+        "checkpoint",
+        "?",                    # TODO: fill it out
+    ])
+
     # Arguments
     yaml_path_arg = DeclareLaunchArgument(
         "yaml_path",
@@ -33,6 +39,11 @@ def generate_launch_description():
         "urdf_path",
         default_value=default_urdf_path,
         description="Path to goat URDF (default: package share/urdf/WF_GOAT.urdf).",
+    )
+    command_unit_arg = DeclareLaunchArgument(
+        "checkpoint_path",
+        default_value=default_ckeckpoint_path,
+        description="Path to goat policy checkpoint (default: package share/checkpoint/).",
     )
     can_channel_arg = DeclareLaunchArgument(
         "can_channel",
@@ -53,11 +64,6 @@ def generate_launch_description():
         "estimation_rate_hz",
         default_value="200.0",
         description="Estimation loop rate for StateEstimationNode.",
-    )
-    command_unit_arg = DeclareLaunchArgument(
-        "command_unit",
-        default_value="torque_nm",
-        description="Command unit for motors: 'torque_nm' or 'amp'.",
     )
     launch_log_viewer_arg = DeclareLaunchArgument(
         "launch_log_viewer",
@@ -82,70 +88,29 @@ def generate_launch_description():
 
 
     # Nodes
-    state_estimation_node = Node(
+    imu_io_node = Node(
         package="goat_control",
-        executable="state_estimation_node",
-        name="state_estimation_node",
+        executable="imu_io_node",
+        name="imu_io_node",
         output="screen",
         parameters=[{
-            "can_channel": LaunchConfiguration("can_channel"),
-            "can_interface": LaunchConfiguration("can_interface"),
-            "estimation_rate_hz": LaunchConfiguration("estimation_rate_hz"),
             "imu_port": LaunchConfiguration("imu_port"),
             "imu_baudrate": LaunchConfiguration("imu_baudrate"),
-            "yaml_path": LaunchConfiguration("yaml_path"),
         }],
     )
 
-    control_node = Node(
+    controller_node = Node(
         package="goat_control",
-        executable="goat_control_node",
-        name="goat_control_node",
+        executable="controller_node",
+        name="controller_node",
         output="screen",
         parameters=[{
+            "control_rate_hz": LaunchConfiguration("control_rate_hz"),
             "yaml_path": LaunchConfiguration("yaml_path"),
             "urdf_path": LaunchConfiguration("urdf_path"),
-            "control_rate_hz": LaunchConfiguration("control_rate_hz"),
-            "command_unit": LaunchConfiguration("command_unit"),
+            "checkpoint_path": LaunchConfiguration("checkpoint_path"),
         }],
     )
-
-    # agent_node = Node(
-    #     package="goat_control",
-    #     executable="agent_node",
-    #     name="agent_node",
-    #     output="screen",
-    #     parameters=[{
-    #     }],
-    # )
-
-    # log_viewer_node = Node(
-    #     package="goat_control",
-    #     executable="log_viewer_node",
-    #     name="log_viewer_node",
-    #     output="screen",
-    #     condition=IfCondition(LaunchConfiguration("launch_log_viewer")),
-    #     parameters=[{
-    #         "log_topic": "goat/torque_log",
-    #         "joint_state_topic": "joint_states",
-    #         "use_joint_state_names": True,
-    #         "print_rate_hz": LaunchConfiguration("print_rate_hz"),
-    #         "command_unit": LaunchConfiguration("command_unit"),
-    #         "print_degrees": True,
-    #     }],
-    # )
-
-    # motor_command_node = Node(
-    #     package="goat_control",
-    #     executable="motor_command_node",
-    #     name="motor_command_node",
-    #     output="screen",
-    #     parameters=[{
-    #         "can_channel": LaunchConfiguration("can_channel"),
-    #         "can_interface": LaunchConfiguration("can_interface"),
-    #         "yaml_path": LaunchConfiguration("yaml_path"),
-    #     }],
-    # )
 
     motor_io_node = Node(
         package="goat_control",
@@ -172,10 +137,7 @@ def generate_launch_description():
         print_rate_arg,
         imu_port_arg,
         imu_baudrate_arg,
-        state_estimation_node,
-        control_node,
-        # policy_node,
-        # log_viewer_node,
+        imu_io_node,
+        controller_node,
         motor_io_node,
-        # motor_command_node,
     ])
