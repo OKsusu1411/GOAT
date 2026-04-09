@@ -154,8 +154,8 @@ class MotorStateManager:
 
         # YAML cfg
         self.cfg = cfg
-        joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
-        joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
+        # joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
+        # joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
         self.motor_gear_ratio = self.cfg["motor_gear_ratio"]
         self.motor_direction = self.cfg["motor_direction"]
         self.motor_torque_constant_nm_per_amp = self.cfg["motor_torque_constant_nm_per_amp"]
@@ -173,17 +173,17 @@ class MotorStateManager:
         self.motor_index_for_joint: List[int] | None = mapped if mapped else None
         
 
-        self.joint_velocity_low_pass_filter = (
-            FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
-            if joint_velocity_lpf_alpha is not None
-            else None
-        )
+        # self.joint_velocity_low_pass_filter = (
+        #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
+        #     if joint_velocity_lpf_alpha is not None
+        #     else None
+        # )
 
-        self.joint_effort_like_low_pass_filter = (
-            FirstOrderLowPassFilter(alpha=joint_effort_like_lpf_alpha)
-            if joint_effort_like_lpf_alpha is not None
-            else None
-        )
+        # self.joint_effort_like_low_pass_filter = (
+        #     FirstOrderLowPassFilter(alpha=joint_effort_like_lpf_alpha)
+        #     if joint_effort_like_lpf_alpha is not None
+        #     else None
+        # )
 
     def torque_to_current(self, torque_cmd:np.ndarray) -> np.ndarray:
         # Convert torque into current
@@ -358,11 +358,11 @@ class MotorStateManager:
             motor_current_amp = self.motor_phase_current_amp[motor_i]
             joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
 
-        # Optional filtering
-        if self.joint_velocity_low_pass_filter is not None:
-            joint_velocity_rad_per_sec = self.joint_velocity_low_pass_filter.apply(joint_velocity_rad_per_sec)  # type: ignore[assignment]
-        if self.joint_effort_like_low_pass_filter is not None:
-            joint_effort_like = self.joint_effort_like_low_pass_filter.apply(joint_effort_like)  # type: ignore[assignment]
+        # # Optional filtering
+        # if self.joint_velocity_low_pass_filter is not None:
+        #     joint_velocity_rad_per_sec = self.joint_velocity_low_pass_filter.apply(joint_velocity_rad_per_sec)  # type: ignore[assignment]
+        # if self.joint_effort_like_low_pass_filter is not None:
+        #     joint_effort_like = self.joint_effort_like_low_pass_filter.apply(joint_effort_like)  # type: ignore[assignment]
 
         return MotorStatesData(
             joint_names=self.joint_names,
