@@ -53,8 +53,8 @@ class MotorIONode(Node):
 
         # YAML file
         self.cfg = yaml.safe_load(yaml_path)
-        self.num_joints = self.cfg.get("num_joints")
-        self.joint_names = self.cfg.get("joint_names")
+        self.num_joints = self.cfg["num_joints"]
+        self.joint_names = self.cfg["joint_names"]
 
         # CAN (single owner)
         self.can = CanInterface(channel=can_channel, interface=can_interface)

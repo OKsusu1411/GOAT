@@ -154,21 +154,21 @@ class MotorStateManager:
 
         # YAML cfg
         self.cfg = cfg
-        joint_velocity_lpf_alpha = self.cfg.get("joint_velocity_lpf_alpha", None)
-        joint_effort_like_lpf_alpha = self.cfg.get("joint_effort_like_lpf_alpha", None)
-        self.motor_gear_ratio = self.cfg.get("motor_gear_ratio")
-        self.motor_direction = self.cfg.get("motor_direction")
-        self.motor_torque_constant_nm_per_amp = self.cfg.get("motor_torque_constant_nm_per_amp")
-        self.angle_deg_per_lsb = self.cfg.get("angle_deg_per_lsb", None)
-        self.joint_names = self.cfg.get("joint_names", None)
-        joint_offsets = self.cfg.get("joint_offsets")
+        joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
+        joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
+        self.motor_gear_ratio = self.cfg["motor_gear_ratio"]
+        self.motor_direction = self.cfg["motor_direction"]
+        self.motor_torque_constant_nm_per_amp = self.cfg["motor_torque_constant_nm_per_amp"]
+        self.angle_deg_per_lsb = self.cfg["angle_deg_per_lsb"]
+        self.joint_names = self.cfg["joint_names"]
+        joint_offsets = self.cfg["joint_offsets"]
         self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten
 
         mapped: List[int] = []
-        if self.cfg.get("joint_indices"):
-            mapped.extend(list(self.cfg.get("joint_indices")))
-        if self.cfg.get("wheel_indices"):
-            mapped.extend(list(self.cfg.get("wheel_indices")))
+        if self.cfg["joint_indices"]:
+            mapped.extend(list(self.cfg["joint_indices"]))
+        if self.cfg["wheel_indices"]:
+            mapped.extend(list(self.cfg["wheel_indices"]))
 
         self.motor_index_for_joint: List[int] | None = mapped if mapped else None
         
