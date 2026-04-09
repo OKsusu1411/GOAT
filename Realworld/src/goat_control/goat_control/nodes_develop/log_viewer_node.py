@@ -64,12 +64,12 @@ class LogViewerNode(Node):
         self.command_unit = "Nm"
 
         # Subscribers
-        # self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
-        # self.create_subscription(JointState, "/joint_states", self._on_joint_state, 10)
-        self.command_subscriber = Subscriber(self, JointState, "/commands", 10)
-        self.state_subscriber = Subscriber(self, JointState, "/joint_states", 10)
-        self.time_sync = ApproximateTimeSynchronizer([self.command_subscriber, self.state_subscriber], 10, 0.01)
-        self.time_sync.registerCallback(self._sync_callback)
+        self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
+        self.create_subscription(JointState, "/joint_states", self._on_joint_state, 10)
+        # self.command_subscriber = Subscriber(self, JointState, "/commands", 10)
+        # self.state_subscriber = Subscriber(self, JointState, "/joint_states", 10)
+        # self.time_sync = ApproximateTimeSynchronizer([self.command_subscriber, self.state_subscriber], 10, 0.01)
+        # self.time_sync.registerCallback(self._sync_callback)
 
         # Timer (rate-limit printing)
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
