@@ -7,20 +7,20 @@ from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from motor_interfaces.msg import BaseStates
+from motor_interfaces.msg import ImuState
 
 
 class ImuTfPublisher(Node):
     """
     Transform custom imu msg type into Rviz imu msg type and publish.
 
-    Subscribe: /imu_data (motor_interfaces/msg/BaseStates)
+    Subscribe: /imu_data (motor_interfaces/msg/ImuState)
     Publish TF: odom -> base_link (rotation = imu quat)
     """
     def __init__(self):
         super().__init__("imu_tf_publisher")
 
-        self.declare_parameter("imu_topic", "/goat/imu_data")
+        self.declare_parameter("imu_topic", "/imu")
         self.declare_parameter("parent_frame", "odom")
         self.declare_parameter("child_frame", "base_link")
         self.declare_parameter("use_translation_zero", True)
@@ -35,12 +35,12 @@ class ImuTfPublisher(Node):
             depth=10
         )
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.sub = self.create_subscription(BaseStates, imu_topic, self.cb, qos_profile)
+        self.sub = self.create_subscription(ImuState, imu_topic, self.cb, qos_profile)
 
         self.get_logger().info(
             f"Listening {imu_topic}, publishing TF {self.parent_frame} -> {self.child_frame}")
 
-    def cb(self, msg: BaseStates):
+    def cb(self, msg: ImuState):
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = self.parent_frame
