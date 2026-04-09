@@ -40,7 +40,7 @@ def generate_launch_description():
         default_value=default_urdf_path,
         description="Path to goat URDF (default: package share/urdf/WF_GOAT.urdf).",
     )
-    command_unit_arg = DeclareLaunchArgument(
+    checkpoint_path_arg = DeclareLaunchArgument(
         "checkpoint_path",
         default_value=default_ckeckpoint_path,
         description="Path to goat policy checkpoint (default: package share/checkpoint/).",
@@ -59,21 +59,6 @@ def generate_launch_description():
         "control_rate_hz",
         default_value="200.0",
         description="Control loop rate for GoatControlNode.",
-    )
-    estimation_rate_arg = DeclareLaunchArgument(
-        "estimation_rate_hz",
-        default_value="200.0",
-        description="Estimation loop rate for StateEstimationNode.",
-    )
-    launch_log_viewer_arg = DeclareLaunchArgument(
-        "launch_log_viewer",
-        default_value="false",
-        description="If true, launch log_viewer_node.",
-    )
-    print_rate_arg = DeclareLaunchArgument(
-        "print_rate_hz",
-        default_value="100.0",
-        description="Print rate for log viewer.",
     )
     imu_port_arg = DeclareLaunchArgument(
         "imu_port",
@@ -128,16 +113,14 @@ def generate_launch_description():
     return LaunchDescription([
         yaml_path_arg,
         urdf_path_arg,
+        checkpoint_path_arg,
         can_channel_arg,
         can_interface_arg,
         control_rate_arg,
-        estimation_rate_arg,
-        command_unit_arg,
-        launch_log_viewer_arg,
-        print_rate_arg,
         imu_port_arg,
         imu_baudrate_arg,
-        imu_io_node,
-        controller_node,
+
+        # imu_io_node,
+        # controller_node,
         motor_io_node,
     ])
