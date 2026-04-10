@@ -108,8 +108,8 @@ class SafetyLimiter:
         """
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
-            # self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
-            self._is_blocked = self._check_joint_vel_estop(joint_vel)
+            self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
+            # self._is_blocked = self._check_joint_vel_estop(joint_vel)
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
