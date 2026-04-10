@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Any
 
 import numpy as np
 import torch
@@ -26,7 +26,8 @@ class PolicyController(BaseController):
         integrator_state_limit
     """
 
-    def __init__(self, cfg: dict) -> None:
+    def __init__(self, cfg: dict, logger: Any | None) -> None:
+        self.logger = logger
         self.num_joints: int = len(cfg["joint_names"])
         self._joint_indices: List[int] = list(cfg["joint_indices"])
         self._wheel_indices: List[int] = list(cfg["wheel_indices"])
@@ -49,7 +50,7 @@ class PolicyController(BaseController):
         # --- Policy-related information ---
         self.policy_observation_info = dict(cfg["policy_observation_info"])
         self.device = self._resolve_device(str(cfg["policy_device"]))
-        self.checkpoint_path = str(cfg["policy_checkpoint_path"])
+        self.checkpoint_path = cfg["policy_checkpoint_path"]
         self.decimation = int(cfg["policy_decimation"])
         self.agent = self._load_agent(self.checkpoint_path, self.device)
 
@@ -87,27 +88,27 @@ class PolicyController(BaseController):
         try:
             device = torch.device(device_name)
         except Exception:
-            print(f"[PolicyController] Invalid torch_device '{device_name}'. Falling back to CPU.")
+            self.logger.info(f"[PolicyController] Invalid torch_device '{device_name}'. Falling back to CPU.")
             return torch.device("cpu")
 
         if device.type == "cuda" and not torch.cuda.is_available():
-            print(f"[Policy Controller] CUDA requested for torch_device but unavailable. Falling back to CPU.")
+            self.logger.info(f"[Policy Controller] CUDA requested for torch_device but unavailable. Falling back to CPU.")
             return torch.device("cpu")
 
         return device
 
     def _load_agent(self, checkpoint_path: str, device: torch.device):
         if not checkpoint_path:
-            print(f"[Policy Controller] No policy checkpoint provided; publishing zero actions.")
+            self.logger.info(f"[Policy Controller] No policy checkpoint provided; publishing zero actions.")
             return None
 
         try:
             model = torch.jit.load(checkpoint_path, map_location=device)
             model.eval()
-            print(f"[Policy Controller] Loaded policy checkpoint from '{checkpoint_path}' on {device}.")
+            self.logger.info(f"[Policy Controller] Loaded policy checkpoint from '{checkpoint_path}' on {device}.")
             return model
         except Exception as exc:
-            print(f"[Policy Controller] Failed to load policy checkpoint '{checkpoint_path}': {exc}")
+            self.logger.info(f"[Policy Controller] Failed to load policy checkpoint '{checkpoint_path}': {exc}")
             return None
 
 

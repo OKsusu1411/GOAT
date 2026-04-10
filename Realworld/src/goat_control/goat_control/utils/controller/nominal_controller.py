@@ -2,14 +2,32 @@ import numpy as np
 import pinocchio as pin
 import math
 
+from typing import Any
+
 from .base_controller import BaseController
 
 from motor_interfaces.msg import ImuState
 from sensor_msgs.msg import JointState
 
 class NominalController(BaseController):
-    def __init__(self, cfg:dict):
-        
+    """PD (legs) + PI (wheels) torque controller driven by policy actions.
+
+    Action space (set via set_targets()):
+        delta_pos:    Delta joint position [rad], shape (num_joints,).
+                      Added to natural_joint_position to form the PD reference.
+        wheel_speed:  Desired wheel speed [rad/s], shape (num_joints,).
+                      PI controller tracks this on wheel_indices only.
+
+    YAML keys consumed:
+        joint_names, joint_indices, wheel_indices, natural_joint_position,
+        policy_leg_proportional_gain, policy_leg_derivative_gain,
+        policy_wheel_proportional_gain, policy_wheel_integral_gain,
+        integrator_state_limit
+    """
+    def __init__(self, cfg:dict, logger: Any | None):
+        # Logger
+        self.logger = logger
+
         # Config
         self.cfg = cfg
         self.urdf_path = self.cfg.get("nsc_urdf_path", None)
@@ -22,16 +40,6 @@ class NominalController(BaseController):
         self.data = self.model.createData()
 
         # ========== Pinocchio Name Index ========== #
-        print("[Nominal Controller] Model Names:")
-        for i, name in enumerate(self.model.names):
-            print(i, name)
-
-        print("\nidx_qs:", self.model.idx_qs)
-        print("idx_vs:", self.model.idx_vs)
-
-        print("\nJoint list:")
-        for i, j in enumerate(self.model.joints):
-            print(i, j)
 
         # model.names:
             # universe
@@ -120,7 +128,7 @@ class NominalController(BaseController):
         self.wheel_outer_Kd = self.cfg.get("nsc_wheel_outer_derivative_gain")  
         self.wheel_inner_Kp = self.cfg.get("nsc_wheel_inner_proportional_gain")  
         self.wheel_inner_Kd = self.cfg.get("nsc_wheel_inner_derivative_gain")
-        self.theta_cmd_limit = self.cfg.get("nsc_theta_cmd_limit")  
+        self.theta_cmd_limit = math.radians(self.cfg.get("nsc_theta_cmd_limit"))  
         self.num_traj_points = self.cfg.get("nsc_num_traj_points")
         self.q_target = np.asarray(self.cfg.get("natural_joint_position"))[self.ros_to_pin_ids]  # Final target joint position
 
@@ -194,7 +202,10 @@ class NominalController(BaseController):
         self.base_q_curr = np.concatenate((np.zeros(3), self.base_quat_curr))        
         self.base_v_curr = np.concatenate((self.base_lin_v_curr, self.base_ang_v_curr))
         self.q_curr = np.concatenate((self.base_q_curr, self.joint_q_curr))
-        self.v_curr = np.concatenate((self.base_v_curr, self.joint_v_curr))   
+        self.v_curr = np.concatenate((self.base_v_curr, self.joint_v_curr)) 
+
+        # Computed torque
+        tau_cmd = np.zeros(self.n_joints, dtype=np.float32)
 
         # Compute Dynamics matrix
         pin.computeAllTerms(self.model, self.data, self.q_curr, self.v_curr)
@@ -215,7 +226,7 @@ class NominalController(BaseController):
 
         # Update reference
         self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
-        # self.q_ref[7:] = np.array(TARGET_JOINT_ANGLE)
+        # self.q_ref[7:] = self.q_target
 
         # Error Feedback for desired generalized acceleration
         q_err = self.q_ref[7:] - self.q_curr[7:]
@@ -237,7 +248,7 @@ class NominalController(BaseController):
         tau_constrained_full = self.S_leg.T @ tau_constrained + self.S_wheel.T @ np.array([wheel_tau, -wheel_tau])
 
         # Index Mapping (Pin -> ROS)
-        tau_cmd = tau_constrained_full[self.pin_to_ros_ids]
+        tau_cmd[:] = tau_constrained_full[6:][self.pin_to_ros_ids]
 
         # Update tick
         self.count_tick += 1
