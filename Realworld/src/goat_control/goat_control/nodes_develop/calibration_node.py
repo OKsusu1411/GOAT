@@ -188,7 +188,6 @@ class CalibrationNode(Node):
             
             # Wait for next update
             time.sleep(sleep_interval)
-        pass
 
         # Calculate Average
         avg_quat = np.mean(quat_samples, axis=0)
