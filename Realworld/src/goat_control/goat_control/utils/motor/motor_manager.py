@@ -335,9 +335,9 @@ class MotorStateManager:
             raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
 
             # Encoder fail safe logic
-            # if raw_multi != 0:
-            #     motor_angle_deg = raw_multi * self.angle_deg_per_lsb
-            if raw_single != 0:
+            if raw_multi != 0:
+                motor_angle_deg = raw_multi * self.angle_deg_per_lsb
+            elif raw_single != 0:
                 motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else:
                 motor_angle_deg = 0.0
@@ -345,9 +345,6 @@ class MotorStateManager:
             # Convert motor position into joint position
             joint_angle_deg = motor_angle_deg * gear * direction
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
-            
-            # Apply joint position offset
-            joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
 
             # Convert motor velocity into joint velocity
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
@@ -358,12 +355,9 @@ class MotorStateManager:
             motor_current_amp = self.motor_phase_current_amp[motor_i]
             joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
 
-        # # Optional filtering
-        # if self.joint_velocity_low_pass_filter is not None:
-        #     joint_velocity_rad_per_sec = self.joint_velocity_low_pass_filter.apply(joint_velocity_rad_per_sec)  # type: ignore[assignment]
-        # if self.joint_effort_like_low_pass_filter is not None:
-        #     joint_effort_like = self.joint_effort_like_low_pass_filter.apply(joint_effort_like)  # type: ignore[assignment]
-
+        # Apply joint position offset
+        joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
+        
         return MotorStatesData(
             joint_names=self.joint_names,
             joint_position_rad=list(joint_position_rad).copy(),
