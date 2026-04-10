@@ -138,7 +138,11 @@ class MotorIONode(Node):
                 return
             torque_cmd = np.zeros(self.num_joints, dtype=float)
         
-        current_cmd_amp = self.motor_state_manager.torque_to_current(np.asarray(torque_cmd, dtype=float))
+        # Torque clipping
+        clipped_torque_cmd = self.motor_state_manager.torque_clipping(np.asarray(torque_cmd, dtype=float))
+        
+        # Convert torque into current
+        current_cmd_amp = self.motor_state_manager.torque_to_current(np.asarray(clipped_torque_cmd, dtype=float))
 
         # Send torque command to motor
         for motor_index, motor_driver in enumerate(self.motor_drivers):
