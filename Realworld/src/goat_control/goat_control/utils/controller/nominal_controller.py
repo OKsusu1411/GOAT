@@ -225,8 +225,8 @@ class NominalController(BaseController):
         ## ============= Joint control ================ ##
 
         # Update reference
-        # self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
-        self.q_ref[7:] = self.q_target
+        self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
+        # self.q_ref[7:] = self.q_target
 
         # Error Feedback for desired generalized acceleration
         q_err = self.q_ref[7:] - self.q_curr[7:]
