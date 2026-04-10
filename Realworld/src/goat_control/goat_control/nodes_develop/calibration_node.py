@@ -2,6 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from goat_control.utils.imu.quaternion_utils import *
 from motor_interfaces.msg import ImuState
 
 import yaml
@@ -31,6 +32,13 @@ class CalibrationNode(Node):
         self.imu_subscriber = self.create_subscription(
             ImuState, "/imu", self._on_imu_msg, 10
         )
+
+        # YAML file
+        with open(self.yaml_path, 'r', encoding='utf-8') as file_handle:
+            self.cfg = yaml.safe_load(file_handle)
+
+        self.old_joint_offsets = self.cfg["joint_offsets"]
+        self.old_imu_offsets = self.cfg["imu_offsets"]
 
         # Data buffers
         self.latest_joint_state = None
@@ -134,29 +142,83 @@ class CalibrationNode(Node):
             if joint_names is None:
                 joint_names = self.latest_joint_state.name
             
-            # 1. Store current positions
+            # Store current positions
             current_pos = np.array(self.latest_joint_state.position, dtype=float)
+            current_pos += self.old_joint_offsets                                         # Restore original position
             position_samples.append(current_pos)
             
             # Wait for next update
             time.sleep(sleep_interval)
 
-        # 2. Calculate Average
+        # Calculate Average
         avg_positions = np.mean(position_samples, axis=0)
 
-        # 3. Calculate offsets (Average)
+        # Calculate offsets (Average)
         joint_offsets = avg_positions
 
         self.get_logger().info(f"Averaged Positions ({self.sample_count} samples): {avg_positions}")
         self.get_logger().info(f"Calculated Joint Offsets: {joint_offsets}")
 
-        # 4. Save to YAML
+        # Save to YAML
         self._save_joint_offsets_to_yaml(joint_offsets)
     
     def _imu_calibration(self):
         """IMU Calibration Logic (Placeholder)."""
-        # TODO: Implement IMU calibration logic here
-        pass
+        # Settings for sampling
+        sleep_interval = 0.05  # 20 * 0.05 = 1.0 second total duration
+
+        self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
+        
+        # Joint position buffer list
+        quat_samples = []
+
+        # Sampling Loop
+        for i in range(self.sample_count):
+            
+            # Exception
+            if self.latest_imu_state is None:
+                self.get_logger().warn("IMU data lost during sampling!")
+                return
+            
+            # Store current positions
+            current_quat = np.array(self.latest_imu_state.quat, dtype=float)
+            old_joint_offsets_inv = inverse_quat(self.old_joint_offsets)
+            current_quat = multiply_quat(old_joint_offsets_inv, current_quat)               # Restore original quaternion
+            quat_samples.append(current_quat)
+            
+            # Wait for next update
+            time.sleep(sleep_interval)
+
+        # Calculate Average
+        avg_quat = np.mean(quat_samples, axis=0)
+        avg_quat /= np.linalg.norm(avg_quat)
+
+        z_axis_local = np.array([0.0, 0.0, 1.0])
+        v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
+
+        # Target Z axis
+        v_target = np.array([0.0, 0.0, 1.0])
+
+        
+        axis = np.cross(v_up, v_target)
+        axis_norm = np.linalg.norm(axis)
+
+        # Already robot is upright
+        if axis_norm < 1e-8:
+            quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
+
+        axis = axis / axis_norm
+        dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
+        angle = np.arccos(dot_prod)
+
+        # Offset quaternion
+        quat_offsets = axis_angle_to_quat(axis, angle)
+
+        self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
+
+        # Save to YAML
+        self._save_imu_offsets_to_yaml(quat_offsets)
+        
 
     def _save_joint_offsets_to_yaml(self, offsets):
         # Read existing file

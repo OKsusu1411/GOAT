@@ -52,9 +52,10 @@ class MotorIONode(Node):
         self.can_tx_timeout_sec = float(self.get_parameter("can_tx_timeout_sec").value)
 
         # YAML file
-        self.cfg = yaml.safe_load(yaml_path)
-        self.num_joints = self.cfg.get("num_joints")
-        self.joint_names = self.cfg.get("joint_names")
+        with open(yaml_path, 'r', encoding='utf-8') as file_handle:
+            self.cfg = yaml.safe_load(file_handle)
+        self.num_joints = self.cfg["num_joints"]
+        self.joint_names = self.cfg["joint_names"]
 
         # CAN (single owner)
         self.can = CanInterface(channel=can_channel, interface=can_interface)
@@ -88,7 +89,7 @@ class MotorIONode(Node):
         
         # ROS pubs/subs
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
-        self.torque_sub = self.create_subscription(JointState, "/joint_commands", self._on_command, 10)
+        self.torque_sub = self.create_subscription(JointState, "/commands", self._on_command, 10)
 
         # IO loop
         period_sec = 1.0 / max(io_rate_hz, 1.0)
@@ -96,7 +97,7 @@ class MotorIONode(Node):
 
         self.get_logger().info(
             "MotorIONode started. Owns CAN (read+write). "
-            f"Publishing '/joint_states', subscribing '/joint_commands'."
+            f"Publishing '/joint_states', subscribing '/commands'."
         )
 
     def _on_command(self, msg: JointState) -> None:

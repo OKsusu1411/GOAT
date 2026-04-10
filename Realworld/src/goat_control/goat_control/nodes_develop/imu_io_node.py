@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import rclpy
+import yaml
 from rclpy.node import Node
 from motor_interfaces.msg import ImuState
 
@@ -31,17 +32,22 @@ class IMUIONode(Node):
         self.declare_parameter("imu_port", "/dev/ttyUSB0")
         self.declare_parameter("imu_baudrate", 115200)
         self.declare_parameter("imu_timeout", 1.0)
+        self.declare_parameter("yaml_path", "goat_config.yaml")
 
         read_rate_hz = float(self.get_parameter("read_rate_hz").value)
         imu_port = str(self.get_parameter("imu_port").value)
         imu_baudrate = int(self.get_parameter("imu_baudrate").value)
         imu_timeout = float(self.get_parameter("imu_timeout").value)
+        yaml_path = str(self.get_parameter("yaml_path").value)
 
+        with open(yaml_path, 'r', encoding='utf-8') as file_handle:
+            self.cfg = yaml.safe_load(file_handle)
+        
         # Publisher
         self.imu_publisher = self.create_publisher(ImuState, "/imu", 10)
 
         # IMU Reader
-        imu_config = ImuConfig(port=imu_port, baudrate=imu_baudrate, timeout=imu_timeout)
+        imu_config = ImuConfig(port=imu_port, baudrate=imu_baudrate, timeout=imu_timeout, yaml = self.cfg)
         self.imu_reader = ImuSerialReader(config=imu_config, logger=self.get_logger())
         self.imu_reader.open()
 

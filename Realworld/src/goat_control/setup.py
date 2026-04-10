@@ -17,7 +17,7 @@ setup(
         (os.path.join('share', package_name, 'launch'),
          glob(os.path.join('launch', '*.launch.py'))),
 
-        # config files -> share/goat_control/config
+        # YAML
         (os.path.join('share', package_name, 'config'),
          glob(os.path.join('config', '*.yaml')) + glob(os.path.join('config', '*.yml'))),
 
@@ -28,8 +28,8 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='haechanlee',
-    maintainer_email='eojin333c@gmail.com',
+    maintainer='HansuKim',
+    maintainer_email='hansusu1411@gmail.com',
     description='GOAT ROS2 control package (refactored core + nodes)',
     license='TODO: License declaration',
     extras_require={

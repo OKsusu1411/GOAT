@@ -1,4 +1,4 @@
-# goat_control/utils/sensor/imu.py
+# goat_control/utils/imu/imu_manager.py
 from __future__ import annotations
 
 import time
@@ -7,6 +7,7 @@ import logging
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
+from goat_control.utils.imu.quaternion_utils import multiply_quat
 
 import serial
 
@@ -17,6 +18,9 @@ class ImuConfig:
     port: str = "/dev/ttyUSB0"
     baudrate: int = 115200
     timeout: float = 1.0
+
+    # YAML config
+    yaml: dict = None
 
     # Input format
     start_char: str = "*"
@@ -69,6 +73,7 @@ class ImuSerialReader:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
         self.serial_port: Optional[serial.Serial] = None
+        self.imu_offsets = config.yaml["imu_offsets"]
 
         self._latest_raw_vector: List[float] = [0.0] * self.config.expected_length
         self._lock = threading.Lock()
@@ -136,13 +141,14 @@ class ImuSerialReader:
             self.logger.warning(f"[IMU] wrong packet size: {len(data_list)}")
             return None
 
+        # IMU offset applied
+        data_list[0:4] = multiply_quat(self.imu_offsets, data_list[0:4])
+
         quat_w, quat_x, quat_y, quat_z = data_list[0:4]
         gyro_x, gyro_y, gyro_z = np.deg2rad(data_list[4:7])         # Convert into radian!!
         vel_x, vel_y, vel_z = data_list[7:10]
         mag_x, mag_y, mag_z = data_list[10:13]
         time_ms = data_list[13]
-
-        # TODO: IMU offset function
 
         return ImuPacket(
             quat_w=quat_w, quat_x=quat_x, quat_y=quat_y, quat_z=quat_z,

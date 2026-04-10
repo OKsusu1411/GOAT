@@ -154,36 +154,36 @@ class MotorStateManager:
 
         # YAML cfg
         self.cfg = cfg
-        joint_velocity_lpf_alpha = self.cfg.get("joint_velocity_lpf_alpha", None)
-        joint_effort_like_lpf_alpha = self.cfg.get("joint_effort_like_lpf_alpha", None)
-        self.motor_gear_ratio = self.cfg.get("motor_gear_ratio")
-        self.motor_direction = self.cfg.get("motor_direction")
-        self.motor_torque_constant_nm_per_amp = self.cfg.get("motor_torque_constant_nm_per_amp")
-        self.angle_deg_per_lsb = self.cfg.get("angle_deg_per_lsb", None)
-        self.joint_names = self.cfg.get("joint_names", None)
-        joint_offsets = self.cfg.get("joint_offsets")
-        self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten
+        # joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
+        # joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
+        self.motor_gear_ratio = self.cfg["motor_gear_ratio"]
+        self.motor_direction = self.cfg["motor_direction"]
+        self.motor_torque_constant_nm_per_amp = self.cfg["motor_torque_constant_nm_per_amp"]
+        self.angle_deg_per_lsb = self.cfg["angle_deg_per_lsb"]
+        self.joint_names = self.cfg["joint_names"]
+        joint_offsets = self.cfg["joint_offsets"]
+        self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten()
 
         mapped: List[int] = []
-        if self.cfg.get("joint_indices"):
-            mapped.extend(list(self.cfg.get("joint_indices")))
-        if self.cfg.get("wheel_indices"):
-            mapped.extend(list(self.cfg.get("wheel_indices")))
+        if self.cfg["joint_indices"]:
+            mapped.extend(list(self.cfg["joint_indices"]))
+        if self.cfg["wheel_indices"]:
+            mapped.extend(list(self.cfg["wheel_indices"]))
 
         self.motor_index_for_joint: List[int] | None = mapped if mapped else None
         
 
-        self.joint_velocity_low_pass_filter = (
-            FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
-            if joint_velocity_lpf_alpha is not None
-            else None
-        )
+        # self.joint_velocity_low_pass_filter = (
+        #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
+        #     if joint_velocity_lpf_alpha is not None
+        #     else None
+        # )
 
-        self.joint_effort_like_low_pass_filter = (
-            FirstOrderLowPassFilter(alpha=joint_effort_like_lpf_alpha)
-            if joint_effort_like_lpf_alpha is not None
-            else None
-        )
+        # self.joint_effort_like_low_pass_filter = (
+        #     FirstOrderLowPassFilter(alpha=joint_effort_like_lpf_alpha)
+        #     if joint_effort_like_lpf_alpha is not None
+        #     else None
+        # )
 
     def torque_to_current(self, torque_cmd:np.ndarray) -> np.ndarray:
         # Convert torque into current
@@ -345,9 +345,6 @@ class MotorStateManager:
             # Convert motor position into joint position
             joint_angle_deg = motor_angle_deg * gear * direction
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
-            
-            # Apply joint position offset
-            joint_position_rad = np.array(joint_position_rad) - self.joint_offsets
 
             # Convert motor velocity into joint velocity
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
@@ -358,12 +355,9 @@ class MotorStateManager:
             motor_current_amp = self.motor_phase_current_amp[motor_i]
             joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
 
-        # Optional filtering
-        if self.joint_velocity_low_pass_filter is not None:
-            joint_velocity_rad_per_sec = self.joint_velocity_low_pass_filter.apply(joint_velocity_rad_per_sec)  # type: ignore[assignment]
-        if self.joint_effort_like_low_pass_filter is not None:
-            joint_effort_like = self.joint_effort_like_low_pass_filter.apply(joint_effort_like)  # type: ignore[assignment]
-
+        # Apply joint position offset
+        joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
+        
         return MotorStatesData(
             joint_names=self.joint_names,
             joint_position_rad=list(joint_position_rad).copy(),
