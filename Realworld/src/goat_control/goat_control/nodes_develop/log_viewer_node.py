@@ -118,12 +118,12 @@ class LogViewerNode(Node):
         joint_effort_current = np.array(self.joint_current.effort, dtype=float)
 
         # Gear ratio
-        motor_pos_current = joint_pos_current * self.gear_ratio
-        motor_vel_current = joint_vel_current * self.gear_ratio
-        motor_effort_current = joint_effort_current * self.gear_ratio
-        motor_pos_ref = joint_pos_ref * self.gear_ratio
-        motor_vel_ref = joint_vel_ref * self.gear_ratio
-        motor_effort_ref = joint_effort_ref * self.gear_ratio
+        motor_pos_current = joint_pos_current / self.gear_ratio
+        motor_vel_current = joint_vel_current / self.gear_ratio
+        motor_effort_current = joint_effort_current / self.gear_ratio
+        motor_pos_ref = joint_pos_ref / self.gear_ratio
+        motor_vel_ref = joint_vel_ref / self.gear_ratio
+        motor_effort_ref = joint_effort_ref / self.gear_ratio
 
         # Print rows (batch: all joints in ONE log block)
         header_str = (
