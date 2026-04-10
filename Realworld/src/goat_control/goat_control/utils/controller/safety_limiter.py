@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 
 import numpy as np
 
@@ -29,9 +29,11 @@ class SafetyLimiter:
         joint_vel_estop_threshold    : float [rad/s]
     """
 
-    def __init__(self, cfg: dict) -> None:
+    def __init__(self, cfg: dict, logger: Any | None) -> None:
         joint_indices: List[int] = list(cfg["joint_indices"])
         self.num_joints: int = len(cfg["joint_names"])
+
+        self.logger = logger
 
         # --- LPF alpha ---
         alpha_raw = np.asarray(cfg["torque_lpf_alpha_per_joint"], dtype=float).flatten()
@@ -58,6 +60,8 @@ class SafetyLimiter:
         # Coefficient-based margin processing
         self._pos_lower = limits[0::2] * margin_coeff
         self._pos_upper = limits[1::2] * margin_coeff
+        self.logger.info(f"pos_lower : {self._pos_lower.tolist()}\r")
+        self.logger.info(f"pos_upper : {self._pos_upper.tolist()}\r")
         # self._pos_lower = limits[0::2] + margin
         # self._pos_upper = limits[1::2] - margin
 
@@ -71,6 +75,10 @@ class SafetyLimiter:
         # --- Kill switch (latching) ---
         # Once True, never resets. Requires process restart to clear.
         self._is_blocked = False
+
+        # --- Motor gear ratio ---
+        # Gear ratio is needed for checking safety margin with perspective of motor
+        self.motor_gear_ratio = np.asarray(cfg["motor_gear_ratio"])
 
     # ------------------------------------------------------------------
     # Public API
@@ -100,7 +108,8 @@ class SafetyLimiter:
         """
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
-            self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
+            # self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
+            self._is_blocked = self._check_joint_vel_estop(joint_vel)
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
@@ -119,10 +128,22 @@ class SafetyLimiter:
 
     def _check_joint_pos(self, pos: np.ndarray) -> bool:
         """Return True if any joint position is outside its allowed range."""
-        return bool(np.any(pos < self._pos_lower) or np.any(pos > self._pos_upper))
+        motor_pos = pos / self.motor_gear_ratio
+        result = bool(np.any(motor_pos < self._pos_lower) or np.any(motor_pos > self._pos_upper))
+        if result:
+            self.logger.info("Joint pos stop.\r")
+            self.logger.info(f"Limiter Results: {np.logical_or((motor_pos < self._pos_lower), (motor_pos > self._pos_upper).tolist())}\r")
+            self.logger.info(f"Joint pos : {motor_pos.tolist()}\r")
+        return result
 
     def _check_joint_vel_estop(self, vel: np.ndarray) -> bool:
         """Return True if any estop joint exceeds the velocity threshold."""
         if self._estop_indices.size == 0:
             return False
-        return bool(np.any(np.abs(vel[self._estop_indices]) > self._estop_threshold))
+        motor_vel = vel / self.motor_gear_ratio
+        result = bool(np.any(np.abs(motor_vel[self._estop_indices]) > self._estop_threshold))
+        if result:
+            self.logger.info("Joint vel stop.\r")
+            self.logger.info(f"Limiter Results: {np.abs(motor_vel[self._estop_indices]) > self._estop_threshold}.\r")
+            self.logger.info(f"Joint vel: {motor_vel.tolist()}.\r")
+        return result

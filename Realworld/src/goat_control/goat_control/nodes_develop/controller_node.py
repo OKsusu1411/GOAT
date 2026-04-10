@@ -41,22 +41,20 @@ class ControllerNode(Node):
       5) Publish safe torque command
     """
     def __init__(self):
-        super().__init__("goat_control_node")
+        super().__init__("controller_node")
 
         # Parameters by Launch File
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
-        self.declare_parameter("checkpoint_path", None)
+        self.declare_parameter("checkpoint_path", "")
         self.declare_parameter("action_timeout_sec", 0.05)
-        self.declare_parameter("debug_print_period_sec", 0.2)
 
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.checkpoint_path = str(self.get_parameter("checkpoint_path").value) or None # TODO: Launch file에서 checkpoint path 명시해야 함
+        self.checkpoint_path = self.get_parameter("checkpoint_path").value or None
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
-        self.debug_print_period_sec = float(self.get_parameter("debug_print_period_sec").value)
 
         # Parameters by Yaml File
         with open(self.yaml_path, "r", encoding="utf-8") as file_handle:
@@ -68,10 +66,13 @@ class ControllerNode(Node):
         if self.checkpoint_path is not None:
             self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path) # Default is None
 
+        # Logger
+        self.logger = self.get_logger()
+
         # Controller
-        self.nominal_controller = NominalController(self.cfg)
-        self.policy_controller = PolicyController(self.cfg)
-        self.safety_limiter = SafetyLimiter(self.cfg)
+        self.nominal_controller = NominalController(self.cfg, self.logger)
+        self.policy_controller = PolicyController(self.cfg, self.logger)
+        self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
 
         # Subscriber
         self.joint_state_subscriber = Subscriber(self, JointState, '/joint_states', 10)
@@ -80,7 +81,7 @@ class ControllerNode(Node):
         self.time_sync.registerCallback(self.sync_callback)
 
         # Publisher
-        self.torque_command_publisher = self.create_publisher(Float32MultiArray, "/torque", 10)
+        self.torque_command_publisher = self.create_publisher(JointState, "/commands", 10)
 
         # Buffer for observation, action
         self.buffers = LatestBuffers()
@@ -88,7 +89,19 @@ class ControllerNode(Node):
         # Mode switch (None = idle, no torque until keyboard selects a mode)
         self.publish_mode = None
         self._prev_mode = None
-        self.settings = termios.tcgetattr(sys.stdin)
+
+
+        self.logger.info("Main Controller Node started")
+        self.logger.info("===========================================")
+        self.logger.info("[Keydown Menu]")
+        self.logger.info("'p': Policy Control Mode")
+        self.logger.info("'n': Nominal Control Mode")
+        self.logger.info("'q': Quit")
+        self.logger.info("===========================================\r")
+
+        # NOTE: 이전 버전 코드와 달라진 점 : Launch file로 한번에 운용하기 때문에, 키보드 입력을 받기 위해선 터미널 추가 설정이 필요함
+        self.tty = open("/dev/tty", "rb+", buffering=0)
+        self.settings = termios.tcgetattr(self.tty.fileno())
         self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
         self.input_thread.start()
 
@@ -100,15 +113,6 @@ class ControllerNode(Node):
         control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
 
-        self.get_logger().info("!! Main Controller Node started !!")
-        print("="*30)
-        print("[Keydown Menu]")
-        print("'p': Policy Control Mode")
-        print("'n': Nominal Control Mode")
-        print("'q': Quit")
-        print("="*30)
-
-
     # ---------------------------------------------------------------------
     # Callback Functions
     # ---------------------------------------------------------------------
@@ -116,10 +120,12 @@ class ControllerNode(Node):
     def _get_key(self):
         """Read a single character from the terminal immediately (Blocking)."""
         try:
-            tty.setraw(sys.stdin.fileno())
-            key = sys.stdin.read(1)
+            # NOTE: stdin -> tty
+            tty.setraw(self.tty.fileno())
+            key = self.tty.read(1).decode(errors="ignore")
         finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+            # NOTE: stdin -> tty
+            termios.tcsetattr(self.tty.fileno(), termios.TCSADRAIN, self.settings)
         return key
 
     def _keyboard_listener_loop(self):
@@ -129,14 +135,14 @@ class ControllerNode(Node):
             
             if key == 'p':
                 self.publish_mode = 'policy'
-                self.get_logger().info("Mode changed: [Policy]")
+                self.logger.info("Mode changed: [Policy]\r")
                 
             elif key == 'n':
                 self.publish_mode = 'nominal'
-                self.get_logger().info("Mode changed: [Nominal]")
+                self.logger.info("Mode changed: [Nominal]\r")
                 
             elif key == 'q':
-                self.get_logger().info("Shutting down Agent Node...")
+                self.logger.info("Shutting down Agent Node...\r")
                 rclpy.shutdown()
                 break
             
@@ -145,13 +151,13 @@ class ControllerNode(Node):
                 break
             
             else:
-                self.get_logger().info("Wrong key! Please enter the right key")
-                print("="*30)
-                print("[Keydown Menu]")
-                print("'p': Policy Control Mode")
-                print("'n': Nominal Control Mode")
-                print("'q': Quit")
-                print("="*30)
+                self.logger.info("Wrong key! Please enter the right key")
+                self.logger.info("===========================================")
+                self.logger.info("[Keydown Menu]")
+                self.logger.info("'p': Policy Control Mode")
+                self.logger.info("'n': Nominal Control Mode")
+                self.logger.info("'q': Quit")
+                self.logger.info("===========================================\r")
                 continue
 
     def sync_callback(self, joint_msg, imu_msg):
@@ -188,7 +194,7 @@ class ControllerNode(Node):
         # Reset LPF to prevent torque jump on mode switch
         self.safety_limiter.reset()
 
-        self.get_logger().info(f"Controller switched: {self._prev_mode} -> {new_mode}")
+        self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
 
     # ---------------------------------------------------------------------
@@ -211,15 +217,24 @@ class ControllerNode(Node):
             return  # No sensor data yet -> skip
 
         # Mode switch detection
-        self._switch_mode(self.publish_mode)
+        if self.publish_mode is not None:
+            self._switch_mode(self.publish_mode)
+
+        # Commands
+        q_ref = np.zeros(self.num_joints, dtype=np.float32)
+        v_ref = np.zeros(self.num_joints, dtype=np.float32)
+        tau   = np.zeros(self.num_joints, dtype=np.float32)
 
         # Active controller execution
         if self.publish_mode == 'policy':
             raw_torque, q_ref, v_ref = self.policy_controller.compute(joint_msg, imu_msg, dt_sec)
+            q_ref[:] = q_ref
+            v_ref[-2:] = v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
             raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, imu_msg, dt_sec)
-
+            q_ref[:] = q_ref
+            v_ref[-2:] = 0 # Only for wheel
         else:
             # None (wait) or unknown mode -> zero torque, skip safety/publish
             return
@@ -231,17 +246,25 @@ class ControllerNode(Node):
 
         # Block handling (latching kill switch)
         if is_blocked:
-            self.get_logger().error("SafetyLimiter BLOCKED! Publishing zero torque.")
+            self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.\r")
             self.control_timer.cancel()
             safe_torque = np.zeros(self.num_joints)
+        tau[:] = safe_torque
 
         # Publish torque command
-        self._publish_torque_command(safe_torque)
+        self._publish_torque_command(q_ref, v_ref, tau)
 
-    def _publish_torque_command(self, torque: np.ndarray) -> None:
-        """Publish torque command to /torque topic."""
-        msg = Float32MultiArray()
-        msg.data = torque.astype(np.float32).tolist()
+    def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
+        """Publish torque command to /commands topic."""
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = [
+            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
+            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
+        ]
+        msg.position = position.tolist()
+        msg.velocity = velocity.tolist()
+        msg.effort = torque.tolist()
         self.torque_command_publisher.publish(msg)
 
 
@@ -253,7 +276,11 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, node.settings)
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        try:
+            if hasattr(node, "tty"):
+                termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
+                node.tty.close()
+        finally:
+            node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()

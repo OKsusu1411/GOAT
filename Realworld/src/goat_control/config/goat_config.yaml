@@ -64,12 +64,12 @@ nsc_urdf_path: null
 
 # NSC: Leg Controller
 nsc_leg_proportional_gain:
-- 100.0
-- 100.0
-- 100.0
-- 100.0
-- 100.0
-- 100.0
+- 30.0
+- 30.0
+- 30.0
+- 30.0
+- 30.0
+- 30.0
 - 0.0
 - 0.0
 nsc_leg_derivative_gain:
@@ -84,10 +84,10 @@ nsc_leg_derivative_gain:
 nsc_num_traj_points: 1000
 
 # NSC: Wheel Controller
-nsc_wheel_outer_proportional_gain: 7.0
-nsc_wheel_outer_derivative_gain: 2.0
-nsc_wheel_inner_proportional_gain: 0.1
-nsc_wheel_inner_derivative_gain: 0.1
+nsc_wheel_outer_proportional_gain: 0.02
+nsc_wheel_outer_derivative_gain: 0.02
+nsc_wheel_inner_proportional_gain: 6.0
+nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
 
 # ===========================================================
@@ -149,14 +149,22 @@ integrator_state_limit: 3.0
 
 # Safety Limiter
 torque_lpf_alpha_per_joint:
-- 0.951
-- 0.951
-- 0.951
-- 0.951
-- 0.951
-- 0.951
-- 0.951
-- 0.951
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+# - 0.951
+# - 0.951
+# - 0.951
+# - 0.951
+# - 0.951
+# - 0.951
+# - 0.951
+# - 0.951
 max_torque_per_joint:
 - 4.5
 - 4.5
