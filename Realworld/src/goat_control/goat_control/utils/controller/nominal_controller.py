@@ -253,7 +253,7 @@ class NominalController(BaseController):
         # Update tick
         self.count_tick += 1
 
-        return tau_cmd, self.q_ref[7:].copy(), None
+        return tau_cmd, self.q_ref[7:][self.pin_to_ros_ids].copy(), None
 
     ### =============================== Auxilary Functions (Wheel) =============================== ###
 
