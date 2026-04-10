@@ -235,9 +235,6 @@ class ControllerNode(Node):
             raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, imu_msg, dt_sec)
             q_ref[:] = q_ref
             v_ref[-2:] = 0 # Only for wheel
-        else:
-            # None (wait) or unknown mode -> zero torque, skip safety/publish
-            return
 
         # SafetyLimiter
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
