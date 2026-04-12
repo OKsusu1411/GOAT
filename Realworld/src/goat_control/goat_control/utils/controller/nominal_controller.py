@@ -194,6 +194,11 @@ class NominalController(BaseController):
 
         # Lazy initialization
         if self.count_tick == 0:
+            
+            # NOTE: test line =====================================================
+            self.q_target = self.joint_q_curr
+            # =====================================================================
+
             # Reference assign
             for i, (start, end) in enumerate(zip(self.joint_q_curr, self.q_target)):
                 self.q_ref_traj[:, i] = np.linspace(start, end, self.num_traj_points)
