@@ -196,7 +196,7 @@ class NominalController(BaseController):
         if self.count_tick == 0:
             
             # NOTE: test line =====================================================
-            self.q_target = self.joint_q_curr
+            # self.q_target = self.joint_q_curr
             # =====================================================================
 
             # Reference assign
