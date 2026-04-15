@@ -159,13 +159,14 @@ class PolicyController(BaseController):
             joint_vel:     Joint velocity                   [rad/s], shape (J,).
         """
         # Observation setting
+        default_joint_pos = self._natural_pos.copy()
         previous_action = self.previous_action.copy()
         joint_vel_hist = self.joint_vel_hist.copy().reshape(-1)
         base_command = self._base_command.copy()
-        # NOTE: Non-holonomic command 이므로, v_y는 항상 0임
+        # NOTE: Non-holonomic command 이므로, v_y는 항상 0
         # joint_pos: legs only (6개), joint_vel: all joints (8개)
         observation = np.hstack([base_ang_vel, base_quat, base_command, 
-                                 joint_pos[self._joint_indices], joint_vel, 
+                                 default_joint_pos[self._joint_indices], joint_pos[self._joint_indices], joint_vel, 
                                  previous_action, joint_vel_hist]).reshape(1, -1) # [1, N]
         if self.policy_observation_dim != observation.shape[1]:
             raise ValueError(f"Observation dimension differs from pre-defined setting: ({self.policy_observation_dim} / {observation.shape[1]})")

@@ -93,7 +93,7 @@ nsc_theta_cmd_limit: 5.0
 # ===========================================================
 
 # Policy: Default
-policy_checkpoint_path: "Realworld/src/goat_control/checkpoint/agent_jit_128000.pt"
+policy_checkpoint_path: "src/goat_control/checkpoint/agent_jit_128000.pt"
 policy_command_vx_limit: 1.0    # [m/s]
 policy_command_wz_limit: 0.5    # [rad/s]
 policy_command_vx_step:  0.1    # 1회 입력당 증감량 [m/s]
@@ -105,6 +105,7 @@ policy_observation_info:
   base_ang_vel: 3
   base_quat: 4
   base_command: 3
+  default_joint_pos: 6
   joint_pos: 6
   joint_vel: 8
   previous_action: 8
