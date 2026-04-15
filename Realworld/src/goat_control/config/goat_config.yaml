@@ -66,12 +66,12 @@ nsc_leg_proportional_gain:
 - 0.0
 - 0.0
 nsc_leg_derivative_gain:
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
 - 0.0
 - 0.0
 nsc_num_traj_points: 1000
@@ -136,12 +136,12 @@ policy_wheel_integral_gain:
 integrator_state_limit: 3.0
 # Safetylimiter
 torque_lpf_alpha_per_joint:
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
+- 0.05
+- 0.05
+- 0.05
+- 0.05
+- 0.05
+- 0.05
 - 1.0
 - 1.0
 sw_max_torque_per_joint:

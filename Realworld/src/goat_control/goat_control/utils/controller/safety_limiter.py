@@ -39,9 +39,8 @@ class SafetyLimiter:
         alpha_raw = np.asarray(cfg["torque_lpf_alpha_per_joint"], dtype=float).flatten()
         if alpha_raw.size != self.num_joints:
             raise ValueError("torque_lpf_alpha_per_joint length must equal num_joints.")
-        if np.any(alpha_raw < 0.0) or np.any(alpha_raw > 1.0):
-            raise ValueError("torque_lpf_alpha_per_joint values must be in [0, 1].")
         self._lpf_alpha = alpha_raw
+        self.logger.info(f"LPF : {self._lpf_alpha}")
 
         # --- Joint position limits ---
         limits = np.asarray(cfg["joint_pos_limit"], dtype=float).flatten()
@@ -102,13 +101,12 @@ class SafetyLimiter:
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
             self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
-            self._is_blocked = self._check_joint_vel_estop(joint_vel)
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
             return np.zeros(self.num_joints, dtype=float), True
 
-        # Normal path: LPF + clipping
+        # Normal path: LPF
         raw = np.asarray(raw_torque, dtype=float).flatten()
         filtered = self._lpf_alpha * raw + (1.0 - self._lpf_alpha) * self._prev_torque
         self._prev_torque[:] = filtered
