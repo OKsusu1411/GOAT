@@ -43,13 +43,6 @@ class SafetyLimiter:
             raise ValueError("torque_lpf_alpha_per_joint values must be in [0, 1].")
         self._lpf_alpha = alpha_raw
 
-        # --- Torque clipping ---
-        max_raw = np.asarray(cfg["max_torque_per_joint"], dtype=float).flatten()
-        if max_raw.size != self.num_joints:
-            raise ValueError("max_torque_per_joint length must equal num_joints.")
-        # 0 or negative -> treat as no clipping
-        self._max_torque = np.where(max_raw > 0.0, max_raw, np.inf)
-
         # --- Joint position limits ---
         limits = np.asarray(cfg["joint_pos_limit"], dtype=float).flatten()
         if limits.size != self.num_joints * 2:
@@ -109,7 +102,7 @@ class SafetyLimiter:
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
             self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
-            # self._is_blocked = self._check_joint_vel_estop(joint_vel)
+            self._is_blocked = self._check_joint_vel_estop(joint_vel)
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0

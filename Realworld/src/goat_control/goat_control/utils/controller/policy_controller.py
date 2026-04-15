@@ -46,7 +46,7 @@ class PolicyController(BaseController):
         self._integrator_limit = float(cfg.get("integrator_state_limit", 0.0))
 
         # --- Wheel max torque for anti-windup ---
-        self.wheel_tau_limit = float(cfg["max_torque_per_joint"][-1])
+        self.wheel_tau_limit = float(cfg["hw_max_torque_per_joint"][-1])
 
         # --- Policy-related information ---
         self.policy_observation_info = dict(cfg["policy_observation_info"])

@@ -134,6 +134,7 @@ policy_wheel_integral_gain:
 - 0.0
 - 0.0
 integrator_state_limit: 3.0
+# Safetylimiter
 torque_lpf_alpha_per_joint:
 - 1.0
 - 1.0
@@ -143,7 +144,7 @@ torque_lpf_alpha_per_joint:
 - 1.0
 - 1.0
 - 1.0
-max_torque_per_joint:
+sw_max_torque_per_joint:
 - 0.0
 - 0.0
 - 0.0
@@ -152,6 +153,15 @@ max_torque_per_joint:
 - 0.0
 - 0.0
 - 0.0
+hw_max_torque_per_joint:
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 4.5
+- 2.5
+- 2.5
 joint_pos_limit:
 - -1.22173
 - 0.750492
