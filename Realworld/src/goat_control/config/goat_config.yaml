@@ -80,33 +80,65 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_checkpoint_path: null
+
+# ===========================================================
+
+# Policy: Default
+policy_checkpoint_path: "src/goat_control/checkpoint/agent_jit_128000.pt"
+policy_command_vx_limit: 1.0    # [m/s]
+policy_command_wz_limit: 0.5    # [rad/s]
+policy_command_vx_step:  0.1    # 1회 입력당 증감량 [m/s]
+policy_command_wz_step:  0.01   # 1회 입력당 증감량 [rad/s]
 policy_decimation: 2.0
-policy_device: cuda
+policy_joint_vel_hist_length: 4
+policy_device: "cuda"
 policy_observation_info:
-  gravity: 3
   base_ang_vel: 3
   base_quat: 4
+  base_command: 3
+  default_joint_pos: 6
   joint_pos: 6
   joint_vel: 8
+  previous_action: 8
+  joint_vel_hist: 32
+
+# Policy: Leg PD Controller
 policy_leg_proportional_gain:
-- 0.3
-- 0.3
-- 0.27
-- 0.27
-- 0.23
-- 0.23
+- 2.0
+- 2.0
+- 2.0
+- 2.0
+- 2.0
+- 2.0
 - 0.0
 - 0.0
+# - 0.0 
+# - 0.3
+# - 0.27
+# - 0.27
+# - 0.23
+# - 0.23
+# - 0.0
+# - 0.0
 policy_leg_derivative_gain:
-- 0.015
-- 0.015
-- 0.01
-- 0.01
-- 0.04
-- 0.04
+- 0.1
+- 0.1
+- 0.1
+- 0.1
+- 0.1
+- 0.1
 - 0.0
 - 0.0
+# - 0.015
+# - 0.015
+# - 0.01
+# - 0.01
+# - 0.04
+# - 0.04
+# - 0.0
+# - 0.0
+
+# Policy: Wheel PI Controller
 policy_wheel_proportional_gain:
 - 0.0
 - 0.0
@@ -114,8 +146,16 @@ policy_wheel_proportional_gain:
 - 0.0
 - 0.0
 - 0.0
-- 0.17
-- 0.17
+- 0.05
+- 0.05
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.17
+# - 0.17
 policy_wheel_integral_gain:
 - 0.0
 - 0.0
@@ -123,8 +163,16 @@ policy_wheel_integral_gain:
 - 0.0
 - 0.0
 - 0.0
-- 0.15
-- 0.15
+- 0.0
+- 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.0
+# - 0.15
+# - 0.15
 integrator_state_limit: 3.0
 torque_lpf_alpha_per_joint:
 - 1.0
