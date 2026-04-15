@@ -164,7 +164,7 @@ class PolicyController(BaseController):
         joint_vel_hist = self.joint_vel_hist.copy().reshape(-1)
         base_command = self._base_command.copy()
         # NOTE: Non-holonomic command 이므로, v_y는 항상 0
-        # joint_pos: legs only (6개), joint_vel: all joints (8개)
+        # joint_pos: legs only (6), joint_vel: all joints (8)
         observation = np.hstack([base_ang_vel, base_quat, base_command, 
                                  default_joint_pos[self._joint_indices], joint_pos[self._joint_indices], joint_vel, 
                                  previous_action, joint_vel_hist]).reshape(1, -1) # [1, N]
