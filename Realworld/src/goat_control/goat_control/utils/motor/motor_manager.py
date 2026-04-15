@@ -163,8 +163,10 @@ class MotorStateManager:
         self.joint_names = self.cfg["joint_names"]
         joint_offsets = self.cfg["joint_offsets"]
         self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten()
-        max_torque_per_joint = self.cfg["max_torque_per_joint"]
-        self.max_torque_per_joint = np.asarray(max_torque_per_joint, dtype=float).flatten()
+        hw_max_torque_per_joint = self.cfg["hw_max_torque_per_joint"]
+        sw_max_torque_per_joint = self.cfg["sw_max_torque_per_joint"]
+        self.hw_max_torque_per_joint = np.asarray(hw_max_torque_per_joint, dtype=float).flatten()
+        self.sw_max_torque_per_joint = np.asarray(sw_max_torque_per_joint, dtype=float).flatten()
 
         mapped: List[int] = []
         if self.cfg["joint_indices"]:
@@ -189,7 +191,8 @@ class MotorStateManager:
 
     def torque_clipping(self, torque_cmd:np.ndarray) -> np.ndarray:
         
-        clipped_torque = np.clip(torque_cmd, -self.max_torque_per_joint, self.max_torque_per_joint)
+        clipped_torque = np.clip(torque_cmd, -self.hw_max_torque_per_joint, self.hw_max_torque_per_joint) # [4.5 and 2.5]
+        clipped_torque = np.clip(clipped_torque, -self.sw_max_torque_per_joint, self.sw_max_torque_per_joint) # [Arbitrary]
         
         return clipped_torque
     

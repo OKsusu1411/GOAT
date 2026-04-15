@@ -277,9 +277,6 @@ class ControllerNode(Node):
         else:
             raw_torque = tau        # Zero command
 
-        t_list = raw_torque.tolist()
-        self.logger.info(f"Mode : {self.publish_mode} | Raw torque : {t_list}")
-
         # SafetyLimiter
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
