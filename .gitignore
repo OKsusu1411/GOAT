@@ -55,6 +55,7 @@ _build
 
 # Pre-Trained Checkpoints
 /.pretrained_checkpoints/
+# **/checkpoint/*
 
 # Generated Assets
 **/usd/*
@@ -72,6 +73,11 @@ _build
 **/Realworld/src/goat_sysid/.vscode/
 **/Realworld/src/goat_sysid/log/
 **/Realworld/test_log/
+
+# CLAUDE
+CLAUDE.md
+research.md
+plan.md
 
 
 <<<<<<< HEAD

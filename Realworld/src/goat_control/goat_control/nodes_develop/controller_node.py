@@ -90,6 +90,12 @@ class ControllerNode(Node):
         self.publish_mode = None
         self._prev_mode = None
 
+        # Base command state [v_x, v_y, w_z]
+        self._base_command = np.zeros(3, dtype=np.float64)
+        self._vx_step  = float(self.cfg.get("policy_command_vx_step",  0.1))
+        self._wz_step  = float(self.cfg.get("policy_command_wz_step",  0.01))
+        self._vx_limit = float(self.cfg.get("policy_command_vx_limit", 1.0))
+        self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
 
         self.logger.info("Main Controller Node started")
         self.logger.info("===========================================")
@@ -97,6 +103,8 @@ class ControllerNode(Node):
         self.logger.info("'p': Policy Control Mode")
         self.logger.info("'n': Nominal Control Mode")
         self.logger.info("'q': Quit")
+        self.logger.info("--- Policy Command (active in Policy mode) ---")
+        self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-  |  'space': reset")
         self.logger.info("===========================================\r")
 
         # NOTE: 이전 버전 코드와 달라진 점 : Launch file로 한번에 운용하기 때문에, 키보드 입력을 받기 위해선 터미널 추가 설정이 필요함
@@ -136,20 +144,44 @@ class ControllerNode(Node):
             if key == 'p':
                 self.publish_mode = 'policy'
                 self.logger.info("Mode changed: [Policy]\r")
-                
+
             elif key == 'n':
                 self.publish_mode = 'nominal'
                 self.logger.info("Mode changed: [Nominal]\r")
-                
+
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
                 rclpy.shutdown()
                 break
-            
+
             elif key == '\x03': # Ctrl+C
                 rclpy.shutdown()
                 break
-            
+
+            elif key == 'w':
+                self._base_command[0] = float(np.clip(
+                    self._base_command[0] + self._vx_step, -self._vx_limit, self._vx_limit))
+                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
+
+            elif key == 's':
+                self._base_command[0] = float(np.clip(
+                    self._base_command[0] - self._vx_step, 0, self._vx_limit))
+                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
+
+            elif key == 'a':
+                self._base_command[2] = float(np.clip(
+                    self._base_command[2] + self._wz_step, -self._wz_limit, self._wz_limit))
+                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
+
+            elif key == 'd':
+                self._base_command[2] = float(np.clip(
+                    self._base_command[2] - self._wz_step, -self._wz_limit, self._wz_limit))
+                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
+
+            elif key == ' ':
+                self._base_command[:] = 0.0
+                self.logger.info("Command reset to zero\r")
+
             else:
                 self.logger.info("Wrong key! Please enter the right key")
                 self.logger.info("===========================================")
@@ -157,6 +189,8 @@ class ControllerNode(Node):
                 self.logger.info("'p': Policy Control Mode")
                 self.logger.info("'n': Nominal Control Mode")
                 self.logger.info("'q': Quit")
+                self.logger.info("--- Policy Command ---")
+                self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-  |  'space': reset")
                 self.logger.info("===========================================\r")
                 continue
 
@@ -194,6 +228,10 @@ class ControllerNode(Node):
         # Reset LPF to prevent torque jump on mode switch
         self.safety_limiter.reset()
 
+        # Reset command to zero on policy entry for safety
+        if new_mode == 'policy':
+            self._base_command[:] = 0.0
+
         self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
 
@@ -227,6 +265,7 @@ class ControllerNode(Node):
 
         # Active controller execution
         if self.publish_mode == 'policy':
+            self.policy_controller.set_command(self._base_command)
             raw_torque, q_ref, v_ref = self.policy_controller.compute(joint_msg, imu_msg, dt_sec)
             q_ref[:] = q_ref
             v_ref[-2:] = v_ref # Only for wheel
