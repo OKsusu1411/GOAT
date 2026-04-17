@@ -142,7 +142,7 @@ class MotorIONode(Node):
         clipped_torque_cmd = self.motor_state_manager.torque_clipping(np.asarray(torque_cmd, dtype=float))
         
         # Torque LPF
-        lpf_torque_cmd = self.motor_state_manager.torque_lpf(np.asarray(torque_cmd, dtype=float))
+        lpf_torque_cmd = self.motor_state_manager.torque_lpf(np.asarray(clipped_torque_cmd, dtype=float))
 
         # Convert torque into current
         current_cmd_amp = self.motor_state_manager.torque_to_current(np.asarray(lpf_torque_cmd, dtype=float))
