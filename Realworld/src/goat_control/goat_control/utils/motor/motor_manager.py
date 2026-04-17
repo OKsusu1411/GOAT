@@ -161,8 +161,10 @@ class MotorStateManager:
         self.motor_torque_constant_nm_per_amp = self.cfg["motor_torque_constant_nm_per_amp"]
         self.angle_deg_per_lsb = self.cfg["angle_deg_per_lsb"]
         self.joint_names = self.cfg["joint_names"]
+        self.num_joints = len(self.joint_names)
         joint_offsets = self.cfg["joint_offsets"]
         self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten()
+        self.lpf_alpha = self.cfg["torque_lpf_alpha_per_joint"]
         hw_max_torque_per_joint = self.cfg["hw_max_torque_per_joint"]
         sw_max_torque_per_joint = self.cfg["sw_max_torque_per_joint"]
         self.hw_max_torque_per_joint = np.asarray(hw_max_torque_per_joint, dtype=float).flatten()
@@ -176,6 +178,7 @@ class MotorStateManager:
 
         self.motor_index_for_joint: List[int] | None = mapped if mapped else None
         
+        self.prev_torque = np.zeros(self.num_joints, dtype=float)
 
         # self.joint_velocity_low_pass_filter = (
         #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
@@ -190,12 +193,17 @@ class MotorStateManager:
         # )
 
     def torque_clipping(self, torque_cmd:np.ndarray) -> np.ndarray:
-        
         clipped_torque = np.clip(torque_cmd, -self.hw_max_torque_per_joint, self.hw_max_torque_per_joint) # [4.5 and 2.5]
         clipped_torque = np.clip(clipped_torque, -self.sw_max_torque_per_joint, self.sw_max_torque_per_joint) # [Arbitrary]
         
         return clipped_torque
     
+    def torque_lpf(self, torque_cmd:np.ndarray) -> np.ndarray:
+        filtered = self.lpf_alpha * torque_cmd + (1.0 - self.lpf_alpha) * self.prev_torque
+        self.prev_torque[:] = filtered
+
+        return filtered
+
     def torque_to_current(self, torque_cmd:np.ndarray) -> np.ndarray:
         # Convert torque into current
         torque_constant = np.asarray(self.motor_torque_constant_nm_per_amp, dtype=float)

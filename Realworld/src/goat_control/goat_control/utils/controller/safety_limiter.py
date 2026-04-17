@@ -108,9 +108,9 @@ class SafetyLimiter:
 
         # Normal path: LPF
         raw = np.asarray(raw_torque, dtype=float).flatten()
-        filtered = self._lpf_alpha * raw + (1.0 - self._lpf_alpha) * self._prev_torque
-        self._prev_torque[:] = filtered
-        return filtered, False
+        # filtered = self._lpf_alpha * raw + (1.0 - self._lpf_alpha) * self._prev_torque
+        # self._prev_torque[:] = filtered
+        return raw, False
 
     # ------------------------------------------------------------------
     # Internal checks
