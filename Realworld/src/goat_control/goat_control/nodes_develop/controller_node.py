@@ -277,10 +277,12 @@ class ControllerNode(Node):
         else:
             raw_torque = tau        # Zero command
 
+        self.logger.info(f"raw_torque: {raw_torque} \r")
         # SafetyLimiter
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
         safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
+        self.logger.info(f"safe_torque: {safe_torque} \r")
 
         # Block handling (latching kill switch)
         if is_blocked:
