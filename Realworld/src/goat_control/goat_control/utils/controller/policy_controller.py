@@ -15,9 +15,9 @@ class PolicyController(BaseController):
     """PD (legs) + PI (wheels) torque controller driven by policy actions.
 
     Action space (set via set_targets()):
-        delta_pos:    Delta joint position [rad], shape (num_joints,).
+        delta_pos:    Delta joint position [rad], shape (num_leg_joints,).
                       Added to natural_joint_position to form the PD reference.
-        wheel_speed:  Desired wheel speed [rad/s], shape (num_joints,).
+        wheel_speed:  Desired wheel speed [rad/s], shape (num_wheel_joints,).
                       PI controller tracks this on wheel_indices only.
 
     YAML keys consumed:
@@ -32,28 +32,27 @@ class PolicyController(BaseController):
         self.num_joints: int = len(cfg["joint_names"])
         self._joint_indices: List[int] = list(cfg["joint_indices"])
         self._wheel_indices: List[int] = list(cfg["wheel_indices"])
+        self.num_leg_joints = len(self._joint_indices)
+        self.num_wheel_joints = len(self._wheel_indices)
 
         # Natural (default) joint position
         self._natural_pos = np.asarray(cfg["natural_joint_position"], dtype=float).flatten()
 
         # --- PD gains (legs) ---
-        self._kp = np.asarray(cfg["policy_leg_proportional_gain"], dtype=float).flatten()
-        self._kd = np.asarray(cfg["policy_leg_derivative_gain"], dtype=float).flatten()
+        self._kp = np.asarray(cfg["policy_leg_proportional_gain"], dtype=float).flatten() # [n_leg]
+        self._kd = np.asarray(cfg["policy_leg_derivative_gain"], dtype=float).flatten() # [n_leg]
 
         # --- PI gains (wheels) ---
-        self._kp_wheel = np.asarray(cfg["policy_wheel_proportional_gain"], dtype=float).flatten()
-        self._ki_wheel = np.asarray(cfg["policy_wheel_integral_gain"], dtype=float).flatten()
-        self._integrator_limit = float(cfg.get("integrator_state_limit", 0.0))
-
-        # --- Wheel max torque for anti-windup ---
-        self.wheel_tau_limit = float(cfg["hw_max_torque_per_joint"][-1])
+        self._kp_wheel = np.asarray(cfg["policy_wheel_proportional_gain"], dtype=float).flatten() # [n_wheel]
+        self._ki_wheel = np.asarray(cfg["policy_wheel_integral_gain"], dtype=float).flatten() # [n_wheel]
 
         # --- Policy-related information ---
+        self.leg_joint_limit_factor = cfg["policy_pos_margin_factor"]
+        self.leg_joint_limit = np.asarray(cfg["policy_leg_joint_limit"]).reshape(self.num_leg_joints, 2)
         self.policy_observation_info = dict(cfg["policy_observation_info"])
         self.device = self._resolve_device(str(cfg["policy_device"]))
         self.checkpoint_path = cfg["policy_checkpoint_path"]
         self.decimation = int(cfg["policy_decimation"])
-        self.agent = self._load_agent(self.checkpoint_path, self.device)
 
         self.logger.info(f"[Policy Controller] Observation Info \r")
         self.policy_observation_name = []
@@ -63,12 +62,10 @@ class PolicyController(BaseController):
             self.policy_observation_dim += v
             self.logger.info(f"Name : {k} | Dim : {v}\r")
 
+        self.agent = self._load_agent(self.checkpoint_path, self.device)
+
         # --- Validate lengths ---
         for name, arr in [
-            ("policy_leg_proportional_gain", self._kp),
-            ("policy_leg_derivative_gain", self._kd),
-            ("policy_wheel_proportional_gain", self._kp_wheel),
-            ("policy_wheel_integral_gain", self._ki_wheel),
             ("natural_joint_position", self._natural_pos),
         ]:
             if arr.size != self.num_joints:
@@ -76,8 +73,8 @@ class PolicyController(BaseController):
 
         # --- Internal state ---
         self._integrator = np.zeros(self.num_joints, dtype=float)
-        self._delta_pos = np.zeros(self.num_joints, dtype=float)
-        self._wheel_speed_ref = np.zeros(self.num_joints, dtype=float)
+        self._delta_pos = np.zeros(self.num_leg_joints, dtype=float)
+        self._wheel_speed_ref = np.zeros(self.num_wheel_joints, dtype=float)
         self._base_command = np.zeros(3, dtype=float)  # [v_x, v_y, w_z]
 
         # --- Count for decimation processing ---
@@ -87,6 +84,11 @@ class PolicyController(BaseController):
         self.joint_vel_hist_length = int(cfg["policy_joint_vel_hist_length"])
         self.joint_vel_hist = np.zeros((self.joint_vel_hist_length, self.num_joints), dtype=float)
         self.previous_action = np.zeros(self.num_joints, dtype=float)
+
+        # --- Augmented joint limit ---
+        self.leg_augmented_joint_limit = np.zeros((self.num_leg_joints, 2))
+        self.leg_augmented_joint_limit[:, 0] = self.leg_joint_limit_factor * self.leg_joint_limit[:, 0]
+        self.leg_augmented_joint_limit[:, 1] = self.leg_joint_limit_factor * self.leg_joint_limit[:, 1]
 
 
     # ------------------------------------------------------------------
@@ -113,9 +115,14 @@ class PolicyController(BaseController):
 
         try:
             path = os.path.abspath(checkpoint_path)
-            model = torch.jit.load(path, map_location=device)
+            model = torch.jit.load(path).to(device)
             model.eval()
             self.logger.info(f"[Policy Controller] Loaded policy checkpoint from '{path}' on {device}.\r")
+
+            test_obs = torch.randn([1, self.policy_observation_dim], device=device)
+            test_act = model(test_obs).detach().cpu().numpy().reshape(-1)
+            self.logger.info(f"[Policy Controller] Zero test input : {test_obs}\r")
+            self.logger.info(f"[Policy Controller] Zero test result : {test_act}\r")
             return model
         except Exception as exc:
             self.logger.info(f"[Policy Controller] Failed to load policy checkpoint '{path}': {exc}\r")
@@ -163,22 +170,34 @@ class PolicyController(BaseController):
         previous_action = self.previous_action.copy()
         joint_vel_hist = self.joint_vel_hist.copy().reshape(-1)
         base_command = self._base_command.copy()
+        stop_sign = (np.linalg.norm(base_command) < 1e-6).astype(float)
         # NOTE: Non-holonomic command 이므로, v_y는 항상 0
         # joint_pos: legs only (6), joint_vel: all joints (8)
-        observation = np.hstack([base_ang_vel, base_quat, base_command, 
-                                 default_joint_pos[self._joint_indices], joint_pos[self._joint_indices], joint_vel, 
-                                 previous_action, joint_vel_hist]).reshape(1, -1) # [1, N]
+        observation = np.hstack([base_ang_vel, 
+                                 base_quat, 
+                                 base_command, 
+                                 default_joint_pos[self._joint_indices],
+                                 stop_sign,
+                                 joint_pos[self._joint_indices], 
+                                 joint_vel, 
+                                 previous_action, 
+                                 joint_vel_hist]).reshape(1, -1) # [1, N]
         if self.policy_observation_dim != observation.shape[1]:
             raise ValueError(f"Observation dimension differs from pre-defined setting: ({self.policy_observation_dim} / {observation.shape[1]})")
 
         # Action processing
         obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.device)
         policy_action = self.agent(obs_tensor, deterministic=True)
-        policy_action_np = policy_action.detach().cpu().numpy().astype(np.float32).reshape(-1)
+        policy_action_np = policy_action.detach().cpu().numpy().reshape(-1)
 
-        num_leg_joints = self.num_joints - 2
-        self._delta_pos = policy_action_np[:num_leg_joints]
-        self._wheel_speed_ref = policy_action_np[num_leg_joints:]
+        # obs_str = ", ".join(f"{x}" for x in observation.reshape(-1))
+        # act_str = ", ".join(f"{x}" for x in policy_action_np)
+
+        # self.logger.info(f"[step {self.decimation_count}] policy observation : [{obs_str}]\r")
+        # self.logger.info(f"[step {self.decimation_count}] policy action : [{act_str}]\r")
+
+        self._delta_pos = policy_action_np[self._joint_indices]
+        self._wheel_speed_ref = policy_action_np[self._wheel_indices]
         self.previous_action = policy_action_np
 
     def compute(self,
@@ -192,9 +211,16 @@ class PolicyController(BaseController):
         base_quat = np.asarray([base_state.quat.w, base_state.quat.x, base_state.quat.y, base_state.quat.z]) # NOTE: Isaacsim quaternion convention
         joint_pos = np.asarray(joint_state.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_state.velocity, dtype=float).flatten()
+        # Leg extraction
+        default_leg_pos = self._natural_pos[self._joint_indices]
+        joint_leg_pos = joint_pos[self._joint_indices]
+        joint_leg_vel = joint_vel[self._joint_indices]
+        # wheel extraction
+        joint_wheel_vel = joint_vel[self._wheel_indices]
 
         # Computed torque
         tau_cmd = np.zeros(self.num_joints, dtype=float)
+        target_pos = np.zeros(self.num_joints, dtype=float)
 
         if self.agent is None:
             return tau_cmd, self._natural_pos.copy(), np.zeros(len(self._wheel_indices))
@@ -204,46 +230,30 @@ class PolicyController(BaseController):
             self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
 
         # --- Leg PD ---
-        target_pos = self._natural_pos + self._delta_pos
-        pos_err = target_pos - joint_pos
-        vel_err = -joint_vel  # desired velocity = 0
+        target_leg_pos = np.clip(default_leg_pos + self._delta_pos, 
+                                 self.leg_augmented_joint_limit[:, 0],
+                                 self.leg_augmented_joint_limit[:, 1])
+        pos_err = target_leg_pos - joint_leg_pos
+        vel_err = -joint_leg_vel  # desired velocity = 0
+        tau_leg = self._kp * pos_err + self._kd * vel_err
 
-        for idx in self._joint_indices:
-            tau_cmd[idx] = self._kp[idx] * pos_err[idx] + self._kd[idx] * vel_err[idx]
+        # --- Wheel P ---
+        speed_err = self._wheel_speed_ref - joint_wheel_vel
+        tau_wheel = self._kp_wheel * speed_err
+        
+        # --- Data inserting ---
+        tau_cmd[self._joint_indices] = tau_leg
+        tau_cmd[self._wheel_indices] = tau_wheel
 
-        # --- Wheel PI --- TODO: Policy의 바퀴 제어에 PI 제어기 계속 쓸건지 논의
-        speed_err = self._wheel_speed_ref - joint_vel
+        target_pos[self._joint_indices] = target_leg_pos
 
-        for idx in self._wheel_indices:
-            err = speed_err[idx]
-
-            # Candidate integrator update
-            candidate_integrator = self._integrator[idx] + err * dt_sec
-
-            # Clamp integrator state
-            if self._integrator_limit > 0.0:
-                candidate_integrator = float(np.clip(candidate_integrator,
-                                                     -self._integrator_limit,
-                                                     self._integrator_limit,))
-
-            # Candidate output (unsaturated)
-            p_term = self._kp_wheel[idx] * err
-            candidate_output = p_term + self._ki_wheel[idx] * candidate_integrator
-
-            # Conditional anti-windup: if output saturates and error pushes
-            # further into saturation, freeze the integrator.
-            tau_limit = self.wheel_tau_limit
-            if abs(candidate_output) > tau_limit:
-                pushing_further = ((candidate_output > tau_limit and err > 0.0) or
-                                   (candidate_output < -tau_limit and err < 0.0))
-                if pushing_further:
-                    candidate_integrator = self._integrator[idx]
-
-            self._integrator[idx] = candidate_integrator
-            tau_cmd[idx] = (p_term + self._ki_wheel[idx] * self._integrator[idx])
-
-        # Update decimation step and joint velocity history
-        self.decimation_count += 1
+        # Update joint velocity history
         self.joint_vel_hist[int(self.decimation_count % self.joint_vel_hist_length), :] = joint_vel
 
-        return tau_cmd, target_pos.copy(), self._wheel_speed_ref.copy()
+        # torque_str = ", ".join(f"{x}" for x in tau_cmd.reshape(-1))
+        # self.logger.info(f"[step {self.decimation_count}] torque : [{torque_str}]\r")
+        
+        # Update decimation step
+        self.decimation_count += 1
+
+        return tau_cmd, target_pos, self._wheel_speed_ref.copy()

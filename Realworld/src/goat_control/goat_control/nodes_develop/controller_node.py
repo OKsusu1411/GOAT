@@ -289,6 +289,10 @@ class ControllerNode(Node):
             safe_torque = np.zeros(self.num_joints)
         tau[:] = safe_torque
 
+        # NOTE: 임시 Limit
+        # tau_limit = np.array(self.cfg["sw_max_torque_per_joint"])
+        # tau = np.clip(tau, -tau_limit, tau_limit)
+
         # Publish torque command
         self._publish_torque_command(q_ref, v_ref, tau)
 
