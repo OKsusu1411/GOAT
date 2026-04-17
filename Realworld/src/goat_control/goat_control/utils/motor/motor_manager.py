@@ -164,7 +164,8 @@ class MotorStateManager:
         self.num_joints = len(self.joint_names)
         joint_offsets = self.cfg["joint_offsets"]
         self.joint_offsets = np.asarray(joint_offsets, dtype=float).flatten()
-        self.lpf_alpha = self.cfg["torque_lpf_alpha_per_joint"]
+        lpf_alpha = self.cfg["torque_lpf_alpha_per_joint"]
+        self.lpf_alpha = np.asarray(lpf_alpha, dtype=float).flatten()
         hw_max_torque_per_joint = self.cfg["hw_max_torque_per_joint"]
         sw_max_torque_per_joint = self.cfg["sw_max_torque_per_joint"]
         self.hw_max_torque_per_joint = np.asarray(hw_max_torque_per_joint, dtype=float).flatten()
