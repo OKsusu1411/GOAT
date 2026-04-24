@@ -106,5 +106,6 @@
     <sensor>
         <accelerometer name="imu_acc" site="imu_site"/>
         <gyro name="imu_gyro" site="imu_site"/>
+        <magnetometer name="imu_mag" site="imu_site"/>
     </sensor>
 </mujoco>
