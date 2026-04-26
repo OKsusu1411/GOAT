@@ -175,12 +175,12 @@ class PolicyController(BaseController):
         policy_action_np_raw = policy_action_raw.detach().cpu().numpy().reshape(-1)
         policy_action_np = policy_action_np_raw * self.policy_action_scale_factor # ACTION_{JOINT}
 
-        if self.decimation_count <= 10:
-            obs_str = ", ".join(f"{x}" for x in observation.reshape(-1))
-            act_str = ", ".join(f"{x}" for x in policy_action_np)
+        # if self.decimation_count <= 10:
+        #     obs_str = ", ".join(f"{x}" for x in observation.reshape(-1))
+        #     act_str = ", ".join(f"{x}" for x in policy_action_np)
 
-            self.logger.info(f"[step {self.decimation_count}] policy observation : [{obs_str}]\r")
-            self.logger.info(f"[step {self.decimation_count}] policy action : [{act_str}]\r")
+        #     self.logger.info(f"[step {self.decimation_count}] policy observation : [{obs_str}]\r")
+        #     self.logger.info(f"[step {self.decimation_count}] policy action : [{act_str}]\r")
 
         self._delta_pos = policy_action_np[self._joint_indices]
         self._wheel_speed_ref = policy_action_np[self._wheel_indices]

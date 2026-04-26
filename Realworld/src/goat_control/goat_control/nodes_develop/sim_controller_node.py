@@ -148,7 +148,7 @@ class SimControllerNode(Node):
         # Timing
         self.last_tick_time = self.get_clock().now()
 
-        self.logger.info("SimControllerNode started with H1-style synchronized I/O pipeline")
+        self.logger.info("SimControllerNode started with synchronized I/O pipeline")
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
         self.logger.info("'p': Policy Control Mode")
@@ -360,12 +360,11 @@ class SimControllerNode(Node):
             )
 
             if is_blocked:
-                self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.\r")
                 safe_torque = np.zeros(self.num_joints, dtype=np.float32)
 
             tau[:] = safe_torque
 
-            
+
 
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback

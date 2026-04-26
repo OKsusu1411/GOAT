@@ -99,8 +99,8 @@ class SafetyLimiter:
             is_blocked:  True if kill switch is active (latches permanently once triggered).
         """
         # Latching kill switch: once triggered, stays blocked forever
-        # if not self._is_blocked:
-        #     self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
+        if not self._is_blocked:
+            self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
@@ -118,7 +118,7 @@ class SafetyLimiter:
         motor_pos = pos / self.motor_gear_ratio
         result = bool(np.any(motor_pos < self._pos_lower) or np.any(motor_pos > self._pos_upper))
         if result:
-            self.logger.info("Joint pos stop.\r")
+            self.logger.info("[SafetyLimiter] Joint pos stop.\r")
             self.logger.info(f"Limiter Results: {np.logical_or((motor_pos < self._pos_lower), (motor_pos > self._pos_upper).tolist())}\r")
             self.logger.info(f"Joint pos : {motor_pos.tolist()}\r")
         return result
@@ -130,7 +130,7 @@ class SafetyLimiter:
         motor_vel = vel / self.motor_gear_ratio
         result = bool(np.any(np.abs(motor_vel[self._estop_indices]) > self._estop_threshold))
         if result:
-            self.logger.info("Joint vel stop.\r")
+            self.logger.info("[SafetyLimiter] Joint vel stop.\r")
             self.logger.info(f"Limiter Results: {np.abs(motor_vel[self._estop_indices]) > self._estop_threshold}.\r")
             self.logger.info(f"Joint vel: {motor_vel.tolist()}.\r")
         return result
