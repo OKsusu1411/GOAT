@@ -84,7 +84,7 @@ class IMUIONode(Node):
         msg.vel.y = float(packet.vel_y)
         msg.vel.z = float(packet.vel_z)
 
-        # Magenometer - ?
+        # Magnetometer - ?
         msg.mag.x = float(packet.mag_x)
         msg.mag.y = float(packet.mag_y)
         msg.mag.z = float(packet.mag_z)
