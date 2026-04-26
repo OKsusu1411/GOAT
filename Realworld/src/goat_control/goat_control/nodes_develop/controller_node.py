@@ -75,15 +75,24 @@ class ControllerNode(Node):
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
 
         # Subscriber
-        self.joint_state_subscriber = Subscriber(self, JointState, '/joint_states', 10)
-        self.imu_subscriber = Subscriber(self, ImuState, '/imu', 10)
-        self.time_sync = ApproximateTimeSynchronizer([self.joint_state_subscriber, self.imu_subscriber], 10, 0.01)
-        self.time_sync.registerCallback(self.sync_callback)
+        self.joint_state_subscriber = self.create_subscription(
+            JointState,
+            "/joint_states",
+            self.joint_callback,
+            1,
+        )
+
+        self.imu_subscriber = self.create_subscription(
+            ImuState,
+            "/imu",
+            self.imu_callback,
+            1,
+        )
 
         # Publisher
         self.torque_command_publisher = self.create_publisher(JointState, "/commands", 10)
 
-        # Buffer for observation, action
+        # Buffer for observation
         self.buffers = LatestBuffers()
         
         # Mode switch (None = idle, no torque until keyboard selects a mode)
@@ -194,10 +203,6 @@ class ControllerNode(Node):
                 self.logger.info("===========================================\r")
                 continue
 
-    def sync_callback(self, joint_msg, imu_msg):
-        self.joint_callback(joint_msg)
-        self.imu_callback(imu_msg)
-
     def joint_callback(self, msg: JointState):
         self.buffers.joint_state_msg = msg
 
@@ -254,6 +259,7 @@ class ControllerNode(Node):
         if joint_msg is None or imu_msg is None:
             return  # No sensor data yet -> skip
 
+
         # Mode switch detection
         if self.publish_mode is not None:
             self._switch_mode(self.publish_mode)
@@ -266,9 +272,9 @@ class ControllerNode(Node):
         # Active controller execution
         if self.publish_mode == 'policy':
             self.policy_controller.set_command(self._base_command)
-            raw_torque, q_ref, v_ref = self.policy_controller.compute(joint_msg, imu_msg, dt_sec)
+            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg, imu_msg, dt_sec)
             q_ref[:] = q_ref
-            v_ref[-2:] = v_ref # Only for wheel
+            v_ref[-2:] = wheel_v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
             raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, imu_msg, dt_sec)
@@ -277,23 +283,18 @@ class ControllerNode(Node):
         else:
             raw_torque = tau        # Zero command
 
-        # self.logger.info(f"raw_torque: {raw_torque} \r")
         # SafetyLimiter
-        joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
-        joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
-        safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
-        # self.logger.info(f"safe_torque: {safe_torque} \r")
+        if self.publish_mode is not None:
+            joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
+            joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
+            safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
 
-        # Block handling (latching kill switch)
-        if is_blocked:
-            self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.\r")
-            self.control_timer.cancel()
-            safe_torque = np.zeros(self.num_joints)
-        tau[:] = safe_torque
-
-        # NOTE: 임시 Limit
-        # tau_limit = np.array(self.cfg["sw_max_torque_per_joint"])
-        # tau = np.clip(tau, -tau_limit, tau_limit)
+            # Block handling (latching kill switch)
+            if is_blocked:
+                self.logger.error("SafetyLimiter BLOCKED! Publishing zero torque.\r")
+                self.control_timer.cancel()
+                safe_torque = np.zeros(self.num_joints)
+            tau[:] = safe_torque
 
         # Publish torque command
         self._publish_torque_command(q_ref, v_ref, tau)
@@ -309,6 +310,7 @@ class ControllerNode(Node):
         msg.position = position.tolist()
         msg.velocity = velocity.tolist()
         msg.effort = torque.tolist()
+
         self.torque_command_publisher.publish(msg)
 
 
