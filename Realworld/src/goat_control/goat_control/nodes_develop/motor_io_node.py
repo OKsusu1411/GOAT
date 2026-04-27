@@ -114,7 +114,13 @@ class MotorIONode(Node):
 
     def _tick(self) -> None:
         # Read motors
+        t1_read = time.monotonic()
         motor_states_data = self.motor_state_manager.decode_motor_encoder()
+        t2_read = time.monotonic()
+
+        dt_read = t2_read - t1_read
+
+        print(f"dt_read : {dt_read:.4f}")
 
         # Publish JointState
         js = JointState()
@@ -127,6 +133,8 @@ class MotorIONode(Node):
         self.joint_state_pub.publish(js)
 
         # Send torque command if fresh
+        t1_command = time.monotonic()
+
         torque_cmd = self._latest_torque_cmd
 
         if torque_cmd is None:
@@ -151,6 +159,12 @@ class MotorIONode(Node):
         for motor_index, motor_driver in enumerate(self.motor_drivers):
             command_amp = float(current_cmd_amp[motor_index])
             motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
+        
+        t2_command = time.monotonic()
+
+        dt_command = t2_command - t1_command
+
+        print(f"dt_command : {dt_command:.4f}")
 
     def destroy_node(self):
         try:
