@@ -243,10 +243,10 @@ class PolicyController(BaseController):
         # Update decimation step
         self.decimation_count += 1
 
-        if self.decimation_count <= 1:
-            target_str = ", ".join(f"{x}" for x in target_leg_pos.reshape(-1))
-            torque_str = ", ".join(f"{x}" for x in tau_cmd.reshape(-1))
-            self.logger.info(f"[step {self.decimation_count}] target : [{target_str}]\r")
-            self.logger.info(f"[step {self.decimation_count}] torque : [{torque_str}]\r")
+        # if self.decimation_count <= 1:
+        #     target_str = ", ".join(f"{x}" for x in target_leg_pos.reshape(-1))
+        #     torque_str = ", ".join(f"{x}" for x in tau_cmd.reshape(-1))
+        #     self.logger.info(f"[step {self.decimation_count}] target : [{target_str}]\r")
+        #     self.logger.info(f"[step {self.decimation_count}] torque : [{torque_str}]\r")
 
         return tau_cmd, target_pos, self._wheel_speed_ref.copy()

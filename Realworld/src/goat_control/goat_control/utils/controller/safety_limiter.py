@@ -54,8 +54,6 @@ class SafetyLimiter:
         self._pos_upper = limits[1::2] * margin_coeff
         self.logger.info(f"pos_lower : {self._pos_lower.tolist()}\r")
         self.logger.info(f"pos_upper : {self._pos_upper.tolist()}\r")
-        # self._pos_lower = limits[0::2] + margin
-        # self._pos_upper = limits[1::2] - margin
 
         # --- Velocity estop ---
         self._estop_indices = np.asarray(joint_indices, dtype=int)
@@ -132,5 +130,5 @@ class SafetyLimiter:
         if result:
             self.logger.info("[SafetyLimiter] Joint vel stop.\r")
             self.logger.info(f"Limiter Results: {np.abs(motor_vel[self._estop_indices]) > self._estop_threshold}.\r")
-            self.logger.info(f"Joint vel: {motor_vel.tolist()}.\r")
+            self.logger.info(f"Joint vel: {motor_vel[self._estop_indices].tolist()}.\r")
         return result

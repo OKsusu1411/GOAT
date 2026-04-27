@@ -69,6 +69,19 @@ def generate_launch_description():
         }],
     )
 
+    # controller_node = Node(
+    #     package="goat_control",
+    #     executable="controller_node",
+    #     name="controller_node",
+    #     output="screen",
+    #     parameters=[{
+    #         "yaml_path": LaunchConfiguration("yaml_path"),
+    #         "urdf_path": LaunchConfiguration("urdf_path"),
+    #         "checkpoint_path": LaunchConfiguration("checkpoint_path"),
+    #         "control_rate_hz": LaunchConfiguration("control_rate_hz"),
+    #     }],
+    # )
+
     topic_converter_node = Node(
         package="goat_control",
         executable="topic_converter_node",
