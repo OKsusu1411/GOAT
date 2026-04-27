@@ -80,18 +80,14 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-
 policy_checkpoint_path: /mnt/c/Users/grape/Downloads/agent_jit_128000.pt
-
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
-
 policy_decimation: 2.0
 policy_pos_margin_factor: 1.5
 policy_joint_vel_hist_length: 4
-
 policy_device: cuda
 policy_observation_info:
   base_ang_vel: 3
@@ -103,21 +99,19 @@ policy_observation_info:
   joint_vel: 8
   previous_action: 8
   joint_vel_hist: 32
-
 policy_leg_joint_limit:
 - -2.0595
--  1.0996
+- 1.0996
 - -1.0996
--  2.0595
+- 2.0595
 - -0.59341
--  1.885
+- 1.885
 - -1.885
--  0.59341
+- 0.59341
 - -0.5236
--  1.7519
+- 1.7519
 - -1.7519
--  0.5236
-
+- 0.5236
 policy_leg_proportional_gain:
 - 3.0
 - 3.0
@@ -125,7 +119,6 @@ policy_leg_proportional_gain:
 - 3.0
 - 3.0
 - 3.0
-
 policy_leg_derivative_gain:
 - 0.1
 - 0.1
@@ -133,34 +126,30 @@ policy_leg_derivative_gain:
 - 0.1
 - 0.1
 - 0.1
-
 policy_wheel_proportional_gain:
 - 0.5
 - 0.5
-
 policy_wheel_integral_gain:
 - 0.0
 - 0.0
-
-
 torque_lpf_alpha_per_joint:
-- 0.05
-- 0.05
-- 0.05
-- 0.05
-- 0.05
-- 0.05
-- 0.05
-- 0.05
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
 sw_max_torque_per_joint:
-- 2.5
-- 2.5
-- 2.5
-- 2.5
-- 5.0
-- 5.0
-- 2.5
-- 2.5
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
 hw_max_torque_per_joint:
 - 4.5
 - 4.5
@@ -194,14 +183,14 @@ motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
 joint_offsets:
-- 0.024225170017681305
-- 0.0075572756611354515
-- 2.1136984439202537
-- -2.079437630703604
-- -5.210471042318831
-- 3.78861238724287
-- -1.6224231660688884
-- 5.422598359606225
+- 0.017627825445142735
+- 0.02553416695667704
+- 2.078983845098086
+- -2.036397811349424
+- 0.6506936517285258
+- 0.84632760758457
+- -1.9364428050877085
+- -2.5905573021501445
 imu_offsets:
 - 1.0
 - 0.0
