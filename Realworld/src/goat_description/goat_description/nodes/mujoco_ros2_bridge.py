@@ -3,6 +3,8 @@ from rclpy.node import Node
 import mujoco
 import mujoco.viewer
 import numpy as np
+import os
+from ament_index_python.packages import get_package_share_directory
 
 from sensor_msgs.msg import JointState
 from motor_interfaces.msg import ImuState
@@ -11,9 +13,12 @@ class MujocoRos2Bridge(Node):
     def __init__(self):
         super().__init__('mujoco_ros2_bridge')
 
+        pkg_share_path = get_package_share_directory('goat_description')
+        default_scene_path = os.path.join(pkg_share_path, 'xml', 'WF_GOAT_sim2real.xml')
+
         # Parameters
         self.declare_parameter("simulation_rate_hz", 200.0)
-        self.declare_parameter("scene_path", "WF_GOAT_sim2real.xml")
+        self.declare_parameter("scene_path", default_scene_path)
 
         self.simulation_rate_hz = float(self.get_parameter("simulation_rate_hz").value)
         self.scene_path = str(self.get_parameter("scene_path").value)
@@ -106,3 +111,17 @@ class MujocoRos2Bridge(Node):
         
         # Joint_state publish
         self.joint_state_pub.publish(js_msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = MujocoRos2Bridge()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == "__main__":
+    main()

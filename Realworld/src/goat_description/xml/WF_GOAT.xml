@@ -1,5 +1,5 @@
 <mujoco model="WF_GOAT">
-    <compiler angle="radian" coordinate="local" meshdir="../meshes/" autolimits="true"/>
+    <compiler angle="radian" coordinate="local" meshdir="../meshes_mujoco/" autolimits="true"/>
     
     <option timestep="0.002" gravity="0 0 -9.81"/>
 
