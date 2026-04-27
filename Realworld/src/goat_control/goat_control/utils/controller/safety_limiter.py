@@ -54,8 +54,6 @@ class SafetyLimiter:
         self._pos_upper = limits[1::2] * margin_coeff
         self.logger.info(f"pos_lower : {self._pos_lower.tolist()}\r")
         self.logger.info(f"pos_upper : {self._pos_upper.tolist()}\r")
-        # self._pos_lower = limits[0::2] + margin
-        # self._pos_upper = limits[1::2] - margin
 
         # --- Velocity estop ---
         self._estop_indices = np.asarray(joint_indices, dtype=int)
@@ -106,10 +104,7 @@ class SafetyLimiter:
             self._prev_torque[:] = 0.0
             return np.zeros(self.num_joints, dtype=float), True
 
-        # Normal path: LPF
-        raw = np.asarray(raw_torque, dtype=float).flatten()
-        # filtered = self._lpf_alpha * raw + (1.0 - self._lpf_alpha) * self._prev_torque
-        # self._prev_torque[:] = filtered
+        raw = raw_torque
         return raw, False
 
     # ------------------------------------------------------------------
@@ -121,7 +116,7 @@ class SafetyLimiter:
         motor_pos = pos / self.motor_gear_ratio
         result = bool(np.any(motor_pos < self._pos_lower) or np.any(motor_pos > self._pos_upper))
         if result:
-            self.logger.info("Joint pos stop.\r")
+            self.logger.info("[SafetyLimiter] Joint pos stop.\r")
             self.logger.info(f"Limiter Results: {np.logical_or((motor_pos < self._pos_lower), (motor_pos > self._pos_upper).tolist())}\r")
             self.logger.info(f"Joint pos : {motor_pos.tolist()}\r")
         return result
@@ -133,7 +128,7 @@ class SafetyLimiter:
         motor_vel = vel / self.motor_gear_ratio
         result = bool(np.any(np.abs(motor_vel[self._estop_indices]) > self._estop_threshold))
         if result:
-            self.logger.info("Joint vel stop.\r")
+            self.logger.info("[SafetyLimiter] Joint vel stop.\r")
             self.logger.info(f"Limiter Results: {np.abs(motor_vel[self._estop_indices]) > self._estop_threshold}.\r")
-            self.logger.info(f"Joint vel: {motor_vel.tolist()}.\r")
+            self.logger.info(f"Joint vel: {motor_vel[self._estop_indices].tolist()}.\r")
         return result
