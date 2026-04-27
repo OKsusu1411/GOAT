@@ -60,7 +60,11 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-20E-03 0E-03 15.5E-03" rpy="0 0 0"/>
+            <!-- <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/> -->
+            <!-- <geometry>
+                <mesh filename="../meshes/base_Link.stl"/>
+            </geometry> -->
+            <origin xyz="-20E-03 0E-03 -15E-03" rpy="0 0 0"/>
             <geometry>
                 <box size="0.214 0.200 0.190"/>
             </geometry>
@@ -86,9 +90,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-43.5E-03 -42E-03 0" rpy="1.57 0 0"/>
+            <origin xyz="-53.5E-03 0 0" rpy="1.57 0 0"/>
             <geometry>
-                <cylinder length="48E-03" radius="43.5E-03"/>
+                <cylinder length="135E-03" radius="42E-03"/>
             </geometry>
         </collision>
     </link>
@@ -112,9 +116,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-43.5E-03 42E-03 0" rpy="1.57 0 0"/>
+            <origin xyz="-53.5E-03 0 0" rpy="1.57 0 0"/>
             <geometry>
-                <cylinder length="48E-03" radius="43.5E-03"/>
+                <cylinder length="135E-03" radius="42E-03"/>
             </geometry>
         </collision>
     </link>
@@ -138,9 +142,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0 41E-03 -94E-03" rpy="0 0 0"/>
+            <origin xyz="-11E-03 16E-03 -116E-03" rpy="0 0 0"/>
             <geometry>
-                <cylinder length="266E-03" radius="41E-03"/>
+                <box size="0.09 0.05 0.145"/>
             </geometry>
         </collision>
     </link>
@@ -164,9 +168,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0 -41E-03 -94E-03" rpy="0 0 0"/>
+            <origin xyz="-11E-03 -16E-03 -116E-03" rpy="0 0 0"/>
             <geometry>
-                <cylinder length="266E-03" radius="41E-03"/>
+                <box size="0.09 0.05 0.145"/>
             </geometry>
         </collision>
     </link>
@@ -290,7 +294,7 @@
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-2.05949" upper="1.09956" velocity="33.5"/>
+        <limit effort="4.5" lower="-1.7453" upper="1.0123" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -300,7 +304,7 @@
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-1.09956" upper="2.05949" velocity="33.5"/>
+        <limit effort="4.5" lower="-1.0123" upper="1.7453" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -310,7 +314,7 @@
         <parent link="hip_L_Link"/>
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-0.593412" upper="1.88496" velocity="33.5"/>
+        <limit effort="4.5" lower="-0.3840" upper="2.0071" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -320,7 +324,7 @@
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-1.88496" upper="0.593412" velocity="33.5"/>
+        <limit effort="4.5" lower="-2.0071" upper="0.3840" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -330,7 +334,7 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-0.523599" upper="1.75192" velocity="33.5"/>
+        <limit effort="4.5" lower="-0.523599" upper="2.3387" velocity="33.5"/>
         <dynamics damping="2.993308e-01" stiffness ="0.0"/>
         <dynamics friction="4.432008e-01" />
     </joint>
@@ -340,7 +344,7 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-1.75192" upper="0.523599" velocity="33.5"/>
+        <limit effort="4.5" lower="-2.3387" upper="0.523599" velocity="33.5"/>
         <dynamics damping="2.993308e-01" stiffness ="0.0"/>
         <dynamics friction="4.432008e-01" />
     </joint>

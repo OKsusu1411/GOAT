@@ -54,6 +54,7 @@ setup(
             'imu_io_node = goat_control.nodes_develop.imu_io_node:main',
             'log_viewer_node = goat_control.nodes_develop.log_viewer_node:main',
             'motor_io_node = goat_control.nodes_develop.motor_io_node:main',
+            'sim_controller_node = goat_control.nodes_develop.sim_controller_node:main',
             'topic_converter_node = goat_control.nodes_develop.topic_converter_node:main',
         ],
     },
