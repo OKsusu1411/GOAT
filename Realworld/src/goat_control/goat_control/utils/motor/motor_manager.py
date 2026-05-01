@@ -5,6 +5,7 @@ import math
 import struct
 import time
 import numpy as np
+import concurrent.futures
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
@@ -309,10 +310,18 @@ class MotorStateManager:
 
     def decode_motor_encoder(self) -> MotorStatesData:
         # for motor_index in range(self.motor_count):
-        for motor_index in [0]:
+        # for motor_index in [0]:
+        #     self.poll_state2(motor_index)
+        #     self.poll_state1(motor_index)
+        #     self.poll_single_or_multi_turn(motor_index)
+
+        def fetch_motor_data(motor_index: int):
             self.poll_state2(motor_index)
             self.poll_state1(motor_index)
             self.poll_single_or_multi_turn(motor_index)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
+            executor.map(fetch_motor_data, range(self.motor_count))
 
         motor_count = len(self.motor_temperature_c)
         joint_count = len(self.joint_names)
