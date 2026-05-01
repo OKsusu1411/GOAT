@@ -33,7 +33,7 @@ class MotorIONode(Node):
         self.declare_parameter("can_interface", "socketcan")
         self.declare_parameter("motor_node_ids", [1, 2, 3, 4, 5, 6, 7, 8])
         self.declare_parameter("yaml_path", "goat_config.yaml")
-        self.declare_parameter("io_rate_hz", 100.0)
+        self.declare_parameter("io_rate_hz", 200.0)
 
         # Safety / timing
         self.declare_parameter("command_timeout_sec", 0.1)
@@ -45,7 +45,8 @@ class MotorIONode(Node):
         motor_node_ids = list(self.get_parameter("motor_node_ids").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
 
-        io_rate_hz = float(self.get_parameter("io_rate_hz").value)
+        # io_rate_hz = float(self.get_parameter("io_rate_hz").value)
+        io_rate_hz = 100.0
 
         self.command_timeout_sec = float(self.get_parameter("command_timeout_sec").value)
         self.zero_on_timeout = bool(self.get_parameter("zero_on_timeout").value)
