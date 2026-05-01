@@ -308,7 +308,8 @@ class MotorStateManager:
         return joint_torque_nm
 
     def decode_motor_encoder(self) -> MotorStatesData:
-        for motor_index in range(self.motor_count):
+        # for motor_index in range(self.motor_count):
+        for motor_index in [0]:
             self.poll_state2(motor_index)
             self.poll_state1(motor_index)
             self.poll_single_or_multi_turn(motor_index)
