@@ -45,8 +45,7 @@ class MotorIONode(Node):
         motor_node_ids = list(self.get_parameter("motor_node_ids").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
 
-        # io_rate_hz = float(self.get_parameter("io_rate_hz").value)
-        io_rate_hz = 100.0
+        io_rate_hz = float(self.get_parameter("io_rate_hz").value)
 
         self.command_timeout_sec = float(self.get_parameter("command_timeout_sec").value)
         self.zero_on_timeout = bool(self.get_parameter("zero_on_timeout").value)
