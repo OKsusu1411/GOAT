@@ -112,7 +112,7 @@ def format_motor_states(
     return "\n".join(lines)
 
 
-class MotorStateManager:
+class MotorManager:
     """ROS-independent full-scan motor polling (ported from states_pub.py).
 
     It polls for each motor:
@@ -308,84 +308,130 @@ class MotorStateManager:
         joint_torque_nm = motor_shaft_torque_nm
         return joint_torque_nm
 
-    def decode_motor_encoder(self) -> MotorStatesData:
-        # for motor_index in range(self.motor_count):
-        # for motor_index in [0]:
-        #     self.poll_state2(motor_index)
-        #     self.poll_state1(motor_index)
-        #     self.poll_single_or_multi_turn(motor_index)
+    # def decode_motor_encoder(self) -> MotorStatesData:
+    #     # for motor_index in range(self.motor_count):
+    #     # for motor_index in [0]:
+    #     #     self.poll_state2(motor_index)
+    #     #     self.poll_state1(motor_index)
+    #     #     self.poll_single_or_multi_turn(motor_index)
 
-        def fetch_motor_data(motor_index: int):
-            self.poll_state2(motor_index)
-            self.poll_state1(motor_index)
-            self.poll_single_or_multi_turn(motor_index)
+    #     def fetch_motor_data(motor_index: int):
+    #         self.poll_state2(motor_index)
+    #         self.poll_state1(motor_index)
+    #         self.poll_single_or_multi_turn(motor_index)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
-            executor.map(fetch_motor_data, range(self.motor_count))
+    #     with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
+    #         executor.map(fetch_motor_data, range(self.motor_count))
 
-        motor_count = len(self.motor_temperature_c)
-        joint_count = len(self.joint_names)
+    #     motor_count = len(self.motor_temperature_c)
+    #     joint_count = len(self.joint_names)
 
-        # Index mapping validation
-        if self.motor_index_for_joint is not None:
-            if len(self.motor_index_for_joint) != joint_count:
-                raise ValueError(
-                    f"joint_indices+wheel_indices length({len(self.motor_index_for_joint)}) "
-                    f"must match joint_names length({joint_count})."
-                )
-        else:
-            if joint_count != motor_count:
-                raise ValueError(
-                    f"joint_names length({joint_count}) != motor_count({motor_count}). "
-                    "Provide joint_indices/wheel_indices in YAML."
-                )
+    #     # Index mapping validation
+    #     if self.motor_index_for_joint is not None:
+    #         if len(self.motor_index_for_joint) != joint_count:
+    #             raise ValueError(
+    #                 f"joint_indices+wheel_indices length({len(self.motor_index_for_joint)}) "
+    #                 f"must match joint_names length({joint_count})."
+    #             )
+    #     else:
+    #         if joint_count != motor_count:
+    #             raise ValueError(
+    #                 f"joint_names length({joint_count}) != motor_count({motor_count}). "
+    #                 "Provide joint_indices/wheel_indices in YAML."
+    #             )
         
-        # Joint variables
+    #     # Joint variables
+    #     joint_position_rad: List[float] = [0.0] * joint_count
+    #     joint_velocity_rad_per_sec: List[float] = [0.0] * joint_count
+    #     joint_effort_like: List[float] = [0.0] * joint_count  # current[A] or torque[Nm]
+        
+    #     # gear, direction index validation
+    #     if self.motor_gear_ratio is None or len(self.motor_gear_ratio) != motor_count:
+    #         raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
+    #     if self.motor_direction is None or len(self.motor_direction) != motor_count:
+    #         raise ValueError("motor_direction must be a list with length == motor_count.")
+
+    #     if self.motor_torque_constant_nm_per_amp is None or len(self.motor_torque_constant_nm_per_amp) != motor_count:
+    #         raise ValueError("motor_torque_constant_nm_per_amp must be a list with length == motor_count.")
+
+    #     # Main state computation logic
+    #     for joint_i in range(joint_count):
+    #         motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
+
+    #         gear = float(self.motor_gear_ratio[motor_i])
+    #         direction = float(self.motor_direction[motor_i])
+
+    #         raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_i]
+    #         raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
+
+    #         # Encoder fail safe logic
+    #         if raw_multi != 0:
+    #             motor_angle_deg = raw_multi * self.angle_deg_per_lsb
+    #         elif raw_single != 0:
+    #             motor_angle_deg = raw_single * self.angle_deg_per_lsb
+    #         else:
+    #             motor_angle_deg = 0.0
+
+    #         # Convert motor position into joint position
+    #         joint_angle_deg = motor_angle_deg * gear * direction
+    #         joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
+
+    #         # Convert motor velocity into joint velocity
+    #         motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
+    #         joint_speed_deg_s = motor_speed_deg_s * gear * direction
+    #         joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0       # degree to radian
+
+    #         # Effort-like
+    #         motor_current_amp = self.motor_phase_current_amp[motor_i]
+    #         joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
+
+    #     # Apply joint position offset
+    #     joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
+        
+    #     return MotorStatesData(
+    #         joint_names=self.joint_names,
+    #         joint_position_rad=list(joint_position_rad).copy(),
+    #         joint_velocity_rad_per_sec=list(joint_velocity_rad_per_sec).copy(),
+    #         joint_effort_like=list(joint_effort_like).copy(),
+    #         motor_temperature_c=self.motor_temperature_c.copy(),
+    #         motor_error_flags=self.motor_error_flags.copy(),
+    #         motor_operating_state=self.motor_operating_state.copy(),
+    #         timestamp_sec=time.time()
+    #     )
+
+    # =========================================================================
+    # [공통 수학 연산 로직] 원시 데이터(Raw data)를 MotorStatesData로 패키징
+    # =========================================================================
+    def _package_motor_states(self) -> MotorStatesData:
+        """내부 버퍼의 Raw 데이터를 이용해 물리량으로 변환하고 MotorStatesData를 생성합니다."""
+        joint_count = len(self.joint_names)
+        
         joint_position_rad: List[float] = [0.0] * joint_count
         joint_velocity_rad_per_sec: List[float] = [0.0] * joint_count
-        joint_effort_like: List[float] = [0.0] * joint_count  # current[A] or torque[Nm]
+        joint_effort_like: List[float] = [0.0] * joint_count
         
-        # gear, direction index validation
-        if self.motor_gear_ratio is None or len(self.motor_gear_ratio) != motor_count:
-            raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
-        if self.motor_direction is None or len(self.motor_direction) != motor_count:
-            raise ValueError("motor_direction must be a list with length == motor_count.")
-
-        if self.motor_torque_constant_nm_per_amp is None or len(self.motor_torque_constant_nm_per_amp) != motor_count:
-            raise ValueError("motor_torque_constant_nm_per_amp must be a list with length == motor_count.")
-
-        # Main state computation logic
         for joint_i in range(joint_count):
             motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
-
             gear = float(self.motor_gear_ratio[motor_i])
             direction = float(self.motor_direction[motor_i])
 
             raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_i]
             raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
 
-            # Encoder fail safe logic
-            if raw_multi != 0:
-                motor_angle_deg = raw_multi * self.angle_deg_per_lsb
-            elif raw_single != 0:
-                motor_angle_deg = raw_single * self.angle_deg_per_lsb
-            else:
-                motor_angle_deg = 0.0
+            if raw_multi != 0: motor_angle_deg = raw_multi * self.angle_deg_per_lsb
+            elif raw_single != 0: motor_angle_deg = raw_single * self.angle_deg_per_lsb
+            else: motor_angle_deg = 0.0
 
-            # Convert motor position into joint position
             joint_angle_deg = motor_angle_deg * gear * direction
-            joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
+            joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
 
-            # Convert motor velocity into joint velocity
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
             joint_speed_deg_s = motor_speed_deg_s * gear * direction
-            joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0       # degree to radian
+            joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
 
-            # Effort-like
             motor_current_amp = self.motor_phase_current_amp[motor_i]
             joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
 
-        # Apply joint position offset
         joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
         
         return MotorStatesData(
@@ -398,3 +444,60 @@ class MotorStateManager:
             motor_operating_state=self.motor_operating_state.copy(),
             timestamp_sec=time.time()
         )
+
+    # =========================================================================
+    # [Read Only] 기존과 동일한 읽기 함수 (이제 공통 로직을 재사용합니다)
+    # =========================================================================
+    def decode_motor_encoder(self, perform_slow_poll: bool = True) -> MotorStatesData:
+        """모터의 상태만 읽어옵니다. (주로 초기화나 대기 상태일 때 사용)"""
+        def fetch_motor_data(motor_index: int):
+            self.poll_state2(motor_index)
+            if perform_slow_poll:
+                self.poll_state1(motor_index)
+                self.poll_single_or_multi_turn(motor_index)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
+            executor.map(fetch_motor_data, range(self.motor_count))
+            
+        # 데이터를 읽어온 후 패키징하여 반환합니다.
+        return self._package_motor_states()
+
+    # =========================================================================
+    # [Write + Read] 토크 명령과 상태 읽기를 동시에 처리하는 함수
+    # =========================================================================
+    def write_torques_and_read_states(self, current_cmd_amp: Sequence[float], timeout: float = 0.05, perform_slow_poll: bool = False) -> MotorStatesData:
+        """
+        모든 모터에 토크 명령을 내림과 동시에 최신 상태를 읽어오고, 
+        그 결과를 MotorStatesData 형식으로 반환합니다.
+        """
+        def control_and_read(motor_index: int):
+            command_amp = float(current_cmd_amp[motor_index])
+            # 명령 송신 + 상태(State2) 즉시 업데이트
+            # self.send_torque_and_update_state(motor_index, command_amp, timeout=timeout)
+            response_message = self.motor_drivers[motor_index].torque_mode_amp(command_amp, timeout=timeout)
+        
+            if response_message is None:
+                return
+                
+            response_data = response_message.data       # TODO: 변경
+            
+            # 매뉴얼에 명시된 0xA1 응답 데이터(State2 포맷) 파싱[cite: 1]
+            self.motor_temperature_c[motor_index] = float(struct.unpack("<b", response_data[1:2])[0])
+            
+            motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
+            self.motor_phase_current_amp[motor_index] = float(motor_current_raw_lsb) * self.motor_current_amp_per_lsb
+            
+            speed_raw_lsb = struct.unpack("<h", response_data[4:6])[0]
+            self.motor_speed_deg_per_sec[motor_index] = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
+            
+            self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
+            # 에러 플래그 등은 매번 읽을 필요가 없으므로 옵션으로 처리합니다.
+            if perform_slow_poll:
+                self.poll_state1(motor_index)
+
+        # 8개 모터에 동시에 명령 송신 및 상태 수신
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
+            executor.map(control_and_read, range(self.motor_count))
+            
+        # 최신화된 버퍼를 이용해 수학 연산을 수행하고 결과를 반환합니다.
+        return self._package_motor_states()

@@ -11,7 +11,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 
 from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
-from goat_control.utils.motor.motor_manager import MotorStateManager
+from goat_control.utils.motor.motor_manager import MotorManager
 
 
 class MotorIONode(Node):
@@ -78,7 +78,7 @@ class MotorIONode(Node):
         # state_manager_cfg = self.goat_model.build_state_manager_config(effort_output_mode="torque_nm")
         # self.state_manager = StateManager(state_manager_cfg)
 
-        self.motor_state_manager = MotorStateManager(
+        self.motor_state_manager = MotorManager(
             motor_drivers=self.motor_drivers,
             cfg=self.cfg
         )
@@ -94,6 +94,7 @@ class MotorIONode(Node):
         # IO loop
         period_sec = 1.0 / max(io_rate_hz, 1.0)
         self._timer = self.create_timer(period_sec, self._tick)
+        self.poll_counter = 0
 
         self.get_logger().info(
             "MotorIONode started. Owns CAN (read+write). "
@@ -114,27 +115,7 @@ class MotorIONode(Node):
 
     def _tick(self) -> None:
         # Read motors
-        t1_read = time.monotonic()
-        motor_states_data = self.motor_state_manager.decode_motor_encoder()
-        t2_read = time.monotonic()
-
-        dt_read = t2_read - t1_read
-
-        print(f"dt_read : {dt_read:.4f}")
-
-        # Publish JointState
-        js = JointState()
-        js.header.stamp = self.get_clock().now().to_msg()
-        js.name = list(self.joint_names)
-        js.position = list(motor_states_data.joint_position_rad)
-        js.velocity = list(motor_states_data.joint_velocity_rad_per_sec)
-        js.effort = list(motor_states_data.joint_effort_like)
-
-        self.joint_state_pub.publish(js)
-
-        # Send torque command if fresh
         t1_command = time.monotonic()
-
         torque_cmd = self._latest_torque_cmd
 
         if torque_cmd is None:
@@ -160,11 +141,30 @@ class MotorIONode(Node):
             command_amp = float(current_cmd_amp[motor_index])
             motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
         
+        do_slow_poll = (self.poll_counter % 10 == 0)
+        motor_states_data = self.motor_state_manager.write_torques_and_read_states(
+            current_cmd_amp, 
+            timeout=self.can_tx_timeout_sec, 
+            perform_slow_poll=do_slow_poll
+        )
+        
+        # Publish JointState
+        js = JointState()
+        js.header.stamp = self.get_clock().now().to_msg()
+        js.name = list(self.joint_names)
+        js.position = list(motor_states_data.joint_position_rad)
+        js.velocity = list(motor_states_data.joint_velocity_rad_per_sec)
+        js.effort = list(motor_states_data.joint_effort_like)
+
+        self.joint_state_pub.publish(js)
+        
         t2_command = time.monotonic()
 
         dt_command = t2_command - t1_command
 
         print(f"dt_command : {dt_command:.4f}")
+
+        self.poll_counter += 1
 
     def destroy_node(self):
         try:
