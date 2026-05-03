@@ -2,7 +2,7 @@
 from .can import CanInterface
 from .motor_driver import MotorDriver, MotorParams
 from .filters import FirstOrderLowPassFilter
-from .motor_manager import MotorStateManager, format_motor_states
+from .motor_manager import MotorManager, format_motor_states
 from .protocol import (
     CanIds,
     mg_ids,
@@ -27,6 +27,6 @@ __all__ = [
     "set_mg_unit_scales",
     "get_mg_unit_scales",
     "FirstOrderLowPassFilter",
-    "MotorStateManager",
+    "MotorManager",
     "format_motor_states"
 ]
