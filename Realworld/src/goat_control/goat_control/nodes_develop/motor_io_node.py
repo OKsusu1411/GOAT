@@ -57,28 +57,59 @@ class MotorIONode(Node):
         self.num_joints = self.cfg["num_joints"]
         self.joint_names = self.cfg["joint_names"]
 
-        # CAN (single owner)
-        self.can = CanInterface(channel=can_channel, interface=can_interface)
-        self.can.open()
 
+        # CAN
+
+        can_channels   = list(self.cfg["can_channels"])           # ["can0", "can1"]
+        motor_bus_idx  = list(self.cfg["motor_bus_index"])
+        motor_node_ids = list(self.cfg["motor_node_ids"])
+
+        # Error detection
+        assert len(motor_bus_idx)  == self.num_joints, "motor_bus_index length mismatch"
+        assert len(motor_node_ids) == self.num_joints, "motor_node_ids length mismatch"
+        assert all(0 <= b < len(can_channels) for b in motor_bus_idx), "motor_bus_index error"
+
+        # Can interface
+        self.cans: list[CanInterface] = [
+            CanInterface(channel=ch, interface=can_interface) for ch in can_channels
+        ]
+        for c in self.cans:
+            c.open()
+
+        # Motor driver
         self.motor_drivers: list[MotorDriver] = []
-        for node_id in motor_node_ids:
-            params = MotorParams(node_id=int(node_id))
-            self.motor_drivers.append(MotorDriver(self.can, params))
-
-        if len(self.motor_drivers) != self.num_joints:
-            self.get_logger().warn(
-                f"motor_node_ids length ({len(self.motor_drivers)}) != YAML num_joints ({self.num_joints}). "
-                "State vector sizes may mismatch. Ensure YAML joint_names matches motor count."
+        for nid, bus_i in zip(motor_node_ids, motor_bus_idx):
+            self.motor_drivers.append(
+                MotorDriver(self.cans[int(bus_i)], MotorParams(node_id=int(nid)))
             )
-            # still proceed; we use driver count as the truth for CAN IO
-            self.num_joints = len(self.motor_drivers)
 
-        # Estimation core
-        # state_manager_cfg = self.goat_model.build_state_manager_config(effort_output_mode="torque_nm")
-        # self.state_manager = StateManager(state_manager_cfg)
+        # Debugging log
+        mapping_str = ", ".join(
+            f"{name}=can{b}#id{nid}"
+            for name, b, nid in zip(self.joint_names, motor_bus_idx, motor_node_ids)
+        )
+        self.get_logger().info(f"motor bus map: {mapping_str}")
 
-        self.motor_state_manager = MotorManager(
+
+
+        # self.can = CanInterface(channel=can_channel, interface=can_interface)
+        # self.can.open()
+
+        # self.motor_drivers: list[MotorDriver] = []
+        # for node_id in motor_node_ids:
+        #     params = MotorParams(node_id=int(node_id))
+        #     self.motor_drivers.append(MotorDriver(self.can, params))
+
+        # if len(self.motor_drivers) != self.num_joints:
+        #     self.get_logger().warn(
+        #         f"motor_node_ids length ({len(self.motor_drivers)}) != YAML num_joints ({self.num_joints}). "
+        #         "State vector sizes may mismatch. Ensure YAML joint_names matches motor count."
+        #     )
+        #     # still proceed; we use driver count as the truth for CAN IO
+        #     self.num_joints = len(self.motor_drivers)
+
+
+        self.motor_manager = MotorManager(
             motor_drivers=self.motor_drivers,
             cfg=self.cfg
         )
@@ -128,21 +159,21 @@ class MotorIONode(Node):
             torque_cmd = np.zeros(self.num_joints, dtype=float)
         
         # Torque clipping
-        clipped_torque_cmd = self.motor_state_manager.torque_clipping(np.asarray(torque_cmd, dtype=float))
+        clipped_torque_cmd = self.motor_manager.torque_clipping(np.asarray(torque_cmd, dtype=float))
         
         # Torque LPF
-        lpf_torque_cmd = self.motor_state_manager.torque_lpf(np.asarray(clipped_torque_cmd, dtype=float))
+        lpf_torque_cmd = self.motor_manager.torque_lpf(np.asarray(clipped_torque_cmd, dtype=float))
 
         # Convert torque into current
-        current_cmd_amp = self.motor_state_manager.torque_to_current(np.asarray(lpf_torque_cmd, dtype=float))
+        current_cmd_amp = self.motor_manager.torque_to_current(np.asarray(lpf_torque_cmd, dtype=float))
 
         # Send torque command to motor
-        for motor_index, motor_driver in enumerate(self.motor_drivers):
-            command_amp = float(current_cmd_amp[motor_index])
-            motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
+        # for motor_index, motor_driver in enumerate(self.motor_drivers):
+        #     command_amp = float(current_cmd_amp[motor_index])
+        #     motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
         
         do_slow_poll = (self.poll_counter % 10 == 0)
-        motor_states_data = self.motor_state_manager.write_torques_and_read_states(
+        motor_states_data = self.motor_manager.write_torques_and_read_states(
             current_cmd_amp, 
             timeout=self.can_tx_timeout_sec, 
             perform_slow_poll=do_slow_poll
