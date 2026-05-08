@@ -18,6 +18,27 @@ wheel_indices:
 - 6
 - 7
 num_joints: 8
+can_channels:
+- can0
+- can1
+motor_bus_index:
+- 0   # [0] hip_L     → can0
+- 1   # [1] hip_R     → can1
+- 0   # [2] thigh_L   → can0
+- 1   # [3] thigh_R   → can1
+- 0   # [4] knee_L    → can0
+- 1   # [5] knee_R    → can1
+- 0   # [6] wheel_L   → can0
+- 1   # [7] wheel_R   → can1
+motor_node_ids:
+- 1
+- 1
+- 2
+- 2
+- 3
+- 3
+- 4
+- 4
 motor_torque_constant_nm_per_amp:
 - 0.2616
 - 0.2616

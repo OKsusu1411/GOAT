@@ -17,7 +17,7 @@ echo "=================================================="
 
 EXIT_CODE=0
 
-# Setting each CAN bus
+# Setting each CAN
 for IFACE in "${INTERFACES[@]}"; do
     echo "[*] Processing ${IFACE}..."
 
