@@ -42,7 +42,7 @@ class MotorIONode(Node):
 
         can_channel = str(self.get_parameter("can_channel").value)
         can_interface = str(self.get_parameter("can_interface").value)
-        motor_node_ids = list(self.get_parameter("motor_node_ids").value)
+        # motor_node_ids = list(self.get_parameter("motor_node_ids").value)
         yaml_path = str(self.get_parameter("yaml_path").value)
 
         io_rate_hz = float(self.get_parameter("io_rate_hz").value)
@@ -146,7 +146,6 @@ class MotorIONode(Node):
 
     def _tick(self) -> None:
         # Read motors
-        t1_command = time.monotonic()
         torque_cmd = self._latest_torque_cmd
 
         if torque_cmd is None:
@@ -172,12 +171,14 @@ class MotorIONode(Node):
         #     command_amp = float(current_cmd_amp[motor_index])
         #     motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
         
+        t1_command = time.monotonic()
         do_slow_poll = (self.poll_counter % 10 == 0)
         motor_states_data = self.motor_manager.write_torques_and_read_states(
             current_cmd_amp, 
             timeout=self.can_tx_timeout_sec, 
             perform_slow_poll=do_slow_poll
         )
+        t2_command = time.monotonic()
         
         # Publish JointState
         js = JointState()
@@ -189,8 +190,6 @@ class MotorIONode(Node):
 
         self.joint_state_pub.publish(js)
         
-        t2_command = time.monotonic()
-
         dt_command = t2_command - t1_command
 
         print(f"dt_command : {dt_command:.4f}")
