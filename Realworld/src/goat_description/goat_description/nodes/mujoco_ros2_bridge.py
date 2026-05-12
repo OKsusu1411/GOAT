@@ -36,7 +36,7 @@ class MujocoRos2Bridge(Node):
         # Sensor ID parsing
         self.acc_id = mujoco.mj_name2id(self.mujoco_model, mujoco.mjtObj.mjOBJ_SENSOR, 'imu_acc')
         self.gyro_id = mujoco.mj_name2id(self.mujoco_model, mujoco.mjtObj.mjOBJ_SENSOR, 'imu_gyro')
-        self.mag_id = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SENSOR, 'imu_mag')
+        self.mag_id = mujoco.mj_name2id(self.mujoco_model, mujoco.mjtObj.mjOBJ_SENSOR, 'imu_mag')
 
         self.viewer = mujoco.viewer.launch_passive(self.mujoco_model, self.mujoco_data)
         
