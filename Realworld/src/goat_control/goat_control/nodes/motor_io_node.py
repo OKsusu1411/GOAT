@@ -197,10 +197,13 @@ class MotorIONode(Node):
         self.poll_counter += 1
 
     def destroy_node(self):
-        try:
-            self.can.close()
-        except Exception:
-            pass
+        # self.can no longer exists after the dual-bus refactor; close every
+        # CanInterface in self.cans so shutdown doesn't raise AttributeError.
+        for can_interface in getattr(self, "cans", []):
+            try:
+                can_interface.close()
+            except Exception:
+                pass
         super().destroy_node()
 
 

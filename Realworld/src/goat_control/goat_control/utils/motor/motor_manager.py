@@ -182,6 +182,14 @@ class MotorManager:
         
         self.prev_torque = np.zeros(self.num_joints, dtype=float)
 
+        # Persistent thread pool reused across every tick. Recreating an
+        # 8-thread pool at 200 Hz was costing ~800 thread spawns/sec for no
+        # parallelism benefit (per-bus txrx_lock already serializes the bus).
+        self._io_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.motor_count,
+            thread_name_prefix="motor_io",
+        )
+
         # self.joint_velocity_low_pass_filter = (
         #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
         #     if joint_velocity_lpf_alpha is not None
@@ -456,9 +464,13 @@ class MotorManager:
                 self.poll_state1(motor_index)
                 self.poll_single_or_multi_turn(motor_index)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
-            executor.map(fetch_motor_data, range(self.motor_count))
-            
+        # Submit on the persistent pool and drain via f.result() so any
+        # exceptions surface instead of being silently swallowed by a
+        # discarded executor.map() iterator.
+        futures = [self._io_pool.submit(fetch_motor_data, i) for i in range(self.motor_count)]
+        for f in futures:
+            f.result()
+
         # 데이터를 읽어온 후 패키징하여 반환합니다.
         return self._package_motor_states()
 
@@ -495,9 +507,12 @@ class MotorManager:
             if perform_slow_poll:
                 self.poll_state1(motor_index)
 
-        # 8개 모터에 동시에 명령 송신 및 상태 수신
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
-            executor.map(control_and_read, range(self.motor_count))
-            
+        # Hot-path fan-out: submit on the persistent pool and drain via
+        # f.result() so any in-thread exceptions surface instead of being
+        # swallowed by a discarded executor.map() iterator.
+        futures = [self._io_pool.submit(control_and_read, i) for i in range(self.motor_count)]
+        for f in futures:
+            f.result()
+
         # 최신화된 버퍼를 이용해 수학 연산을 수행하고 결과를 반환합니다.
         return self._package_motor_states()

@@ -129,15 +129,17 @@ class CanInterface:
 
         transmitted_data = bytes([cmd_byte]) + payload7
 
-        # with self.txrx_lock:
-        #     # Drain any pending frames to avoid matching a stale response.
-        #     drained = self._drain_rx(max_frames=200)
-        #     if drained > 0:
-        #         self.logger.debug(f"[CAN] drained {drained} stale RX frames before txrx")
-
-        #     sent_message = self.send(tx_id, transmitted_data)
-
+        # Acquire bus lock, then drain stale frames left by the previous
+        # motor's txrx on this bus. Without the drain, the next motor pulls
+        # the previous motor's response out of recv(), fails the rx_id/tx_id
+        # match, discards it, and then misses its own response window.
         with self.txrx_lock:
+            # Stale-frame purge: pull anything already sitting in the kernel RX queue.
+            drained = self._drain_rx(max_frames=200)
+            if drained > 0:
+                self.logger.debug(f"[CAN] drained {drained} stale RX frames before txrx")
+
+            # Issue the command on the bus; abort early if send itself failed.
             sent_message = self.send(tx_id, transmitted_data)
             if sent_message is None:
                 return None
@@ -156,11 +158,9 @@ class CanInterface:
                 if received_message.data[0] != cmd_byte:
                     continue
 
-                # 1) Normal protocol response (0x180 + node_id)
                 if accept_rx_id and (received_message.arbitration_id == rx_id):
                     return received_message
 
-                # 2) Response on tx_id with different data (ignore pure echo)
                 if (
                     accept_tx_echo_diff
                     and (received_message.arbitration_id == tx_id)
