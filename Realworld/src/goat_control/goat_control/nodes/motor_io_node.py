@@ -69,6 +69,29 @@ class MotorIONode(Node):
         assert len(motor_node_ids) == self.num_joints, "motor_node_ids length mismatch"
         assert all(0 <= b < len(can_channels) for b in motor_bus_idx), "motor_bus_index error"
 
+        # Mapping sanity: each (bus, node_id) pair must be unique. The motors
+        # are flashed with globally-unique node IDs (1..8) and split across
+        # the two buses; a duplicate pair almost always means the YAML wasn't
+        # updated for the dual-bus split — the exact bug that caused the
+        # [1,2,5,6] dropouts. Fail loud here instead of silently timing out.
+        seen_bus_node_pairs = set()                                 # tracks (bus, node_id) seen so far
+        for joint_i, (bus_i, node_id_i) in enumerate(zip(motor_bus_idx, motor_node_ids)):
+            pair_key = (int(bus_i), int(node_id_i))                 # canonical key for this joint
+            if pair_key in seen_bus_node_pairs:
+                raise RuntimeError(
+                    f"motor_io_node: duplicate (bus={bus_i}, node_id={node_id_i}) at joint index {joint_i}. "
+                    "Each (bus, node_id) pair must be unique."
+                )
+            seen_bus_node_pairs.add(pair_key)
+        # Cross-bus duplicate IDs are only valid if the same physical node_id
+        # really exists on both buses; warn so the operator double-checks.
+        unique_node_ids = {int(n) for n in motor_node_ids}          # distinct IDs across all buses
+        if len(unique_node_ids) != len(motor_node_ids):
+            self.get_logger().warn(
+                "motor_node_ids contains duplicate IDs across buses; this is only valid "
+                "if the same physical node_id really exists on both buses."
+            )
+
         # Can interface
         self.cans: list[CanInterface] = [
             CanInterface(channel=ch, interface=can_interface) for ch in can_channels

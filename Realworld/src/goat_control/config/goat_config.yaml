@@ -31,14 +31,14 @@ motor_bus_index:
 - 0   # [6] wheel_L   → can0
 - 1   # [7] wheel_R   → can1
 motor_node_ids:
-- 1
-- 1
-- 2
-- 2
-- 3
-- 3
-- 4
-- 4
+- 1   # [0] hip_L     -> 0x141 on can0
+- 2   # [1] hip_R     -> 0x142 on can1
+- 3   # [2] thigh_L   -> 0x143 on can0
+- 4   # [3] thigh_R   -> 0x144 on can1
+- 5   # [4] knee_L    -> 0x145 on can0
+- 6   # [5] knee_R    -> 0x146 on can1
+- 7   # [6] wheel_L   -> 0x147 on can0
+- 8   # [7] wheel_R   -> 0x148 on can1
 motor_torque_constant_nm_per_amp:
 - 0.2616
 - 0.2616
