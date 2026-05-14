@@ -358,7 +358,8 @@ class ControllerNode(Node):
         #     return
 
         # Publish torque command
-        tau[:] = safe_torque
+        # tau[:] = safe_torque
+        tau[:] = raw_torque
 
         self._send_to_motors(tau * 0.0)
 
