@@ -104,6 +104,8 @@ class ControllerNode(Node):
         # Messages
         self.joint_state_msg = None
         self.imu_msg = None
+        self.prev_joint_rx_time = None
+        self.prev_imu_rx_time = None
         self.last_joint_rx_time = None
         self.last_imu_rx_time = None
         
@@ -230,11 +232,13 @@ class ControllerNode(Node):
 
     def joint_callback(self, msg: JointState):
         self.joint_state_msg = msg
-        self.last_joint_rx_time = time.monotonic()
+        self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time)
+        self.last_joint_rx_time = self.get_clock().now()
 
     def imu_callback(self, msg: ImuState):
         self.imu_msg = msg
-        self.last_imu_rx_time = time.monotonic()
+        self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time)
+        self.last_imu_rx_time = self.get_clock().now()
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
@@ -315,11 +319,11 @@ class ControllerNode(Node):
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
 
-        # =================== Proactive Condition Check ====================
+        #r =================== Proactive Condition Check ====================
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish_toque_command(q_ref, v_ref, tau)
             return
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
@@ -408,9 +412,9 @@ class ControllerNode(Node):
         if self.last_imu_rx_time is None:
             return True, "last_imu_rx_time is None"
 
-        now_mono = time.monotonic()
-        joint_age = now_mono - self.last_joint_rx_time
-        imu_age = now_mono - self.last_imu_rx_time
+        # now = self.get_clock().now()
+        joint_age = self.last_joint_rx_time - self.prev_joint_rx_time
+        imu_age = self.last_imu_rx_time - self.prev_imu_rx_time
 
         if joint_age > self.action_timeout_sec:
             return True, f"joint state stale: age={joint_age:.4f}s"
