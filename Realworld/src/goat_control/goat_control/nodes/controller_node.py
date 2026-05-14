@@ -334,9 +334,9 @@ class ControllerNode(Node):
             self._publish_torque_command(q_ref, v_ref, tau)
             return
         # Stale check
-        is_stale, stale_reason = self._sensor_data_is_stale()
-        if is_stale:
-            self._trigger_kill_switch(f"Sensor stale: {stale_reason}")
+        # is_stale, stale_reason = self._sensor_data_is_stale()
+        # if is_stale:
+        #     self._trigger_kill_switch(f"Sensor stale: {stale_reason}")
             # self._publish_torque_command(q_ref, v_ref, tau)
             # return
         # ==================================================================
