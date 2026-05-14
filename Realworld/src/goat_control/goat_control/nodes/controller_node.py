@@ -366,11 +366,11 @@ class ControllerNode(Node):
             throttle_duration_sec=1.0,
         )
 
-        # # Block handling (latching kill switch)
-        # if is_blocked:
-        #     self._trigger_kill_switch("SafetyLimiter blocked command")
-        #     self._publish_torque_command(q_ref * 0.0, v_ref * 0.0, tau)
-        #     return
+        # Block handling (latching kill switch)
+        if is_blocked:
+            self._trigger_kill_switch("SafetyLimiter blocked command")
+            self._publish_torque_command(q_ref * 0.0, v_ref * 0.0, tau)
+            return
 
         # Publish torque command
         tau[:] = safe_torque
