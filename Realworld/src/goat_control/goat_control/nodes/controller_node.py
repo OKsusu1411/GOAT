@@ -349,13 +349,13 @@ class ControllerNode(Node):
         # Safety Limiter
         joint_pos = np.asarray(self.joint_state_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(self.joint_state_msg.velocity, dtype=float).flatten()
-        safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
+        # safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
 
-        # Block handling (latching kill switch)
-        if is_blocked:
-            self._trigger_kill_switch("SafetyLimiter blocked command")
-            self._send_to_motors(tau)
-            return
+        # # Block handling (latching kill switch)
+        # if is_blocked:
+        #     self._trigger_kill_switch("SafetyLimiter blocked command")
+        #     self._send_to_motors(tau)
+        #     return
 
         # Publish torque command
         tau[:] = safe_torque
