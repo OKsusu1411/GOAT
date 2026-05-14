@@ -91,19 +91,6 @@ def generate_launch_description():
         }],
     )
 
-    motor_io_node = Node(
-        package="goat_control",
-        executable="motor_io_node",
-        name="motor_io_node",
-        output="screen",
-        parameters=[{
-            "can_channel": LaunchConfiguration("can_channel"),
-            "can_interface": LaunchConfiguration("can_interface"),
-            "yaml_path": LaunchConfiguration("yaml_path"),
-            "io_rate_hz": LaunchConfiguration("control_rate_hz"),
-        }],
-    )
-    
     return LaunchDescription([
         yaml_path_arg,
         urdf_path_arg,
@@ -115,5 +102,4 @@ def generate_launch_description():
         imu_baudrate_arg,
         imu_io_node,
         controller_node,
-        motor_io_node,
     ])
