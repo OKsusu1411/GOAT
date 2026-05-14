@@ -362,8 +362,7 @@ class ControllerNode(Node):
         # Time spent inside controller_node this cycle: agent inference + safety limiter.
         controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
         print(
-            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
-            throttle_duration_sec=1.0,
+            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r"
         )
 
         # Block handling (latching kill switch)
