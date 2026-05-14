@@ -232,13 +232,13 @@ class ControllerNode(Node):
 
     def joint_callback(self, msg: JointState):
         self.joint_state_msg = msg
-        self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time) if self.last_joint_rx_time is not None else self.get_clock().now()
-        self.last_joint_rx_time = self.get_clock().now()
+        self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time) if self.last_joint_rx_time is not None else time.monotonic()
+        self.last_joint_rx_time = time.monotonic()
 
     def imu_callback(self, msg: ImuState):
         self.imu_msg = msg
-        self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else self.get_clock().now()
-        self.last_imu_rx_time = self.get_clock().now()
+        self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else time.monotonic()
+        self.last_imu_rx_time = time.monotonic()
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
@@ -323,7 +323,7 @@ class ControllerNode(Node):
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
-            self._publish_toque_command(q_ref, v_ref, tau)
+            self._publish_torque_command(q_ref, v_ref, tau)
             return
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
