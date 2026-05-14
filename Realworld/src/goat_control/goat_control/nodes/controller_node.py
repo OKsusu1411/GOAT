@@ -235,10 +235,14 @@ class ControllerNode(Node):
         self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time) if self.last_joint_rx_time is not None else time.monotonic()
         self.last_joint_rx_time = time.monotonic()
 
+        self.logger.info(f"joint time : {self.last_joint_rx_time - self.prev_joint_rx_time:.6f}s\r")
+
     def imu_callback(self, msg: ImuState):
         self.imu_msg = msg
         self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else time.monotonic()
         self.last_imu_rx_time = time.monotonic()
+
+        # self.logger.info(f"joint time : {self.last_joint_rx_time - self.prev_joint_rx_time:.6f}s\r")
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
