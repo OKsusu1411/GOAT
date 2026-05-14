@@ -223,7 +223,7 @@ class MotorIONode(Node):
         
         dt_command = t2_command - t1_command
 
-        print(f"motor freq : {1/dt_command:.4f} Hz")
+        # print(f"motor freq : {1/dt_command:.4f} Hz")
 
         # --- End-to-end latency: T0 (agent start) -> T1 (CAN write done) ---
         if self._latest_torque_cmd_stamp is not None:
