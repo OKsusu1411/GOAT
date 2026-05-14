@@ -35,13 +35,29 @@ for IFACE in "${INTERFACES[@]}"; do
     echo "    - Bringing ${IFACE} up with txqueuelen ${TXQUEUELEN}..."
     sudo ip link set "${IFACE}" up txqueuelen "${TXQUEUELEN}"
 
-    sleep 0.2
+    # Wait up to ~1s for the netdev IFF_UP flag to appear.
+    # We check the flag list "<...,UP,...>" on the first line of `ip link show`,
+    # NOT the "state UP" token: for SocketCAN that token reflects the CAN
+    # controller state (ERROR-ACTIVE / BUS-OFF / ...) and may not read "UP"
+    # even when the interface is administratively up and the transceiver is on.
+    UP_OK=0
+    for _ in 1 2 3 4 5; do
+        # Match IFF_UP, anchored so it can't hit the "UP" inside "LOWER_UP".
+        if ip link show "${IFACE}" 2>/dev/null | head -n1 | grep -qE '[<,]UP[,>]'; then
+            UP_OK=1
+            break
+        fi
+        sleep 0.2
+    done
 
-    # Check if the interface state is UP
-    if ip -details link show "${IFACE}" | grep -q "state UP"; then
-        echo "    -> [OK] ${IFACE} is UP and ready."
+    if [ "${UP_OK}" -eq 1 ]; then
+        # CAN controller state, logged for visibility only; not part of the UP/DOWN decision.
+        CAN_STATE=$(ip -details link show "${IFACE}" | awk '/can state/ {print $3; exit}')
+        echo "    -> [OK] ${IFACE} is UP and ready (can state: ${CAN_STATE:-unknown})."
     else
-        echo "    -> [FAIL] ${IFACE} is NOT UP. Check wiring or device."
+        echo "    -> [FAIL] ${IFACE} is NOT UP. Check wiring, termination, or device."
+        # Dump details to help diagnose (BUS-OFF / STOPPED / ERROR-PASSIVE differ a lot).
+        ip -details link show "${IFACE}" || true
         EXIT_CODE=1
     fi
     echo "--------------------------------------------------"

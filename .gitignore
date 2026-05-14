@@ -79,8 +79,6 @@ CLAUDE.md
 research.md
 plan.md
 
-
-<<<<<<< HEAD
 # VS Code
 .vscode/
 **/.vscode/
@@ -89,5 +87,3 @@ plan.md
 *.vc.db
 *.vc.db-shm
 *.vc.db-wal
-=======
->>>>>>> 51fb41c074c58b14fcb3abaaacc1ceb7dfa8ebf3
