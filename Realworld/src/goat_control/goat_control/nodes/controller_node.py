@@ -235,14 +235,14 @@ class ControllerNode(Node):
         self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time) if self.last_joint_rx_time is not None else time.monotonic()
         self.last_joint_rx_time = time.monotonic()
 
-        self.logger.info(f"joint time : {self.last_joint_rx_time - self.prev_joint_rx_time:.6f}s\r")
+        self.logger.info(f"joint time : {self.last_joint_rx_time - self.prev_joint_rx_time:.6f}s\r", throttle_duration_sec=0.5)
 
     def imu_callback(self, msg: ImuState):
         self.imu_msg = msg
         self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else time.monotonic()
         self.last_imu_rx_time = time.monotonic()
 
-        self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r")
+        self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r", throttle_duration_sec=0.5)
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
@@ -371,7 +371,7 @@ class ControllerNode(Node):
         controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
         self.logger.info(
             f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
-            throttle_duration_sec=1.0,
+            throttle_duration_sec=0.5,
         )
 
         # Block handling (latching kill switch)
@@ -384,9 +384,6 @@ class ControllerNode(Node):
         tau[:] = safe_torque
 
         self._publish_torque_command(q_ref * 0.0, v_ref * 0.0, tau * 0.0)
-
-        # inference_dt = time.monotonic() - now_time
-        # self.logger.info(f"Inference time: {inference_dt:.6f} s\r")
 
     def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish torque command to /commands topic."""
