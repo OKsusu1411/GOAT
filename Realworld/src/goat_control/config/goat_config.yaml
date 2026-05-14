@@ -22,23 +22,23 @@ can_channels:
 - can0
 - can1
 motor_bus_index:
-- 0   # [0] hip_L     → can0
-- 1   # [1] hip_R     → can1
-- 0   # [2] thigh_L   → can0
-- 1   # [3] thigh_R   → can1
-- 0   # [4] knee_L    → can0
-- 1   # [5] knee_R    → can1
-- 0   # [6] wheel_L   → can0
-- 1   # [7] wheel_R   → can1
+- 0
+- 1
+- 0
+- 1
+- 0
+- 1
+- 0
+- 1
 motor_node_ids:
-- 1   # [0] hip_L     -> 0x141 on can0
-- 2   # [1] hip_R     -> 0x142 on can1
-- 3   # [2] thigh_L   -> 0x143 on can0
-- 4   # [3] thigh_R   -> 0x144 on can1
-- 5   # [4] knee_L    -> 0x145 on can0
-- 6   # [5] knee_R    -> 0x146 on can1
-- 7   # [6] wheel_L   -> 0x147 on can0
-- 8   # [7] wheel_R   -> 0x148 on can1
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
 motor_torque_constant_nm_per_amp:
 - 0.2616
 - 0.2616
@@ -103,7 +103,6 @@ nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
 policy_checkpoint_path: src/goat_control/checkpoint/agent_jit_128000.pt
 policy_device: cuda
-
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
@@ -115,7 +114,6 @@ policy_observation_info:
   joint_pos: 6
   joint_vel: 8
   previous_action: 8
-
 policy_action_scale_factor:
 - 1.0
 - 1.0
@@ -125,7 +123,6 @@ policy_action_scale_factor:
 - 1.0
 - 5.0
 - 5.0
-
 policy_leg_proportional_gain:
 - 5.0
 - 5.0
@@ -133,7 +130,6 @@ policy_leg_proportional_gain:
 - 5.0
 - 5.0
 - 5.0
-
 policy_leg_derivative_gain:
 - 0.1
 - 0.1
@@ -144,11 +140,9 @@ policy_leg_derivative_gain:
 policy_wheel_proportional_gain:
 - 0.02
 - 0.02
-
 policy_wheel_integral_gain:
 - 0.0
 - 0.0
-
 torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
@@ -200,14 +194,14 @@ motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
 joint_offsets:
-- 0.017627825445142735
-- 0.02553416695667704
-- 2.078983845098086
-- -2.036397811349424
-- 0.6506936517285258
-- 0.84632760758457
-- -1.9364428050877085
-- -2.5905573021501445
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
 imu_offsets:
 - 1.0
 - 0.0
