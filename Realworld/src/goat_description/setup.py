@@ -14,11 +14,13 @@ setup(
         (os.path.join("share", package_name, "launch"), glob(os.path.join("launch/*.launch.py"))),
         (os.path.join("share", package_name, "urdf"), glob(os.path.join("urdf/*"))),
         (os.path.join("share", package_name, "meshes"), glob(os.path.join("meshes/*"))),
+        (os.path.join("share", package_name, "meshes_mujoco"), glob(os.path.join("meshes_mujoco/*"))),
+        (os.path.join("share", package_name, "xml"), glob(os.path.join("xml/*"))),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="heachanlee",
-    maintainer_email="eojin333c@gmail.com",
+    maintainer="Hansu Kim",
+    maintainer_email="hansusu1411@gmail.com",
     description="GOAT Rviz display + helper nodes",
     license="TODO: License declaration",
     extras_require={
@@ -29,6 +31,7 @@ setup(
     entry_points={
         'console_scripts': [
             'imu_tf_publisher = goat_description.nodes.imu_tf_publisher:main',
+            'mujoco_ros2_bridge = goat_description.nodes.mujoco_ros2_bridge:main',
         ],
     },
 )

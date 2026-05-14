@@ -172,7 +172,7 @@ class NominalController(BaseController):
         self.count_tick = 0
 
         # Wheel torque limit for leg joint control
-        self.wheel_tau_limit = self.cfg.get("max_torque_per_joint")[-1]
+        self.wheel_tau_limit = self.cfg.get("hw_max_torque_per_joint")[-1]
 
     def reset(self):
         """Reset only count tick for trajectory tracking control.
@@ -194,6 +194,11 @@ class NominalController(BaseController):
 
         # Lazy initialization
         if self.count_tick == 0:
+            
+            # NOTE: test line =====================================================
+            # self.q_target = self.joint_q_curr
+            # =====================================================================
+
             # Reference assign
             for i, (start, end) in enumerate(zip(self.joint_q_curr, self.q_target)):
                 self.q_ref_traj[:, i] = np.linspace(start, end, self.num_traj_points)
@@ -253,7 +258,7 @@ class NominalController(BaseController):
         # Update tick
         self.count_tick += 1
 
-        return tau_cmd, self.q_ref[7:].copy(), None
+        return tau_cmd, self.q_ref[7:][self.pin_to_ros_ids].copy(), None
 
     ### =============================== Auxilary Functions (Wheel) =============================== ###
 
@@ -319,7 +324,7 @@ class NominalController(BaseController):
         # PD controller
         theta_err = theta - theta_cmd
         wheel_tau = self.wheel_inner_Kp * theta_err + self.wheel_inner_Kd * theta_dot
-        
+
         return np.clip(wheel_tau, -self.wheel_tau_limit, self.wheel_tau_limit)
 
 

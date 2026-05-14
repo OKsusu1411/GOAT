@@ -39,16 +39,8 @@ class SafetyLimiter:
         alpha_raw = np.asarray(cfg["torque_lpf_alpha_per_joint"], dtype=float).flatten()
         if alpha_raw.size != self.num_joints:
             raise ValueError("torque_lpf_alpha_per_joint length must equal num_joints.")
-        if np.any(alpha_raw < 0.0) or np.any(alpha_raw > 1.0):
-            raise ValueError("torque_lpf_alpha_per_joint values must be in [0, 1].")
         self._lpf_alpha = alpha_raw
-
-        # --- Torque clipping ---
-        max_raw = np.asarray(cfg["max_torque_per_joint"], dtype=float).flatten()
-        if max_raw.size != self.num_joints:
-            raise ValueError("max_torque_per_joint length must equal num_joints.")
-        # 0 or negative -> treat as no clipping
-        self._max_torque = np.where(max_raw > 0.0, max_raw, np.inf)
+        self.logger.info(f"LPF : {self._lpf_alpha}")
 
         # --- Joint position limits ---
         limits = np.asarray(cfg["joint_pos_limit"], dtype=float).flatten()
@@ -62,8 +54,6 @@ class SafetyLimiter:
         self._pos_upper = limits[1::2] * margin_coeff
         self.logger.info(f"pos_lower : {self._pos_lower.tolist()}\r")
         self.logger.info(f"pos_upper : {self._pos_upper.tolist()}\r")
-        # self._pos_lower = limits[0::2] + margin
-        # self._pos_upper = limits[1::2] - margin
 
         # --- Velocity estop ---
         self._estop_indices = np.asarray(joint_indices, dtype=int)
@@ -108,19 +98,14 @@ class SafetyLimiter:
         """
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
-            # self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
-            self._is_blocked = self._check_joint_vel_estop(joint_vel)
+            self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
             return np.zeros(self.num_joints, dtype=float), True
 
-        # Normal path: LPF + clipping
-        raw = np.asarray(raw_torque, dtype=float).flatten()
-        filtered = self._lpf_alpha * raw + (1.0 - self._lpf_alpha) * self._prev_torque
-        clipped = np.clip(filtered, -self._max_torque, self._max_torque)
-        self._prev_torque[:] = clipped
-        return clipped, False
+        raw = raw_torque
+        return raw, False
 
     # ------------------------------------------------------------------
     # Internal checks
@@ -131,7 +116,7 @@ class SafetyLimiter:
         motor_pos = pos / self.motor_gear_ratio
         result = bool(np.any(motor_pos < self._pos_lower) or np.any(motor_pos > self._pos_upper))
         if result:
-            self.logger.info("Joint pos stop.\r")
+            self.logger.info("[SafetyLimiter] Joint pos stop.\r")
             self.logger.info(f"Limiter Results: {np.logical_or((motor_pos < self._pos_lower), (motor_pos > self._pos_upper).tolist())}\r")
             self.logger.info(f"Joint pos : {motor_pos.tolist()}\r")
         return result
@@ -143,7 +128,7 @@ class SafetyLimiter:
         motor_vel = vel / self.motor_gear_ratio
         result = bool(np.any(np.abs(motor_vel[self._estop_indices]) > self._estop_threshold))
         if result:
-            self.logger.info("Joint vel stop.\r")
+            self.logger.info("[SafetyLimiter] Joint vel stop.\r")
             self.logger.info(f"Limiter Results: {np.abs(motor_vel[self._estop_indices]) > self._estop_threshold}.\r")
-            self.logger.info(f"Joint vel: {motor_vel.tolist()}.\r")
+            self.logger.info(f"Joint vel: {motor_vel[self._estop_indices].tolist()}.\r")
         return result
