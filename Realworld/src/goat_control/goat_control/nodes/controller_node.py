@@ -93,11 +93,14 @@ class ControllerNode(Node):
             depth=1,
         )
 
-        # Subscriber — only /imu remains a topic (imu_io_node is still separate).
+        # Subscriber
         self.imu_subscriber = self.create_subscription(ImuState,
                                                        "/imu",
                                                        self.imu_callback,
                                                        qos_profile=qos_profile,)
+        
+        # Publisher
+        self.joint_state_pub = self.create_publisher(JointState,"/joint_states", qos_profile=qos_profile,)
 
         # Messages
         self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
@@ -229,6 +232,36 @@ class ControllerNode(Node):
 
         # self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r", throttle_duration_sec=0.5)
 
+    def _sensor_data_has_nan(self) -> bool:
+        """Return True if any element of the joint or IMU state is NaN.
+
+        A motor that does not answer the state read leaves NaN in joint
+        velocity/effort; a bad IMU frame leaves NaN in the IMU fields. Either
+        would propagate into the torque command and crash the CAN current
+        conversion, so the caller treats True as a kill condition. Does not
+        modify the data — detection only.
+        """
+        # Joint state: position / velocity / effort arrays.
+        js = self.joint_state_msg
+        if js is not None:
+            for field in (js.position, js.velocity, js.effort):
+                if np.any(np.isnan(np.asarray(field, dtype=float))):
+                    return True
+
+        # IMU state: quaternion + gyro / vel / mag vectors.
+        imu = self.imu_msg
+        if imu is not None:
+            imu_values = [
+                imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
+                imu.gyro.x, imu.gyro.y, imu.gyro.z,
+                imu.vel.x, imu.vel.y, imu.vel.z,
+                imu.mag.x, imu.mag.y, imu.mag.z,
+            ]
+            if np.any(np.isnan(np.asarray(imu_values, dtype=float))):
+                return True
+
+        return False
+
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
         # Prevent automatic controller re-entry.
@@ -302,6 +335,9 @@ class ControllerNode(Node):
         # Joint state from the previous tick's CAN transaction (in-process).
         self.joint_state_msg = self.motor_io.latest_joint_state
 
+        # Publish joint states
+        self.joint_state_pub.publish(self.joint_state_msg)
+
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -311,18 +347,18 @@ class ControllerNode(Node):
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
-            self._send_to_motors(tau)
+            self.motor_io.read_write_motor(tau)
             return
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
-            self._send_to_motors(tau)
+            self.motor_io.read_write_motor(tau)
             return
-        # Stale check
-        # is_stale, stale_reason = self._sensor_data_is_stale()
-        # if is_stale:
-        #     self._trigger_kill_switch(f"Sensor stale: {stale_reason}")
-        #     self._publish_torque_command(q_ref, v_ref, tau)
-        #     return
+        # NaN check: a NaN in joint/IMU state would propagate into the torque
+        # command and crash the CAN current conversion. Treat it as a kill condition.
+        if self._sensor_data_has_nan():
+            self._trigger_kill_switch("NaN detected in joint/IMU state")
+            self.motor_io.read_write_motor(tau)
+            return
         # ==================================================================
 
         # Mode switch detection
@@ -343,7 +379,7 @@ class ControllerNode(Node):
             v_ref[-2:] = 0 # Only for wheel
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._send_to_motors(tau)
+            self.motor_io.read_write_motor(tau)
             return
 
         # Safety Limiter
@@ -361,7 +397,7 @@ class ControllerNode(Node):
         # tau[:] = safe_torque
         tau[:] = raw_torque
 
-        self._send_to_motors(tau * 0.0)
+        self.motor_io.read_write_motor(tau * 0.0)
 
         # Time spent inside controller_node this cycle: agent inference + safety limiter.
         controller_internal_sec = (self.get_clock().now() - now_time).nanoseconds * 1e-9
@@ -369,10 +405,6 @@ class ControllerNode(Node):
             f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
             throttle_duration_sec=0.5,
         )
-
-    def _send_to_motors(self, torque: np.ndarray) -> None:
-        """Write torque to the motors in-process (replaces /commands publish)."""
-        self.motor_io.step(np.asarray(torque, dtype=float))
 
 
     def _sensor_data_is_stale(self) -> tuple[bool, str]:

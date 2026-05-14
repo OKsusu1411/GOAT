@@ -96,7 +96,7 @@ class MotorIO:
         js.effort = list(states.joint_effort_like)
         return js
 
-    def step(self, torque_cmd_nm: np.ndarray) -> JointState:
+    def read_write_motor(self, torque_cmd_nm: np.ndarray) -> JointState:
         """Write torque to all motors and read back joint state in one CAN pass.
 
         Returns the freshly read JointState; also cached as `latest_joint_state`
