@@ -235,14 +235,14 @@ class ControllerNode(Node):
         self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time) if self.last_joint_rx_time is not None else time.monotonic()
         self.last_joint_rx_time = time.monotonic()
 
-        self.logger.info(f"joint time : {self.last_joint_rx_time - self.prev_joint_rx_time:.6f}s\r", throttle_duration_sec=0.5)
+        # self.logger.info(f"joint time : {self.last_joint_rx_time - self.prev_joint_rx_time:.6f}s\r", throttle_duration_sec=0.5)
 
     def imu_callback(self, msg: ImuState):
         self.imu_msg = msg
         self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else time.monotonic()
         self.last_imu_rx_time = time.monotonic()
 
-        self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r", throttle_duration_sec=0.5)
+        # self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r", throttle_duration_sec=0.5)
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
@@ -367,12 +367,12 @@ class ControllerNode(Node):
         joint_vel = np.asarray(self.joint_state_msg.velocity, dtype=float).flatten()
         safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
 
-        # Time spent inside controller_node this cycle: agent inference + safety limiter.
-        controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
-        self.logger.info(
-            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
-            throttle_duration_sec=0.5,
-        )
+        # # Time spent inside controller_node this cycle: agent inference + safety limiter.
+        # controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
+        # self.logger.info(
+        #     f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
+        #     throttle_duration_sec=0.5,
+        # )
 
         # Block handling (latching kill switch)
         if is_blocked:

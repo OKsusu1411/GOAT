@@ -233,16 +233,16 @@ class MotorIONode(Node):
             self._e2e_latency_buf.append(e2e_latency_sec)
 
             # Flush rolling stats once per ~200 ticks (~1 s at the 200 Hz target).
-            # if len(self._e2e_latency_buf) >= 200:
-            #     latency_arr = np.asarray(self._e2e_latency_buf)
-            #     self.get_logger().info(
-            #         f"[timing] e2e  mean={latency_arr.mean() * 1e3:.3f}ms "
-            #         f"min={latency_arr.min() * 1e3:.3f}ms "
-            #         f"max={latency_arr.max() * 1e3:.3f}ms "
-            #         f"std={latency_arr.std() * 1e3:.3f}ms "
-            #         f"eff_rate={1.0 / latency_arr.mean():.1f}Hz\r"
-            #     )
-            #     self._e2e_latency_buf.clear()
+            if len(self._e2e_latency_buf) >= 200:
+                latency_arr = np.asarray(self._e2e_latency_buf)
+                self.get_logger().info(
+                    f"[timing] e2e  mean={latency_arr.mean() * 1e3:.3f}ms "
+                    f"min={latency_arr.min() * 1e3:.3f}ms "
+                    f"max={latency_arr.max() * 1e3:.3f}ms "
+                    f"std={latency_arr.std() * 1e3:.3f}ms "
+                    f"eff_rate={1.0 / latency_arr.mean():.1f}Hz\r"
+                )
+                self._e2e_latency_buf.clear()
 
         self.poll_counter += 1
 
