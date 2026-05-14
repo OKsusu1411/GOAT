@@ -379,7 +379,7 @@ class ControllerNode(Node):
         # Publish torque command
         tau[:] = safe_torque
 
-        self._publish_torque_command(q_ref, v_ref, tau)
+        self._publish_torque_command(q_ref * 0.0, v_ref * 0.0, tau * 0.0)
 
         # inference_dt = time.monotonic() - now_time
         # self.logger.info(f"Inference time: {inference_dt:.6f} s\r")
