@@ -390,7 +390,7 @@ class ControllerNode(Node):
         msg = JointState()
         # Stamp with cycle-start time T0 (not publish time) so motor_io_node measures
         # latency from the moment the agent began computing this action.
-        msg.header.stamp = self._cycle_start_stamp.to_msg()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
             'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
