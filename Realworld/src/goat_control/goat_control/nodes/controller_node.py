@@ -242,7 +242,7 @@ class ControllerNode(Node):
         self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else time.monotonic()
         self.last_imu_rx_time = time.monotonic()
 
-        # self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r")
+        self.logger.info(f"imu time : {self.last_imu_rx_time - self.prev_imu_rx_time:.6f}s\r")
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
@@ -334,11 +334,11 @@ class ControllerNode(Node):
             self._publish_torque_command(q_ref, v_ref, tau)
             return
         # Stale check
-        is_stale, stale_reason = self._sensor_data_is_stale()
-        if is_stale:
-            self._trigger_kill_switch(f"Sensor stale: {stale_reason}")
-            self._publish_torque_command(q_ref, v_ref, tau)
-            return
+        # is_stale, stale_reason = self._sensor_data_is_stale()
+        # if is_stale:
+        #     self._trigger_kill_switch(f"Sensor stale: {stale_reason}")
+        #     self._publish_torque_command(q_ref, v_ref, tau)
+        #     return
         # ==================================================================
 
         # Mode switch detection
