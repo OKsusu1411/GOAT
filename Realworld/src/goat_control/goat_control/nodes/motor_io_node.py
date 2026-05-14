@@ -169,6 +169,7 @@ class MotorIONode(Node):
 
     def _tick(self) -> None:
         # Read motors
+        t1_command = time.monotonic()
         torque_cmd = self._latest_torque_cmd
 
         if torque_cmd is None:
@@ -194,14 +195,12 @@ class MotorIONode(Node):
         #     command_amp = float(current_cmd_amp[motor_index])
         #     motor_driver.torque_mode_amp(command_amp, timeout=self.can_tx_timeout_sec)
         
-        t1_command = time.monotonic()
         do_slow_poll = (self.poll_counter % 10 == 0)
         motor_states_data = self.motor_manager.write_torques_and_read_states(
             current_cmd_amp, 
             timeout=self.can_tx_timeout_sec, 
             perform_slow_poll=do_slow_poll
         )
-        t2_command = time.monotonic()
         
         # Publish JointState
         js = JointState()
@@ -211,11 +210,12 @@ class MotorIONode(Node):
         js.velocity = list(motor_states_data.joint_velocity_rad_per_sec)
         js.effort = list(motor_states_data.joint_effort_like)
 
+        t2_command = time.monotonic()
         self.joint_state_pub.publish(js)
         
         dt_command = t2_command - t1_command
 
-        print(f"dt_command : {dt_command:.4f}")
+        print(f"motor freq : {1/dt_command:.4f} Hz")
 
         self.poll_counter += 1
 
