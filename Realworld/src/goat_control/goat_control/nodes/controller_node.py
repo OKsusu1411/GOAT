@@ -351,13 +351,6 @@ class ControllerNode(Node):
         joint_vel = np.asarray(self.joint_state_msg.velocity, dtype=float).flatten()
         safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
 
-        # # Time spent inside controller_node this cycle: agent inference + safety limiter.
-        # controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
-        # self.logger.info(
-        #     f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
-        #     throttle_duration_sec=0.5,
-        # )
-
         # Block handling (latching kill switch)
         if is_blocked:
             self._trigger_kill_switch("SafetyLimiter blocked command")
@@ -368,6 +361,13 @@ class ControllerNode(Node):
         tau[:] = safe_torque
 
         self._send_to_motors(tau * 0.0)
+
+        # Time spent inside controller_node this cycle: agent inference + safety limiter.
+        controller_internal_sec = (self.get_clock().now() - now_time).nanoseconds * 1e-9
+        self.logger.info(
+            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
+            throttle_duration_sec=0.5,
+        )
 
     def _send_to_motors(self, torque: np.ndarray) -> None:
         """Write torque to the motors in-process (replaces /commands publish)."""
