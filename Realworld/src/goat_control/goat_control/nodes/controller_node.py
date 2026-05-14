@@ -232,12 +232,12 @@ class ControllerNode(Node):
 
     def joint_callback(self, msg: JointState):
         self.joint_state_msg = msg
-        self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time)
+        self.prev_joint_rx_time = copy.deepcopy(self.last_joint_rx_time) if self.last_joint_rx_time is not None else self.get_clock.now()
         self.last_joint_rx_time = self.get_clock().now()
 
     def imu_callback(self, msg: ImuState):
         self.imu_msg = msg
-        self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time)
+        self.prev_imu_rx_time = copy.deepcopy(self.last_imu_rx_time) if self.last_imu_rx_time is not None else self.get_clock.now()
         self.last_imu_rx_time = self.get_clock().now()
 
     def reset(self) -> None:
