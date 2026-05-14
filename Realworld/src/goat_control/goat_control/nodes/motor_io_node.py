@@ -8,6 +8,7 @@ import numpy as np
 import rclpy
 import yaml
 from rclpy.node import Node
+from rclpy.time import Time          # for reconstructing a ROS time from a header stamp
 from sensor_msgs.msg import JointState
 
 from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
@@ -140,7 +141,12 @@ class MotorIONode(Node):
         # Latest command buffer
         self._latest_torque_cmd: Optional[np.ndarray] = None
         self._latest_torque_cmd_time_sec: float = 0.0
-        
+
+        # Header stamp (T0) of the latest /commands message — controller cycle start.
+        self._latest_torque_cmd_stamp = None
+        # Rolling buffer of end-to-end latencies [sec], flushed as stats every N ticks.
+        self._e2e_latency_buf: list[float] = []
+
         # ROS pubs/subs
         self.joint_state_pub = self.create_publisher(JointState, "/joint_states", 10)
         self.torque_sub = self.create_subscription(JointState, "/commands", self._on_command, 10)
@@ -166,6 +172,8 @@ class MotorIONode(Node):
 
         self._latest_torque_cmd = torque
         self._latest_torque_cmd_time_sec = time.time()
+        # Keep the controller's cycle-start stamp (T0) for end-to-end latency.
+        self._latest_torque_cmd_stamp = msg.header.stamp
 
     def _tick(self) -> None:
         # Read motors
@@ -216,6 +224,25 @@ class MotorIONode(Node):
         dt_command = t2_command - t1_command
 
         print(f"motor freq : {1/dt_command:.4f} Hz")
+
+        # --- End-to-end latency: T0 (agent start) -> T1 (CAN write done) ---
+        if self._latest_torque_cmd_stamp is not None:
+            # T1 now, T0 from the carried header stamp; ROS clock is cross-process safe.
+            cmd_stamp = Time.from_msg(self._latest_torque_cmd_stamp)
+            e2e_latency_sec = (self.get_clock().now() - cmd_stamp).nanoseconds * 1e-9
+            self._e2e_latency_buf.append(e2e_latency_sec)
+
+            # Flush rolling stats once per ~200 ticks (~1 s at the 200 Hz target).
+            if len(self._e2e_latency_buf) >= 200:
+                latency_arr = np.asarray(self._e2e_latency_buf)
+                self.get_logger().info(
+                    f"[timing] e2e  mean={latency_arr.mean() * 1e3:.3f}ms "
+                    f"min={latency_arr.min() * 1e3:.3f}ms "
+                    f"max={latency_arr.max() * 1e3:.3f}ms "
+                    f"std={latency_arr.std() * 1e3:.3f}ms "
+                    f"eff_rate={1.0 / latency_arr.mean():.1f}Hz"
+                )
+                self._e2e_latency_buf.clear()
 
         self.poll_counter += 1
 

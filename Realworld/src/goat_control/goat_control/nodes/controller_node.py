@@ -125,6 +125,10 @@ class ControllerNode(Node):
         # Timing
         self.last_tick_time = time.monotonic()
 
+        # ROS-clock timestamp marking the start of the current control cycle (T0).
+        # Carried in the /commands header so motor_io_node can measure end-to-end latency.
+        self._cycle_start_stamp = self.get_clock().now()
+
         self.logger.info("Main Controller Node started")
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
@@ -302,6 +306,10 @@ class ControllerNode(Node):
             dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
+        # T0: start of this control cycle (moment the agent begins computing).
+        # ROS clock is used because it is comparable across processes.
+        self._cycle_start_stamp = self.get_clock().now()
+
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -359,6 +367,14 @@ class ControllerNode(Node):
 
         # Publish torque command
         tau[:] = safe_torque
+
+        # Time spent inside controller_node this cycle: agent inference + safety limiter.
+        controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
+        self.logger.info(
+            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
+            throttle_duration_sec=1.0,
+        )
+
         self._publish_torque_command(q_ref, v_ref, tau)
 
         # inference_dt = time.monotonic() - now_time
@@ -367,7 +383,9 @@ class ControllerNode(Node):
     def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish torque command to /commands topic."""
         msg = JointState()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        # Stamp with cycle-start time T0 (not publish time) so motor_io_node measures
+        # latency from the moment the agent began computing this action.
+        msg.header.stamp = self._cycle_start_stamp.to_msg()
         msg.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
             'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
