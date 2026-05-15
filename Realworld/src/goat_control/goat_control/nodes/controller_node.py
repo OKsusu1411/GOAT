@@ -123,8 +123,8 @@ class ControllerNode(Node):
         self._vx_limit = float(self.cfg.get("policy_command_vx_limit", 1.0))
         self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
 
-        # Timing
-        self.last_tick_time = time.monotonic()
+        # Timing — use ROS clock so it works under sim time too.
+        self.last_tick_time = self.get_clock().now()
 
         self.logger.info("Main Controller Node started")
         self.logger.info("===========================================")
@@ -327,7 +327,8 @@ class ControllerNode(Node):
         """Main control loop called by create_timer at control_rate_hz."""
         now_time = self.get_clock().now()
 
-        dt_sec = now_time - self.last_tick_time
+        # Time - Time → Duration; convert to seconds via nanoseconds.
+        dt_sec = (now_time - self.last_tick_time).nanoseconds * 1e-9
         if dt_sec <= 0.0:
             dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
