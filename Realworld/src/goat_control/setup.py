@@ -41,7 +41,6 @@ setup(
         'console_scripts': [
             'calibration_node = goat_control.nodes.calibration_node:main',
             'controller_node = goat_control.nodes.controller_node:main',
-            'imu_io_node = goat_control.nodes.imu_io_node:main',
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
             'sim_controller_node = goat_control.nodes.sim_controller_node:main',
             'topic_converter_node = goat_control.nodes.topic_converter_node:main',

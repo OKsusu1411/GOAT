@@ -66,18 +66,6 @@ def generate_launch_description():
 
 
     # Nodes
-    imu_io_node = Node(
-        package="goat_control",
-        executable="imu_io_node",
-        name="imu_io_node",
-        output="screen",
-        parameters=[{
-            "imu_port": LaunchConfiguration("imu_port"),
-            "imu_baudrate": LaunchConfiguration("imu_baudrate"),
-            "yaml_path": LaunchConfiguration("yaml_path"),
-        }],
-    )
-
     controller_node = Node(
         package="goat_control",
         executable="controller_node",
@@ -88,6 +76,8 @@ def generate_launch_description():
             "urdf_path": LaunchConfiguration("urdf_path"),
             "checkpoint_path": LaunchConfiguration("checkpoint_path"),
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
+            "imu_port": LaunchConfiguration("imu_port"),
+            "imu_baudrate": LaunchConfiguration("imu_baudrate"),
         }],
     )
 
@@ -100,6 +90,5 @@ def generate_launch_description():
         control_rate_arg,
         imu_port_arg,
         imu_baudrate_arg,
-        imu_io_node,
         controller_node,
     ])

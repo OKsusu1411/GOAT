@@ -1,4 +1,4 @@
-# src/goat_control/goat_control/nodes/motor_io_node.py
+# src/goat_control/goat_control/nodes/motor_io.py
 from __future__ import annotations
 
 import numpy as np
