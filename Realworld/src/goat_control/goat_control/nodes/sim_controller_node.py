@@ -364,8 +364,6 @@ class SimControllerNode(Node):
 
             tau[:] = safe_torque
 
-
-
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------

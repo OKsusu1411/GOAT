@@ -1,0 +1,17 @@
+<mujoco model="WF_GOAT_sim2real">
+    <compiler angle="radian" coordinate="local"/>
+    <option timestep="0.002" gravity="0 0 -9.81"/>
+
+    <asset>
+        <texture name="texplane" type="2d" builtin="checker" rgb1=".2 .3 .4" rgb2=".1 0.15 0.2" width="512" height="512"/>
+        <material name="matplane" reflectance="0.3" texture="texplane" texrepeat="1 1" texuniform="true"/>
+    </asset>
+
+    <worldbody>
+        <light directional="true" diffuse=".8 .8 .8" specular=".2 .2 .2" pos="0 0 5" dir="0 0 -1"/>
+        <geom name="floor" type="plane" size="0 0 1" material="matplane"/>
+    </worldbody>
+
+    <include file="./WF_GOAT.xml"/>
+    
+</mujoco>

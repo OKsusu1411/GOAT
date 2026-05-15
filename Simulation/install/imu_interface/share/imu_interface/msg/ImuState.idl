@@ -1,0 +1,31 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from imu_interface/msg/ImuState.msg
+// generated code does not contain a copyright notice
+
+#include "geometry_msgs/msg/Quaternion.idl"
+#include "geometry_msgs/msg/Vector3.idl"
+#include "std_msgs/msg/Header.idl"
+
+module imu_interface {
+  module msg {
+    @verbatim (language="comment", text=
+      "ImuState.msg")
+    struct ImuState {
+      @verbatim (language="comment", text=
+        "Header")
+      std_msgs::msg::Header header;
+
+      @verbatim (language="comment", text=
+        "IMU data")
+      geometry_msgs::msg::Quaternion quat;
+
+      geometry_msgs::msg::Vector3 gyro;
+
+      geometry_msgs::msg::Vector3 vel;
+
+      geometry_msgs::msg::Vector3 mag;
+
+      double time_ms;
+    };
+  };
+};
