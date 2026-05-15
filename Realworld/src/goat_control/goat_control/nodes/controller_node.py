@@ -325,7 +325,7 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        now_time = time.monotonic()
+        now_time = self.get_clock().now()
 
         dt_sec = now_time - self.last_tick_time
         if dt_sec <= 0.0:
