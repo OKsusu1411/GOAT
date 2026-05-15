@@ -34,7 +34,7 @@ class ImuIO:
         self.imu_reader.open()
 
         # Initial poll so `latest_imu_state` is non-None on tick 0.
-        self.latest_imu_state: ImuState = self._to_imu_state_msg()
+        self.latest_imu_state = ImuState()
 
         self.logger.info("[ImuIO] initialized — owns IMU serial (in-process).")
 
