@@ -7,7 +7,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from sensor_msgs.msg import JointState
-from imu_interface.msg import ImuState
+from motor_interfaces.msg import ImuState
 
 class MujocoRos2Bridge(Node):
     def __init__(self):
