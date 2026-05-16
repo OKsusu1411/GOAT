@@ -47,9 +47,32 @@ class MujocoRos2Bridge(Node):
         simulation_period_sec = 1.0 / max(self.simulation_rate_hz, 1.0)
         self.timer = self.create_timer(simulation_period_sec, self.simulation_step)
 
+        # Topic-traffic monitor: per-second rate report for each topic this node touches.
+        # Counters are reset every time the monitor timer fires.
+        self._imu_pub_count = 0          # /imu publishes since last report
+        self._js_pub_count = 0           # /joint_states publishes since last report
+        self._cmd_recv_count = 0         # /commands receives since last report
+
+        # First-seen latches so we log the first message on each topic at INFO once.
+        self._first_imu_logged = False
+        self._first_js_logged = False
+        self._first_cmd_logged = False
+
+        # Wall-clock anchor for the rate report (so Hz math is honest even if sim rate changes).
+        self._monitor_last_time = self.get_clock().now()
+
+        # 1 Hz monitor timer — decoupled from simulation_rate_hz on purpose.
+        self._monitor_timer = self.create_timer(1.0, self._log_topic_rates)
+
     def control_callback(self, msg):
-        """ Write command to Mujoco actuator"""
+        """ Write command to Mujoco actuator, and tally for the topic monitor."""
         np.copyto(self.mujoco_data.ctrl, msg.effort)
+
+        # Topic monitor: count this receive and log the first one at INFO.
+        self._cmd_recv_count += 1
+        if not self._first_cmd_logged:
+            self.get_logger().info("first /commands received")
+            self._first_cmd_logged = True
 
     def simulation_step(self):
         if not self.viewer.is_running():
@@ -103,6 +126,12 @@ class MujocoRos2Bridge(Node):
         # IMU data publish
         self.imu_pub.publish(imu_msg)
 
+        # Topic monitor: count this publish and log the first one at INFO.
+        self._imu_pub_count += 1
+        if not self._first_imu_logged:
+            self.get_logger().info("first /imu published")
+            self._first_imu_logged = True
+
         # Joint_states
         js_msg = JointState()
         js_msg.header.stamp = time_msg
@@ -114,6 +143,37 @@ class MujocoRos2Bridge(Node):
 
         # Joint_state publish
         self.joint_state_pub.publish(js_msg)
+
+        # Topic monitor: count this publish and log the first one at INFO.
+        self._js_pub_count += 1
+        if not self._first_js_logged:
+            self.get_logger().info("first /joint_states published")
+            self._first_js_logged = True
+
+    def _log_topic_rates(self):
+        """1 Hz reporter: print observed Hz for each topic, then reset counters."""
+        now = self.get_clock().now()
+        # Elapsed seconds since the previous report (wall-clock from rclpy clock).
+        elapsed = (now - self._monitor_last_time).nanoseconds * 1e-9
+        if elapsed <= 0.0:
+            return  # Guard against a zero/negative interval on the very first tick.
+
+        # Compute observed rates over the elapsed window.
+        imu_hz = self._imu_pub_count / elapsed
+        js_hz = self._js_pub_count / elapsed
+        cmd_hz = self._cmd_recv_count / elapsed
+
+        self.get_logger().info(
+            f"rates (Hz) — /imu: {imu_hz:.1f}  "
+            f"/joint_states: {js_hz:.1f}  "
+            f"/commands: {cmd_hz:.1f}"
+        )
+
+        # Reset counters and re-anchor the wall-clock window.
+        self._imu_pub_count = 0
+        self._js_pub_count = 0
+        self._cmd_recv_count = 0
+        self._monitor_last_time = now
 
 def main(args=None):
     rclpy.init(args=args)

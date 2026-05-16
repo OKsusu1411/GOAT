@@ -1,6 +1,0 @@
-source;share/mujoco_sim2real/hook/pythonpath.ps1
-source;share/mujoco_sim2real/hook/pythonpath.dsv
-source;share/mujoco_sim2real/hook/pythonpath.sh
-source;share/mujoco_sim2real/hook/ament_prefix_path.ps1
-source;share/mujoco_sim2real/hook/ament_prefix_path.dsv
-source;share/mujoco_sim2real/hook/ament_prefix_path.sh
