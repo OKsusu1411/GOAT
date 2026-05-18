@@ -4,12 +4,20 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 import os
+import time
 from ament_index_python.packages import get_package_share_directory
 
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import ImuState
+from imu_interface.msg import ImuState
 
 class MujocoRos2Bridge(Node):
+    # MuJoCo orders qpos[7:]/qvel[6:] by tree traversal (per-leg):
+    #   hip_L, thigh_L, knee_L, wheel_L, hip_R, thigh_R, knee_R, wheel_R
+    # The controller and yaml index joints per-joint-type:
+    #   hip_L, hip_R, thigh_L, thigh_R, knee_L, knee_R, wheel_L, wheel_R
+    # MJ_TO_CTRL[k] = MuJoCo index that holds the joint at controller index k.
+    MJ_TO_CTRL = [0, 4, 1, 5, 2, 6, 3, 7]
+
     def __init__(self):
         super().__init__('mujoco_ros2_bridge')
 
@@ -64,6 +72,13 @@ class MujocoRos2Bridge(Node):
         # 1 Hz monitor timer — decoupled from simulation_rate_hz on purpose.
         self._monitor_timer = self.create_timer(1.0, self._log_topic_rates)
 
+        # Real-time pacing anchors. simulation_step will run mj_step in a while loop
+        # until data.time catches up to (wall-elapsed since this point). Cap below
+        # keeps a transient pause from triggering a spiral-of-death catch-up.
+        self._wallclock_anchor = time.monotonic()
+        self._sim_time_anchor = float(self.mujoco_data.time)
+        self._max_substeps_per_tick = 20
+
     def control_callback(self, msg):
         """ Write command to Mujoco actuator, and tally for the topic monitor."""
         np.copyto(self.mujoco_data.ctrl, msg.effort)
@@ -79,10 +94,20 @@ class MujocoRos2Bridge(Node):
             rclpy.shutdown()
             return
 
-        mujoco.mj_step(self.mujoco_model, self.mujoco_data)
+        # Catch sim time up to wall clock. mj_step always advances by model.opt.timestep,
+        # so we loop until data.time has reached the target or the cap is hit.
+        target_sim_time = self._sim_time_anchor + (time.monotonic() - self._wallclock_anchor)
+        substeps = 0
+        while (
+            self.mujoco_data.time < target_sim_time
+            and substeps < self._max_substeps_per_tick
+        ):
+            mujoco.mj_step(self.mujoco_model, self.mujoco_data)
+            substeps += 1
+
         self.viewer.sync()
 
-        # Publish physics step
+        # Publish physics step (rate is still driven by the ROS timer, not the substep loop).
         self.publish_sensor_data()
 
     def publish_sensor_data(self):
@@ -137,8 +162,11 @@ class MujocoRos2Bridge(Node):
         js_msg.header.stamp = time_msg
         js_msg.name = ['hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint',
                        'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint']
-        js_msg.position = self.mujoco_data.qpos[7:].tolist()        # [:7] is base's position
-        js_msg.velocity = self.mujoco_data.qvel[6:].tolist()        # []:6] is base's velocity
+        # Reorder MuJoCo's per-leg joint layout into the per-joint-type order the controller expects.
+        mj_qpos_joints = np.asarray(self.mujoco_data.qpos[7:])      # [:7] is base's free-joint pose
+        mj_qvel_joints = np.asarray(self.mujoco_data.qvel[6:])      # [:6] is base's free-joint vel
+        js_msg.position = mj_qpos_joints[self.MJ_TO_CTRL].tolist()
+        js_msg.velocity = mj_qvel_joints[self.MJ_TO_CTRL].tolist()
         js_msg.effort = self.mujoco_data.actuator_force.tolist()
 
         # Joint_state publish

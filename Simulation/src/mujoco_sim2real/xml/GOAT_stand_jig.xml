@@ -2,7 +2,7 @@
     <compiler angle="radian" coordinate="local"/>
 
     <asset>
-        <mesh name="jig_mesh" file="../meshes/GOAT_gochu_stand7mm35cm.stl" scale="1 1 1"/>
+        <mesh name="jig_mesh" file="../meshes/GOAT_gochu_stand7mm35cm.stl" scale="0.5 1 1"/>
         <material name="jig_material" rgba="0.8 0.8 0.8 1.0"/>
     </asset>
 

@@ -3,7 +3,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
@@ -22,6 +21,13 @@ def generate_launch_description():
         "urdf",
         "WF_GOAT.urdf",
     ])
+
+    default_checkpoint_path = PathJoinSubstitution([
+        FindPackageShare("goat_control"),
+        "checkpoint",
+        "agent_jit_128000.pt"
+    ])
+
     # Arguments
     yaml_path_arg = DeclareLaunchArgument(
         "yaml_path",
@@ -35,7 +41,7 @@ def generate_launch_description():
     )
     checkpoint_path_arg = DeclareLaunchArgument(
         "checkpoint_path",
-        default_value="",
+        default_value=default_checkpoint_path,
         description="Path to RL agent checkpoint. Empty string disables checkpoint loading.",
     )
     can_channel_arg = DeclareLaunchArgument(
