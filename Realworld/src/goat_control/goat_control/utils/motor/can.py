@@ -28,7 +28,7 @@ class CanInterface:
         self,
         channel: str = "can0",
         interface: str = "socketcan",
-        bitrate: int | None = None,  
+        bitrate: int | None = None,
         receive_own_messages: bool = False,
         logger: logging.Logger | None = None,
     ):
@@ -40,8 +40,22 @@ class CanInterface:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
         self.bus: can.BusABC | None = None
 
-        # Serialize txrx() to prevent response-frame “stealing” between callers.
+        # Serialize txrx() to prevent response-frame "stealing" between callers.
+        # Only used by the init path; once the background reader thread starts,
+        # txrx() must not be called (the reader would consume the response).
         self.txrx_lock = threading.Lock()
+
+        # Background reader state. The reader owns RX after start_reader_thread().
+        # Keyed by (arbitration_id, cmd_byte) so 0xA1 (torque reply) and 0x9A
+        # (error-flag reply) from the same motor don't clobber each other.
+        self.latest_rx_frames_by_key: dict[tuple[int, int], can.Message] = {}
+        self._rx_lock = threading.Lock()
+        self._rx_stop_event = threading.Event()
+        self._rx_thread: threading.Thread | None = None
+        # Diagnostics: total frames seen + first 8 unique keys (for one-shot
+        # sanity log so we can verify whether motors reply on rx_id or tx_id).
+        self.rx_frame_count: int = 0
+        self._rx_first_keys_seen: set[tuple[int, int]] = set()
 
     def open(self) -> None:
         """Open the CAN bus if it is not already opened."""
@@ -58,12 +72,100 @@ class CanInterface:
 
     def close(self) -> None:
         """Close the CAN bus if it is opened."""
+        # Stop reader first so it doesn't try to recv() on a closed bus.
+        self.stop_reader_thread()
+
         if self.bus is None:
             return
 
         self.bus.shutdown()
         self.bus = None
         self.logger.info("[CAN] closed")
+
+    # ------------------------------------------------------------------
+    # Background reader thread (Step 3 — TX/RX decouple)
+    # ------------------------------------------------------------------
+    def start_reader_thread(self) -> None:
+        """Spawn a daemon thread that drains the bus into a per-key cache.
+
+        Must be called AFTER all init-time txrx() calls have completed.
+        Once running, callers must use send_only()/get_latest_frame() instead
+        of txrx() — the reader will consume any in-flight responses.
+        """
+        if self._rx_thread is not None and self._rx_thread.is_alive():
+            return
+        if self.bus is None:
+            raise RuntimeError("CAN bus not opened; call open() before start_reader_thread().")
+        self._rx_stop_event.clear()
+        self._rx_thread = threading.Thread(
+            target=self._rx_loop,
+            daemon=True,
+            name=f"can-rx-{self.channel}",
+        )
+        self._rx_thread.start()
+        self.logger.info(f"[CAN] reader thread started on {self.channel}")
+
+    def stop_reader_thread(self, timeout: float = 1.0) -> None:
+        """Signal the reader thread to exit and join it."""
+        self._rx_stop_event.set()
+        if self._rx_thread is not None and self._rx_thread.is_alive():
+            self._rx_thread.join(timeout=timeout)
+        self._rx_thread = None
+
+    def is_reader_running(self) -> bool:
+        """True if the background reader is draining the bus."""
+        return self._rx_thread is not None and self._rx_thread.is_alive()
+
+    def _rx_loop(self) -> None:
+        """Continuously drain the bus into latest_rx_frames_by_key."""
+        while not self._rx_stop_event.is_set():
+            try:
+                # Short recv timeout so stop_event is checked promptly on shutdown.
+                msg = self.bus.recv(timeout=0.05) if self.bus is not None else None
+            except Exception as exc:
+                self.logger.warning(f"[CAN] reader recv error on {self.channel}: {exc}")
+                time.sleep(0.01)
+                continue
+            if msg is None:
+                continue
+            if not msg.data:
+                continue
+            key = (msg.arbitration_id, msg.data[0])
+            with self._rx_lock:
+                self.latest_rx_frames_by_key[key] = msg
+                self.rx_frame_count += 1
+            # One-shot diagnostic: log each new (arb_id, cmd_byte) the first
+            # time we see it, up to 16 distinct keys. Lets us verify whether
+            # motor replies are on rx_id (0x180+id) or tx_id (0x140+id).
+            if key not in self._rx_first_keys_seen and len(self._rx_first_keys_seen) < 16:
+                self._rx_first_keys_seen.add(key)
+                self.logger.info(
+                    f"[CAN] {self.channel} first frame for arb_id=0x{key[0]:03X} "
+                    f"cmd=0x{key[1]:02X} (total seen={self.rx_frame_count})"
+                )
+
+    def get_latest_frame(self, arbitration_id: int, cmd_byte: int) -> can.Message | None:
+        """Return the most recent cached frame for (arbitration_id, cmd_byte)."""
+        with self._rx_lock:
+            return self.latest_rx_frames_by_key.get((arbitration_id, cmd_byte))
+
+    def send_only(self, arbitration_id: int, data: bytes) -> None:
+        """Fire-and-forget send. No lock, no response wait.
+
+        Use this on the control hot path; the response (if any) will be
+        consumed by the background reader thread and made available via
+        get_latest_frame().
+        """
+        if self.bus is None:
+            raise RuntimeError("CAN bus is not opened. Call open() first.")
+        try:
+            self.bus.send(can.Message(
+                arbitration_id=arbitration_id,
+                data=data,
+                is_extended_id=False,
+            ))
+        except can.CanError as can_error:
+            self.logger.error(f"[CAN] send_only failed (id=0x{arbitration_id:X}): {can_error}")
 
     def send(self, arbitration_id: int, data: bytes) -> can.Message | None:
         """Send a raw CAN frame."""

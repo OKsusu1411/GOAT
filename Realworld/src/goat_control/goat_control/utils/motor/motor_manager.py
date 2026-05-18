@@ -242,7 +242,19 @@ class MotorManager:
         return current_command_amp
 
     def poll_state1(self, motor_index: int, timeout: float = 0.05) -> None:
-        response_message = self.motor_drivers[motor_index].read_state1(timeout=timeout)
+        """Read 0x9A error flags. Auto-picks blocking txrx (init, no reader)
+        vs fire-and-forget + cache read (after reader thread starts)."""
+        driver = self.motor_drivers[motor_index]
+        if driver.can_interface.is_reader_running():
+            # Reader thread mode: fire request, read prior reply from cache.
+            # 1 Hz call rate means worst-case staleness is ~1 s — fine for
+            # safety telemetry. First call returns None (no cached reply yet).
+            driver.send_state1_request()
+            response_message = driver.latest_state1()
+        else:
+            # Init mode: blocking round-trip is safe; reader not yet running.
+            response_message = driver.read_state1(timeout=timeout)
+
         if response_message is None:
             return
 
@@ -552,45 +564,55 @@ class MotorManager:
     # [Write + Read] 토크 명령과 상태 읽기를 동시에 처리하는 함수
     # =========================================================================
     def write_torques_and_read_states(self, current_cmd_amp: Sequence[float], timeout: float = 0.05, perform_slow_poll: bool = False) -> MotorStatesData:
+        """Fire-and-forget torque sends + cached state reads (Step 3).
+
+        Hot path no longer blocks on per-motor CAN round-trips. The background
+        reader thread (started in CanInterface.start_reader_thread) drains
+        replies into a per-(arbitration_id, cmd_byte) cache. Here we:
+          Phase 1: send all 8 torque (0xA1) commands back-to-back (non-blocking).
+          Phase 2: read each motor's most recent cached 0xA1 reply and parse.
+        One-tick staleness: this tick reads the previous tick's reply. The
+        encoder-integration path already tolerates that (delta against
+        prev_encoder_count); the NaN kill-switch protects against a totally
+        silent motor.
+
+        `perform_slow_poll` and `timeout` are kept for API compatibility but
+        ignored — state1 polling lives on a separate 1 Hz timer now.
         """
-        모든 모터에 토크 명령을 내림과 동시에 최신 상태를 읽어오고, 
-        그 결과를 MotorStatesData 형식으로 반환합니다.
-        """
-        def control_and_read(motor_index: int):
-            command_amp = float(current_cmd_amp[motor_index])
-            # 명령 송신 + 상태(State2) 즉시 업데이트
-            # self.send_torque_and_update_state(motor_index, command_amp, timeout=timeout)
-            response_message = self.motor_drivers[motor_index].torque_mode_amp(command_amp, timeout=timeout)
-        
+        # Phase 1 — fire all torque sends. Sequential is fine: bus.send() is
+        # non-blocking (kernel TX queue) and avoiding the thread pool removes
+        # ~0.18 ms of submit overhead we measured in Step 1.
+        t_submit = time.perf_counter()                                           # [timing] start TX phase
+        for motor_index, amp in enumerate(current_cmd_amp):
+            self.motor_drivers[motor_index].send_torque_only(float(amp))
+        t_joined = time.perf_counter()                                           # [timing] TX done, start RX-cache phase
+
+        # Phase 2 — read latest cached 0xA1 reply per motor and parse it into
+        # the existing state buffers. If no reply yet (first tick, dropped
+        # frame), leave the buffer at its previous value.
+        for motor_index in range(self.motor_count):
+            response_message = self.motor_drivers[motor_index].latest_state2()
             if response_message is None:
-                return
-                
-            response_data = response_message.data       # TODO: 변경
-            
-            # 매뉴얼에 명시된 0xA1 응답 데이터(State2 포맷) 파싱[cite: 1]
+                continue
+            response_data = response_message.data
+
+            # 0xA1 reply format (matches the old in-place parser above).
             self.motor_temperature_c[motor_index] = float(struct.unpack("<b", response_data[1:2])[0])
-            
+
             motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
             self.motor_phase_current_amp[motor_index] = float(motor_current_raw_lsb) * self.motor_current_amp_per_lsb
-            
+
             speed_raw_lsb = struct.unpack("<h", response_data[4:6])[0]
             self.motor_speed_deg_per_sec[motor_index] = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
-            
+
             self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
-            # 에러 플래그 등은 매번 읽을 필요가 없으므로 옵션으로 처리합니다.
-            if perform_slow_poll:
-                self.poll_state1(motor_index)
 
-            # Update multi-turn motor angle from the encoder count just parsed
-            # out of this same 0xA1 reply — no extra CAN read required.
+            # Update multi-turn motor angle from the encoder count just parsed.
             self._update_motor_angle_from_encoder(motor_index)
+        t_done = time.perf_counter()                                             # [timing] RX-cache phase done
 
-        # Hot-path fan-out: submit on the persistent pool and drain via
-        # f.result() so any in-thread exceptions surface instead of being
-        # swallowed by a discarded executor.map() iterator.
-        futures = [self._io_pool.submit(control_and_read, i) for i in range(self.motor_count)]
-        for f in futures:
-            f.result()
+        # Surface timings (read by controller_node timing log).
+        self._last_tx_submit_ms = (t_joined - t_submit) * 1e3                    # send-only cost
+        self._last_tx_wait_ms = (t_done - t_joined) * 1e3                        # cache read+parse cost
 
-        # 최신화된 버퍼를 이용해 수학 연산을 수행하고 결과를 반환합니다.
         return self._package_motor_states()

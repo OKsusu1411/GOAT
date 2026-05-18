@@ -74,11 +74,16 @@ class MotorIO:
         # Shared CAN scan / torque conversion helper.
         self.motor_manager = MotorManager(motor_drivers=self.motor_drivers, cfg=cfg)
 
-        # Tick counter driving the every-10th-tick state1 (error flag) poll.
-        self.poll_counter = 0
-
         # Initial blocking read so the controller has valid state on tick 0.
+        # MUST run before the reader threads start — uses txrx() which would
+        # otherwise lose responses to the background reader.
         self.latest_joint_state: JointState = self._read_initial_state()
+
+        # Step 3: switch every bus into background-reader mode. From here on
+        # the hot path uses send_only() + get_latest_frame() — no more
+        # per-motor recv() blocking the control loop.
+        for can_interface in self.cans:
+            can_interface.start_reader_thread()
 
         self.logger.info("[MotorIO] initialized — owns both CAN buses (in-process).")
 
@@ -99,8 +104,9 @@ class MotorIO:
     def read_write_motor(self, torque_cmd_nm: np.ndarray) -> JointState:
         """Write torque to all motors and read back joint state in one CAN pass.
 
-        Returns the freshly read JointState; also cached as `latest_joint_state`
-        for the next control tick.
+        Slow-poll (0x9A error-flag read) moved off the hot path — driven by a
+        ~1 Hz ROS timer via `poll_error_flags_once()` instead. Removing it
+        kills the periodic 4-5 ms spike that previously hit every 10th tick.
         """
         torque_cmd_nm = np.asarray(torque_cmd_nm, dtype=float).flatten()
 
@@ -109,21 +115,26 @@ class MotorIO:
         lpf_torque_cmd = self.motor_manager.torque_lpf(clipped_torque_cmd)
         current_cmd_amp = self.motor_manager.torque_to_current(lpf_torque_cmd)
 
-        # Every 10th tick also reads state1 (error flags) — slower, optional.
-        do_slow_poll = (self.poll_counter % 10 == 0)
         motor_states_data = self.motor_manager.write_torques_and_read_states(
             current_cmd_amp,
             timeout=self.can_tx_timeout_sec,
-            perform_slow_poll=do_slow_poll,
+            perform_slow_poll=False,
         )
-        self.poll_counter += 1
 
         # Cache for next tick + return to caller.
         self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
         return self.latest_joint_state
 
+    def poll_error_flags_once(self) -> None:
+        """Read 0x9A error flags on every motor — call from a ~1 Hz timer.
+        After Step 3 poll_state1 is fire-and-forget; no need for the thread
+        pool. Sequential send_only is essentially free (<1 ms total)."""
+        mm = self.motor_manager
+        for motor_index in range(mm.motor_count):
+            mm.poll_state1(motor_index)
+
     def close(self) -> None:
-        """Close both CAN buses on shutdown."""
+        """Close both CAN buses on shutdown (stops reader threads first)."""
         for can_interface in getattr(self, "cans", []):
             try:
                 can_interface.close()

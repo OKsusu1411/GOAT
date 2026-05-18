@@ -68,6 +68,49 @@ class MotorDriver:
         torque_payload = protocol.payload_torque_mode_from_amp(amps)
         return self._txrx(0xA1, torque_payload, timeout)
 
+    # ------------------------
+    # Fire-and-forget API (Step 3 — TX/RX decouple)
+    # Use these on the control hot path. Responses are consumed by the
+    # CanInterface background reader thread and pulled from its cache via
+    # latest_state2() / latest_state1().
+    # ------------------------
+    def send_torque_only(self, amps: float) -> None:
+        """Send 0xA1 torque command; response will be cached by reader thread."""
+        torque_payload = protocol.payload_torque_mode_from_amp(amps)
+        self.can_interface.send_only(
+            self.can_ids.tx_id,
+            bytes([0xA1]) + torque_payload,
+        )
+
+    def send_state1_request(self) -> None:
+        """Send 0x9A state1 (error flags) request; reply cached by reader thread."""
+        self.can_interface.send_only(
+            self.can_ids.tx_id,
+            bytes([0x9A]) + protocol.E7,
+        )
+
+    def latest_state2(self):
+        """Return the most recent cached 0xA1 reply for this motor (or None).
+
+        Tries rx_id (0x180+node_id) first, then falls back to tx_id
+        (0x140+node_id). Mirrors the OLD txrx()'s `accept_tx_echo_diff=True`
+        path — some motor setups echo replies on the tx_id with modified data.
+        """
+        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
+        if msg is not None:
+            return msg
+        return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1)
+
+    def latest_state1(self):
+        """Return the most recent cached 0x9A reply for this motor (or None).
+
+        Tries rx_id first, then tx_id — see latest_state2() for rationale.
+        """
+        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0x9A)
+        if msg is not None:
+            return msg
+        return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0x9A)
+
     # additional command wrappers (not used yet)
 
     # ------------------------

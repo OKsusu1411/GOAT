@@ -168,6 +168,11 @@ class ControllerNode(Node):
         control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
 
+        # Off-hot-path error-flag poll. State1 (0x9A) used to run every 10th
+        # control tick; moving it here removes the periodic ~4-5 ms spike from
+        # the control loop. 1 Hz is plenty for safety telemetry.
+        self.error_flag_timer = self.create_timer(1.0, self.motor_io.poll_error_flags_once)
+
     # ---------------------------------------------------------------------
     # Callback Functions
     # ---------------------------------------------------------------------
@@ -360,7 +365,9 @@ class ControllerNode(Node):
         self.joint_state_pub.publish(self.joint_state_msg)
 
         # IMU state
+        t_imu_start = time.perf_counter()                                        # [timing] start IMU read window
         self.imu_msg = self.imu_io.read_imu()
+        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                  # [timing] IMU read duration in ms
 
         # Publish for logging
         self.imu_state_pub.publish(self.imu_msg)
@@ -396,16 +403,17 @@ class ControllerNode(Node):
         self._switch_mode(self.publish_mode)
 
         # Active controller execution
+        t_ctrl_start = time.perf_counter()                                       # [timing] start controller compute window
         if self.publish_mode == 'policy':
             self.policy_controller.set_command(self._base_command)
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(self.joint_state_msg, 
-                                                                            self.imu_msg, 
+            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(self.joint_state_msg,
+                                                                            self.imu_msg,
                                                                             dt_sec)
             v_ref[-2:] = wheel_v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
-            raw_torque, q_ref, _ = self.nominal_controller.compute(self.joint_state_msg, 
-                                                                   self.imu_msg, 
+            raw_torque, q_ref, _ = self.nominal_controller.compute(self.joint_state_msg,
+                                                                   self.imu_msg,
                                                                    dt_sec)
             v_ref[-2:] = 0 # Only for wheel
 
@@ -429,17 +437,28 @@ class ControllerNode(Node):
         # Publish torque command
         # tau[:] = safe_torque
         tau[:] = raw_torque
+        ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3             # [timing] controller compute duration in ms
 
         # Apply action
+        t_can_start = time.perf_counter()                                        # [timing] start CAN write+read window
         self.motor_io.read_write_motor(tau * 0.0)                               # NOTE: test for 0
+        can_io_ms = (time.perf_counter() - t_can_start) * 1e3                   # [timing] CAN write+read duration in ms
 
         # Publish for logging
         self._publish_torque_command(q_ref, v_ref, tau)
 
-        # Time spent inside controller_node this cycle: agent inference + safety limiter.
-        controller_internal_sec = (self.get_clock().now() - now_time).nanoseconds * 1e-9
+        # Per-segment timing breakdown. Comment out once bottleneck confirmed.
+        total_ms = (self.get_clock().now() - now_time).nanoseconds * 1e-6        # [timing] full _control_loop duration in ms
+        tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
+        tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
+        # Step 3 sanity: per-bus reader frame counts. If these stay at 0 the
+        # reader thread is starved (bus dead, wrong arb_id, or send_only failing).
+        rx_counts = [getattr(c, "rx_frame_count", 0) for c in self.motor_io.cans]
         self.logger.info(
-            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
+            f"[timing] total: {total_ms:6.2f} ms | 1/cycle: {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
+            f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
+            f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms "
+            f"| rx_frames: {rx_counts}\r",
             throttle_duration_sec=0.5,
         )
 
