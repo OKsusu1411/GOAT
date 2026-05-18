@@ -182,6 +182,18 @@ class MotorManager:
         
         self.prev_torque = np.zeros(self.num_joints, dtype=float)
 
+        # ------------------------------------------------------------------
+        # Encoder integration (Option B): convert the per-tick uint16 encoder
+        # field of the 0xA1 reply into a multi-turn motor angle, anchored to
+        # the absolute multi-turn read taken once at init.
+        # ------------------------------------------------------------------
+        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 16384))
+        # Per-motor anchor state. `None` until _seed_position_anchor() runs.
+        self.motor_anchor_motor_angle_deg: List[Optional[float]] = [None] * self.motor_count
+        self.motor_anchor_encoder_count:   List[Optional[int]]   = [None] * self.motor_count
+        self.motor_prev_encoder_count:     List[Optional[int]]   = [None] * self.motor_count
+        self.motor_encoder_wrap_count:     List[int]             = [0]    * self.motor_count
+
         # Persistent thread pool reused across every tick. Recreating an
         # 8-thread pool at 200 Hz was costing ~800 thread spawns/sec for no
         # parallelism benefit (per-bus txrx_lock already serializes the bus).
@@ -454,6 +466,62 @@ class MotorManager:
         )
 
     # =========================================================================
+    # Encoder integration helpers (Option B)
+    # =========================================================================
+    def _seed_position_anchor(self) -> None:
+        """Capture absolute motor angle + matching encoder count as the
+        per-motor anchor. Called once after the init multi-turn poll."""
+        for motor_index in range(self.motor_count):
+            raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_index]
+            raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_index]
+            if raw_multi != 0:
+                anchor_motor_angle_deg = raw_multi * self.angle_deg_per_lsb
+            elif raw_single != 0:
+                anchor_motor_angle_deg = raw_single * self.angle_deg_per_lsb
+            else:
+                anchor_motor_angle_deg = 0.0
+
+            self.motor_anchor_motor_angle_deg[motor_index] = anchor_motor_angle_deg
+            self.motor_anchor_encoder_count[motor_index]   = int(self.motor_encoder_count[motor_index])
+            self.motor_prev_encoder_count[motor_index]     = int(self.motor_encoder_count[motor_index])
+            self.motor_encoder_wrap_count[motor_index]     = 0
+
+    def _update_motor_angle_from_encoder(self, motor_index: int) -> None:
+        """Integrate the latest uint16 encoder count into a multi-turn motor
+        angle and write it back into motor_multi_turn_angle_raw_0p001deg so
+        _package_motor_states picks it up without further changes."""
+        anchor_angle_deg = self.motor_anchor_motor_angle_deg[motor_index]
+        if anchor_angle_deg is None:
+            return  # anchor not seeded yet (init not done) — leave buffer alone
+
+        counts_per_rev = self.motor_encoder_counts_per_rev
+        half_range = counts_per_rev // 2
+
+        current_count = int(self.motor_encoder_count[motor_index])
+        prev_count = self.motor_prev_encoder_count[motor_index]
+        delta_count = current_count - prev_count
+
+        # Wrap detection — a single-tick step larger than half range means
+        # the uint encoder field wrapped, not that the motor moved that fast.
+        if delta_count > half_range:
+            self.motor_encoder_wrap_count[motor_index] -= 1
+        elif delta_count < -half_range:
+            self.motor_encoder_wrap_count[motor_index] += 1
+        self.motor_prev_encoder_count[motor_index] = current_count
+
+        anchor_count = self.motor_anchor_encoder_count[motor_index]
+        total_count_delta = (
+            (current_count - anchor_count)
+            + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
+        )
+        motor_angle_deg = anchor_angle_deg + total_count_delta * (360.0 / counts_per_rev)
+
+        # Write back in the same 0.001 deg/LSB units _package_motor_states reads.
+        self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(
+            round(motor_angle_deg / self.angle_deg_per_lsb)
+        )
+
+    # =========================================================================
     # [Read Only] 기존과 동일한 읽기 함수 (이제 공통 로직을 재사용합니다)
     # =========================================================================
     def decode_motor_encoder(self, perform_slow_poll: bool = True) -> MotorStatesData:
@@ -470,6 +538,12 @@ class MotorManager:
         futures = [self._io_pool.submit(fetch_motor_data, i) for i in range(self.motor_count)]
         for f in futures:
             f.result()
+
+        # Seed (or re-seed) the encoder anchor exactly when we have a fresh
+        # multi-turn read available. Safe to call multiple times — it always
+        # re-aligns to the latest absolute angle.
+        if perform_slow_poll:
+            self._seed_position_anchor()
 
         # 데이터를 읽어온 후 패키징하여 반환합니다.
         return self._package_motor_states()
@@ -506,6 +580,10 @@ class MotorManager:
             # 에러 플래그 등은 매번 읽을 필요가 없으므로 옵션으로 처리합니다.
             if perform_slow_poll:
                 self.poll_state1(motor_index)
+
+            # Update multi-turn motor angle from the encoder count just parsed
+            # out of this same 0xA1 reply — no extra CAN read required.
+            self._update_motor_angle_from_encoder(motor_index)
 
         # Hot-path fan-out: submit on the persistent pool and drain via
         # f.result() so any in-thread exceptions surface instead of being

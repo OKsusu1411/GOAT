@@ -351,6 +351,11 @@ class ControllerNode(Node):
         # Joint state from the previous tick's CAN transaction (in-process).
         self.joint_state_msg = self.motor_io.latest_joint_state
 
+        # Stamp header so consumers (rqt, PlotJuggler, rosbag) see a fresh
+        # timestamp each tick — motor_io builds the JointState with an empty header.
+        self.joint_state_msg.header.stamp = self.get_clock().now().to_msg()
+        self.joint_state_msg.header.frame_id = "base_link"
+
         # Publish joint states
         self.joint_state_pub.publish(self.joint_state_msg)
 

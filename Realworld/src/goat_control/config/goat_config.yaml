@@ -193,15 +193,19 @@ joint_vel_estop_threshold: 4.0
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
+# Encoder counts per motor-shaft revolution (14-bit absolute encoder -> 16384).
+# Used by MotorManager to integrate the 0xA1-reply encoder field into a
+# multi-turn motor angle without extra CAN reads.
+motor_encoder_counts_per_rev: 16384
 joint_offsets:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
+- 0.012322024519079962
+- 0.015009831567151239
+- 2.100311768557456
+- -2.0478471712425064
+- 1.002141876556364
+- -0.2750900700530862
+- -1.2306142022886815
+- 1.286080765917062
 imu_offsets:
 - 1.0
 - 0.0

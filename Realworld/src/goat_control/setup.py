@@ -25,6 +25,10 @@ setup(
         (os.path.join("share", package_name, "urdf"),
          glob(os.path.join("urdf/*"))),
 
+        # Checkpoints -> share/goat_control/checkpoint
+        (os.path.join("share", package_name, "checkpoint"),
+         glob(os.path.join("checkpoint", "*.pt"))),
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,
