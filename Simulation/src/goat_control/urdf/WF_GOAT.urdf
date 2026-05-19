@@ -1,0 +1,401 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="wheel_GOAT">
+    <!-- 
+      Uncomment to support the robot by fixing its base link to the world frame. 
+      This anchors the robot in place, preventing movement.
+    -->
+    
+    <!-- 
+    <link name="world"/>
+    <joint name="base_static_Joint" type="fixed">
+        <origin rpy="0 0 0" xyz="0 0 0.3"/>
+        <parent link="world"/>
+        <child link="base_Link"/>
+    </joint>
+    -->
+    <material name="black">
+        <color rgba="0.0 0.0 0.0 1.0"/>
+    </material>
+    <material name="blue">
+        <color rgba="0.0 0.0 0.8 1.0"/>
+    </material>
+    <material name="green">
+        <color rgba="0.0 0.8 0.0 1.0"/>
+    </material>
+    <material name="grey">
+        <color rgba="0.2 0.2 0.2 1.0"/>
+    </material>
+    <material name="silver">
+        <color rgba="0.9137254901960784 0.9137254901960784 0.8470588235294118 1.0"/>
+    </material>
+    <material name="orange">
+        <color rgba="1.0 0.4235294117647059 0.0392156862745098 1.0"/>
+    </material>
+    <material name="brown">
+        <color rgba="0.8705882352941177 0.8117647058823529 0.7647058823529411 1.0"/>
+    </material>
+    <material name="red">
+        <color rgba="0.8 0.0 0.0 1.0"/>
+    </material>
+    <material name="white">
+        <color rgba="1.0 1.0 1.0 1.0"/>
+    </material>
+
+    <!-- ****************************************** Link ******************************************************** -->
+
+    <link name="base_Link">
+        <inertial>
+            <origin rpy="0 0 0" xyz="-9.521E-03 0.016E-03 -72.346E-03"/>
+            <mass value="2.818"/>
+            <inertia ixx="20284.45E-06" ixy="-5.647E-06" ixz="6404.633E-06"
+                    iyy="23476.973E-06" iyz="0.541E-06" izz="21206.204E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/base_Link.stl"/>
+            </geometry>
+            <material name="black">
+                <color rgba="0.79216 0.81961 0.93333 1"/>
+            </material>
+        </visual>
+        <collision>
+            <!-- <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/> -->
+            <!-- <geometry>
+                <mesh filename="../meshes/base_Link.stl"/>
+            </geometry> -->
+            <origin xyz="-20E-03 0E-03 -15E-03" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.214 0.200 0.190"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <link name="hip_L_Link">
+        <inertial>
+            <!-- C_rel_mirror = [-48.092, -38.296, -0.162] mm -->
+            <origin rpy="0 0 0" xyz="-48.092E-03 -38.296E-03 -0.162E-03"/>
+            <mass value="0.32"/>
+            <!-- I_C_new_mirror -->
+            <inertia ixx="143.701E-06" ixy="-12.808E-06" ixz="-1.53E-06"
+                    iyy="215.732E-06" iyz="-0.447E-06" izz="197.705E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/hip_L_Link.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="0.79216 0.81961 0.93333 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="-53.5E-03 0 0" rpy="1.57 0 0"/>
+            <geometry>
+                <cylinder length="135E-03" radius="42E-03"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <link name="hip_R_Link">
+        <inertial>
+            <!-- C_rel = [-48.092, 38.296, -0.162] mm -->
+            <origin rpy="0 0 0" xyz="-48.092E-03 38.296E-03 -0.162E-03"/>
+            <mass value="0.32"/>
+            <!-- I_C_new -->
+            <inertia ixx="143.701E-06" ixy="12.808E-06" ixz="-1.53E-06"
+                    iyy="215.732E-06" iyz="0.447E-06" izz="197.705E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/hip_R_Link.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="0.79216 0.81961 0.93333 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="-53.5E-03 0 0" rpy="1.57 0 0"/>
+            <geometry>
+                <cylinder length="135E-03" radius="42E-03"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <link name="thigh_L_Link">
+        <inertial>
+            <!-- C_rel_mirror = [-2.292, 44.134, -32.074] mm -->
+            <origin rpy="0 0 0" xyz="-2.292E-03 44.134E-03 -32.074E-03"/>
+            <mass value="0.429"/>
+            <!-- I_C_new_mirror -->
+            <inertia ixx="2141.33E-06" ixy="-25.21E-06" ixz="-67.863E-06"
+                    iyy="2065.884E-06" iyz="-348.977E-06" izz="345.531E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/thigh_L_Link.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="-11E-03 16E-03 -116E-03" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.09 0.05 0.145"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <link name="thigh_R_Link">
+        <inertial>
+            <!-- C_rel = [-2.292, -44.134, -32.074] mm -->
+            <origin rpy="0 0 0" xyz="-2.292E-03 -44.134E-03 -32.074E-03"/>
+            <mass value="0.429"/>
+            <!-- I_C_new -->
+            <inertia ixx="2141.33E-06" ixy="25.21E-06" ixz="-67.863E-06"
+                    iyy="2065.884E-06" iyz="348.977E-06" izz="345.531E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/thigh_R_Link.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="-11E-03 -16E-03 -116E-03" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.09 0.05 0.145"/>
+            </geometry>
+        </collision>
+    </link>
+        
+    <link name="calf_L_Link">
+        <inertial>
+            <!-- C_rel_mirror = [1.922, 0.564, -169.664] mm -->
+            <origin rpy="0 0 0" xyz="1.922E-03 0.564E-03 -169.664E-03"/>
+            <mass value="0.287"/>
+            <!-- I_C_new_mirror -->
+            <inertia ixx="1163.053E-06" ixy="0.554E-06" ixz="-35.747E-06"
+                    iyy="1199.643E-06" iyz="1.349E-06" izz="92.01E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/calf_L_Link.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="0.79216 0.81961 0.93333 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 -116E-03" rpy="0 0 0"/>
+            <geometry>
+                <cylinder length="233E-03" radius="32.5E-03"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <link name="calf_R_Link">
+        <inertial>
+            <!-- C_rel = [1.922, -0.564, -169.664] mm -->
+            <origin rpy="0 0 0" xyz="1.922E-03 -0.564E-03 -169.664E-03"/>
+            <mass value="0.287"/>
+            <!-- I_C_new -->
+            <inertia ixx="1163.053E-06" ixy="-0.554E-06" ixz="-35.747E-06"
+                    iyy="1199.643E-06" iyz="-1.349E-06" izz="92.01E-06"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="../meshes/calf_R_Link.stl"/>
+            </geometry>
+            <material name="">
+                <color rgba="0.79216 0.81961 0.93333 1"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 -116E-03" rpy="0 0 0"/>
+            <geometry>
+                <cylinder length="233E-03" radius="32.5E-03"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <link name="wheel_L_Link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="../meshes/wheel_L_Link.stl"/>
+            </geometry>
+            <material name="orange" />
+            <color rgba="0.69804 0.69804 0.69804 1" />
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 7E-03 0" />
+            <geometry>
+                <cylinder length="32E-03" radius="72.75E-03" />
+            </geometry>
+        </collision>
+        <inertial>
+            <!-- C_rel_mirror = [0, 7.264, -0.002] mm -->
+            <origin rpy="0 0 0" xyz="0.0E-03 7.264E-03 -0.002E-03" />
+            <mass value="0.212" />
+            <!-- I_C_new_mirror -->
+            <inertia ixx="338.788E-06" ixy="-0.001E-06" ixz="-0.008E-06" 
+                    iyy="647.488E-06" iyz="0.001E-06" izz="338.791E-06" />
+        </inertial>
+    </link>  
+
+    <link name="wheel_R_Link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="../meshes/wheel_R_Link.stl"/>
+            </geometry>
+            <material name="orange" />
+            <color rgba="0.69804 0.69804 0.69804 1" />
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 -7E-03 0" />
+            <geometry>
+                <cylinder length="32E-03" radius="72.75E-03" />
+            </geometry>
+        </collision>
+        <inertial>
+            <!-- C_rel = [0, -7.264, -0.002] mm -->
+            <origin rpy="0 0 0" xyz="0.0E-03 -7.264E-03 -0.002E-03" />
+            <mass value="0.212" />
+            <!-- I_C_new -->
+            <inertia ixx="338.788E-06" ixy="0.001E-06" ixz="-0.008E-06" 
+                    iyy="647.488E-06" iyz="-0.001E-06" izz="338.791E-06" />
+        </inertial>
+    </link>
+
+    <link name="imu_link">
+        <!-- <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.02 0.02 0.01"/> </geometry>
+            <material name="red"/>
+        </visual> -->
+    </link>
+
+
+    <!-- ****************************************** Joint ******************************************************** -->
+    
+    <joint name="hip_L_Joint" type="revolute">
+        <origin xyz="38.386E-03 94.233E-03 -152.597E-03" rpy="0 0 0"/>
+        <parent link="base_Link"/>
+        <child link="hip_L_Link"/>
+        <axis xyz="-1 0 0"/>
+        <limit effort="4.5" lower="-1.7453" upper="1.0123" velocity="33.5"/>
+        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
+        <dynamics friction="6.453013E-02" />
+    </joint>
+    
+    <joint name="hip_R_Joint" type="revolute">
+        <origin xyz="38.386E-03 -94.233E-03 -152.597E-03" rpy="0 0 0"/>
+        <parent link="base_Link"/>
+        <child link="hip_R_Link"/>
+        <axis xyz="-1 0 0"/>
+        <limit effort="4.5" lower="-1.0123" upper="1.7453" velocity="33.5"/>
+        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
+        <dynamics friction="6.453013E-02" />
+    </joint>
+    
+    <joint name="thigh_L_Joint" type="revolute">
+        <origin xyz="-54E-03 -17E-03 0" rpy="0 0 0"/>
+        <parent link="hip_L_Link"/>
+        <child link="thigh_L_Link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="4.5" lower="-0.3840" upper="2.0071" velocity="33.5"/>
+        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
+        <dynamics friction="6.453013E-02" />
+    </joint>
+
+    <joint name="thigh_R_Joint" type="revolute">
+        <origin xyz="-54E-03 17E-03 0" rpy="0 0 0"/>
+        <parent link="hip_R_Link"/>
+        <child link="thigh_R_Link"/>
+        <axis xyz="0 -1 0"/>
+        <limit effort="4.5" lower="-2.0071" upper="0.3840" velocity="33.5"/>
+        <dynamics damping="2.401586E-03" stiffness ="0.0"/>
+        <dynamics friction="6.453013E-02" />
+    </joint>
+
+    <joint name="knee_L_Joint" type="revolute">
+        <origin xyz="0 18E-03 -205E-03" rpy="0 0 0"/>
+        <parent link="thigh_L_Link"/>
+        <child link="calf_L_Link"/>
+        <axis xyz="0 -1 0"/>
+        <limit effort="4.5" lower="-0.523599" upper="2.3387" velocity="33.5"/>
+        <dynamics damping="2.993308e-01" stiffness ="0.0"/>
+        <dynamics friction="4.432008e-01" />
+    </joint>
+
+    <joint name="knee_R_Joint" type="revolute">
+        <origin xyz="0 -18E-03 -205E-03" rpy="0 0 0"/>
+        <parent link="thigh_R_Link"/>
+        <child link="calf_R_Link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="4.5" lower="-2.3387" upper="0.523599" velocity="33.5"/>
+        <dynamics damping="2.993308e-01" stiffness ="0.0"/>
+        <dynamics friction="4.432008e-01" />
+    </joint>
+
+    <joint name="wheel_L_Joint" type="revolute">
+        <origin xyz="0 16.555E-03 -200E-03" rpy="0 0 0"/>
+        <parent link="calf_L_Link" />
+        <child link="wheel_L_Link" />
+        <axis xyz="0 1 0" />
+        <limit effort="2.5" lower="-1000000" upper="1000000" velocity="33.5" />
+        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics friction="0.01" />
+    </joint>
+    
+    <joint name="wheel_R_Joint" type="revolute">
+        <origin xyz="0 -16.555E-03 -200E-03" rpy="0 0 0"/>
+        <parent link="calf_R_Link" />
+        <child link="wheel_R_Link" />
+        <axis xyz="0 -1 0" />
+        <limit effort="2.5" lower="-1000000" upper="1000000" velocity="33.5" />
+        <dynamics damping="100.0" stiffness="10000.0"/>
+        <dynamics friction="0.01" />
+    </joint>
+
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_Link"/>
+        <child link="imu_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    
+    <!-- ****************************************** D435 Camera ******************************************************** -->
+    <!--
+    <joint name="d435_joint" type="fixed">
+        <origin rpy="0 1.063778179 0" xyz="0.13223 0.0222 -0.26826"/>
+        <parent link="base_Link"/>
+        <child link="d435_Link"/>
+    </joint>
+    <link name="d435_Link">
+        <visual>
+            <origin rpy="1.5707963267948966 0 1.5707963267948966" xyz="0.0149 -0.0175 0"/>
+            <geometry>
+                <mesh filename="package://goat_description/meshes_camera/d435.dae" scale="1 1 1"/>
+            </geometry>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="0 -0.0175 0"/>
+            <geometry>
+                <box size="0.02505 0.09 0.025"/>
+            </geometry>
+        </collision>
+    </link>
+    -->
+    <!-- ****************************************** D435 Camera END ******************************************************** -->
+</robot>

@@ -12,7 +12,7 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import ImuState
+from imu_interface.msg import ImuState
 from message_filters import Subscriber, TimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
@@ -44,16 +44,8 @@ class SimControllerNode(Node):
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("sync_queue_size", 10)
 
-        # use simulation time.
-        self.set_parameters(
-            [
-                rclpy.parameter.Parameter(
-                    "use_sim_time",
-                    rclpy.Parameter.Type.BOOL,
-                    True,
-                )
-            ]
-        )
+        # NOTE: not forcing use_sim_time. The MuJoCo bridge doesn't publish /clock,
+        # so sim-time would stay at 0 and corrupt dt_sec inside _tick().
 
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)

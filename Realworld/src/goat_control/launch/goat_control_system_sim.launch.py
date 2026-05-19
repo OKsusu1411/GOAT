@@ -100,5 +100,5 @@ def generate_launch_description():
         estimation_rate_arg,
         command_unit_arg,
         controller_node,
-        topic_converter_node,
+        # topic_converter_node,
     ])

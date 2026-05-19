@@ -60,10 +60,10 @@ _build
 # Generated Assets
 **/usd/*
 
-#Realworld ros2
-**/Realworld/install/
-**/Realworld/build/
-**/Realworld/log/
+# Ros2
+**/install/
+**/build/
+**/log/
 **/Realworld/.vscode/
 **/Realworld/src/goat_control/pd_logs/
 

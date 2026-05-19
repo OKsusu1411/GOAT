@@ -3,7 +3,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
@@ -22,6 +21,13 @@ def generate_launch_description():
         "urdf",
         "WF_GOAT.urdf",
     ])
+
+    default_checkpoint_path = PathJoinSubstitution([
+        FindPackageShare("goat_control"),
+        "checkpoint",
+        "agent_jit_128000.pt"
+    ])
+
     # Arguments
     yaml_path_arg = DeclareLaunchArgument(
         "yaml_path",
@@ -35,7 +41,7 @@ def generate_launch_description():
     )
     checkpoint_path_arg = DeclareLaunchArgument(
         "checkpoint_path",
-        default_value="",
+        default_value=default_checkpoint_path,
         description="Path to RL agent checkpoint. Empty string disables checkpoint loading.",
     )
     can_channel_arg = DeclareLaunchArgument(
@@ -66,18 +72,6 @@ def generate_launch_description():
 
 
     # Nodes
-    imu_io_node = Node(
-        package="goat_control",
-        executable="imu_io_node",
-        name="imu_io_node",
-        output="screen",
-        parameters=[{
-            "imu_port": LaunchConfiguration("imu_port"),
-            "imu_baudrate": LaunchConfiguration("imu_baudrate"),
-            "yaml_path": LaunchConfiguration("yaml_path"),
-        }],
-    )
-
     controller_node = Node(
         package="goat_control",
         executable="controller_node",
@@ -88,22 +82,11 @@ def generate_launch_description():
             "urdf_path": LaunchConfiguration("urdf_path"),
             "checkpoint_path": LaunchConfiguration("checkpoint_path"),
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
+            "imu_port": LaunchConfiguration("imu_port"),
+            "imu_baudrate": LaunchConfiguration("imu_baudrate"),
         }],
     )
 
-    motor_io_node = Node(
-        package="goat_control",
-        executable="motor_io_node",
-        name="motor_io_node",
-        output="screen",
-        parameters=[{
-            "can_channel": LaunchConfiguration("can_channel"),
-            "can_interface": LaunchConfiguration("can_interface"),
-            "yaml_path": LaunchConfiguration("yaml_path"),
-            "io_rate_hz": LaunchConfiguration("control_rate_hz"),
-        }],
-    )
-    
     return LaunchDescription([
         yaml_path_arg,
         urdf_path_arg,
@@ -113,7 +96,5 @@ def generate_launch_description():
         control_rate_arg,
         imu_port_arg,
         imu_baudrate_arg,
-        imu_io_node,
         controller_node,
-        motor_io_node,
     ])
