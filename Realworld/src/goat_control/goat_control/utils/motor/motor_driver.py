@@ -1,6 +1,7 @@
 # goat_control/core/comm/motor_driver.py
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 from .can import CanInterface
@@ -110,6 +111,36 @@ class MotorDriver:
         if msg is not None:
             return msg
         return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0x9A)
+
+    # ------------------------
+    # Synchronous hot-path API (sync 200 Hz pipeline)
+    # Use clear_state2_event() before send_torque_only(), then await_state2()
+    # to block on THIS tick's reply. Returns the can.Message or None on
+    # timeout. Restores the constant-Δt invariant the integrator needs.
+    # ------------------------
+    def clear_state2_event(self) -> None:
+        """Arm this motor for a fresh 0xA1 reply.
+
+        Must be called BEFORE send_torque_only() each tick so the subsequent
+        wait blocks until THIS tick's reply lands (not the previous one's)."""
+        self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1).clear()
+        self.can_interface.event_for_key(self.can_ids.tx_id, 0xA1).clear()
+
+    def await_state2(self, deadline_monotonic: float):
+        """Block until a fresh 0xA1 reply arrives for this motor, or the
+        shared deadline elapses. Returns the can.Message or None on timeout.
+
+        `deadline_monotonic` is an absolute time.monotonic() value shared by
+        all 8 motors this tick — keeps total RX wait bounded regardless of
+        motor count."""
+        rx_ev = self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1)
+        remaining = max(0.0, deadline_monotonic - time.monotonic())
+        if rx_ev.wait(remaining):
+            msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
+            if msg is not None:
+                return msg
+        # rx_id timed out — try tx_id fallback (mirrors txrx accept_tx_echo_diff).
+        return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1)
 
     # additional command wrappers (not used yet)
 
