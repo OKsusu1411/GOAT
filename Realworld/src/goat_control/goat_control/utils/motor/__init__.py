@@ -1,8 +1,11 @@
 # goat_control/utils/motor/__init__.py
 from .can import CanInterface
 from .motor_driver import MotorDriver, MotorParams
-from .filters import FirstOrderLowPassFilter
-from .motor_manager import MotorManager, format_motor_states
+# [DEPRECATED] FirstOrderLowPassFilter is no longer used; torque LPF lives in
+# MotorManager.torque_lpf(). format_motor_states references fields removed from
+# MotorStatesData and is also unused.
+# from .filters import FirstOrderLowPassFilter
+from .motor_manager import MotorManager  # , format_motor_states  # [DEPRECATED]
 from .protocol import (
     CanIds,
     mg_ids,
@@ -26,7 +29,7 @@ __all__ = [
     "MGUnitScales",
     "set_mg_unit_scales",
     "get_mg_unit_scales",
-    "FirstOrderLowPassFilter",
+    # [DEPRECATED] "FirstOrderLowPassFilter",
     "MotorManager",
-    "format_motor_states"
+    # [DEPRECATED] "format_motor_states",
 ]

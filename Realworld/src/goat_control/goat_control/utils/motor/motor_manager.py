@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 from goat_control.utils.motor.motor_driver import MotorDriver
-from goat_control.utils.motor.filters import FirstOrderLowPassFilter
+# [DEPRECATED] LPF logic was moved into MotorManager.torque_lpf() — this generic filter is no longer wired into the pipeline.
+# from goat_control.utils.motor.filters import FirstOrderLowPassFilter
 
 
 # Motor current resolution used previously:
@@ -42,74 +43,79 @@ class MotorStatesData:
     motor_operating_state: List[int]                   # motor mode/state (device-defined)
 
     timestamp_sec: Optional[float] = None
+# ============================================================================
+# [DEPRECATED] format_motor_states: references MotorStatesData fields that no
+# longer exist (motor_phase_current_amp, motor_speed_deg_per_sec, etc.). The
+# current MotorStatesData carries only joint-space quantities. Never called.
+# ============================================================================
 
-def format_motor_states(
-    motor_states_data: MotorStatesData,
-    max_motor_count: int | None = 8,
-    show_angles_in_degrees: bool = True,
-    angle_deg_per_lsb: float = DEFAULT_ANGLE_DEG_PER_LSB,
-) -> str:
-    """Human-readable formatter (core-friendly replacement of motor_states_echo.py)."""
-
-    motor_limit = max_motor_count if (max_motor_count and max_motor_count > 0) else None
-
-    def clip(values: List):
-        return values if (motor_limit is None) else values[:motor_limit]
-
-    motor_temperature_c = clip(motor_states_data.motor_temperature_c)
-    motor_phase_current_amp = clip(motor_states_data.motor_phase_current_amp)
-    motor_speed_deg_per_sec = clip(motor_states_data.motor_speed_deg_per_sec)
-    motor_encoder_count = clip(motor_states_data.motor_encoder_count)
-
-    motor_single_turn_angle_raw_0p001deg = clip(motor_states_data.motor_single_turn_angle_raw_0p001deg)
-    motor_multi_turn_angle_raw_0p001deg = clip(motor_states_data.motor_multi_turn_angle_raw_0p001deg)
-
-    motor_error_flags = clip(motor_states_data.motor_error_flags)
-    motor_operating_state = clip(motor_states_data.motor_operating_state)
-
-    if show_angles_in_degrees:
-        motor_single_turn_angle_deg = [
-            raw_value * angle_deg_per_lsb for raw_value in motor_single_turn_angle_raw_0p001deg
-        ]
-        motor_multi_turn_angle_deg = [
-            raw_value * angle_deg_per_lsb for raw_value in motor_multi_turn_angle_raw_0p001deg
-        ]
-    else:
-        motor_single_turn_angle_deg = None
-        motor_multi_turn_angle_deg = None
-
-    timestamp_string = (
-        f"{motor_states_data.timestamp_sec:.6f}"
-        if motor_states_data.timestamp_sec is not None
-        else "N/A"
-    )
-
-    lines: List[str] = []
-    lines.append(f"\n=== MotorStates @ {timestamp_string} ===")
-    lines.append(f"  motor_temperature_c        : {['{:.1f}'.format(v) for v in motor_temperature_c]} (degC)")
-    lines.append(f"  motor_phase_current_amp    : {['{:.3f}'.format(v) for v in motor_phase_current_amp]} (A)")
-    lines.append(f"  motor_speed_deg_per_sec    : {['{:.1f}'.format(v) for v in motor_speed_deg_per_sec]} (deg/s)")
-    lines.append(f"  motor_encoder_count        : {motor_encoder_count}")
-
-    if show_angles_in_degrees:
-        lines.append(
-            "  motor_single_turn_angle    : "
-            f"{motor_single_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
-            f"{['{:.2f}'.format(v) for v in motor_single_turn_angle_deg]} (deg)"
-        )
-        lines.append(
-            "  motor_multi_turn_angle     : "
-            f"{motor_multi_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
-            f"{['{:.2f}'.format(v) for v in motor_multi_turn_angle_deg]} (deg)"
-        )
-    else:
-        lines.append(f"  motor_single_turn_angle    : {motor_single_turn_angle_raw_0p001deg} (raw)")
-        lines.append(f"  motor_multi_turn_angle     : {motor_multi_turn_angle_raw_0p001deg} (raw)")
-
-    lines.append(f"  motor_error_flags          : {motor_error_flags}")
-    lines.append(f"  motor_operating_state      : {motor_operating_state}")
-
-    return "\n".join(lines)
+# [DEPRECATED] def format_motor_states(
+# [DEPRECATED]     motor_states_data: MotorStatesData,
+# [DEPRECATED]     max_motor_count: int | None = 8,
+# [DEPRECATED]     show_angles_in_degrees: bool = True,
+# [DEPRECATED]     angle_deg_per_lsb: float = DEFAULT_ANGLE_DEG_PER_LSB,
+# [DEPRECATED] ) -> str:
+# [DEPRECATED]     """Human-readable formatter (core-friendly replacement of motor_states_echo.py)."""
+# [DEPRECATED] 
+# [DEPRECATED]     motor_limit = max_motor_count if (max_motor_count and max_motor_count > 0) else None
+# [DEPRECATED] 
+# [DEPRECATED]     def clip(values: List):
+# [DEPRECATED]         return values if (motor_limit is None) else values[:motor_limit]
+# [DEPRECATED] 
+# [DEPRECATED]     motor_temperature_c = clip(motor_states_data.motor_temperature_c)
+# [DEPRECATED]     motor_phase_current_amp = clip(motor_states_data.motor_phase_current_amp)
+# [DEPRECATED]     motor_speed_deg_per_sec = clip(motor_states_data.motor_speed_deg_per_sec)
+# [DEPRECATED]     motor_encoder_count = clip(motor_states_data.motor_encoder_count)
+# [DEPRECATED] 
+# [DEPRECATED]     motor_single_turn_angle_raw_0p001deg = clip(motor_states_data.motor_single_turn_angle_raw_0p001deg)
+# [DEPRECATED]     motor_multi_turn_angle_raw_0p001deg = clip(motor_states_data.motor_multi_turn_angle_raw_0p001deg)
+# [DEPRECATED] 
+# [DEPRECATED]     motor_error_flags = clip(motor_states_data.motor_error_flags)
+# [DEPRECATED]     motor_operating_state = clip(motor_states_data.motor_operating_state)
+# [DEPRECATED] 
+# [DEPRECATED]     if show_angles_in_degrees:
+# [DEPRECATED]         motor_single_turn_angle_deg = [
+# [DEPRECATED]             raw_value * angle_deg_per_lsb for raw_value in motor_single_turn_angle_raw_0p001deg
+# [DEPRECATED]         ]
+# [DEPRECATED]         motor_multi_turn_angle_deg = [
+# [DEPRECATED]             raw_value * angle_deg_per_lsb for raw_value in motor_multi_turn_angle_raw_0p001deg
+# [DEPRECATED]         ]
+# [DEPRECATED]     else:
+# [DEPRECATED]         motor_single_turn_angle_deg = None
+# [DEPRECATED]         motor_multi_turn_angle_deg = None
+# [DEPRECATED] 
+# [DEPRECATED]     timestamp_string = (
+# [DEPRECATED]         f"{motor_states_data.timestamp_sec:.6f}"
+# [DEPRECATED]         if motor_states_data.timestamp_sec is not None
+# [DEPRECATED]         else "N/A"
+# [DEPRECATED]     )
+# [DEPRECATED] 
+# [DEPRECATED]     lines: List[str] = []
+# [DEPRECATED]     lines.append(f"\n=== MotorStates @ {timestamp_string} ===")
+# [DEPRECATED]     lines.append(f"  motor_temperature_c        : {['{:.1f}'.format(v) for v in motor_temperature_c]} (degC)")
+# [DEPRECATED]     lines.append(f"  motor_phase_current_amp    : {['{:.3f}'.format(v) for v in motor_phase_current_amp]} (A)")
+# [DEPRECATED]     lines.append(f"  motor_speed_deg_per_sec    : {['{:.1f}'.format(v) for v in motor_speed_deg_per_sec]} (deg/s)")
+# [DEPRECATED]     lines.append(f"  motor_encoder_count        : {motor_encoder_count}")
+# [DEPRECATED] 
+# [DEPRECATED]     if show_angles_in_degrees:
+# [DEPRECATED]         lines.append(
+# [DEPRECATED]             "  motor_single_turn_angle    : "
+# [DEPRECATED]             f"{motor_single_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
+# [DEPRECATED]             f"{['{:.2f}'.format(v) for v in motor_single_turn_angle_deg]} (deg)"
+# [DEPRECATED]         )
+# [DEPRECATED]         lines.append(
+# [DEPRECATED]             "  motor_multi_turn_angle     : "
+# [DEPRECATED]             f"{motor_multi_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
+# [DEPRECATED]             f"{['{:.2f}'.format(v) for v in motor_multi_turn_angle_deg]} (deg)"
+# [DEPRECATED]         )
+# [DEPRECATED]     else:
+# [DEPRECATED]         lines.append(f"  motor_single_turn_angle    : {motor_single_turn_angle_raw_0p001deg} (raw)")
+# [DEPRECATED]         lines.append(f"  motor_multi_turn_angle     : {motor_multi_turn_angle_raw_0p001deg} (raw)")
+# [DEPRECATED] 
+# [DEPRECATED]     lines.append(f"  motor_error_flags          : {motor_error_flags}")
+# [DEPRECATED]     lines.append(f"  motor_operating_state      : {motor_operating_state}")
+# [DEPRECATED] 
+# [DEPRECATED]     return "\n".join(lines)
 
 
 class MotorManager:
@@ -155,6 +161,8 @@ class MotorManager:
 
         # YAML cfg
         self.cfg = cfg
+        # [DEPRECATED] Velocity / effort LPFs were removed in favor of a single
+        # torque-side LPF (see torque_lpf_alpha_per_joint below).
         # joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
         # joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
         self.motor_gear_ratio = self.cfg["motor_gear_ratio"]
@@ -202,6 +210,8 @@ class MotorManager:
             thread_name_prefix="motor_io",
         )
 
+        # [DEPRECATED] Generic FirstOrderLowPassFilter instances on velocity /
+        # effort. Superseded by the per-joint torque LPF in torque_lpf().
         # self.joint_velocity_low_pass_filter = (
         #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
         #     if joint_velocity_lpf_alpha is not None
@@ -340,6 +350,11 @@ class MotorManager:
         joint_torque_nm = motor_shaft_torque_nm
         return joint_torque_nm
 
+    # ============================================================================
+    # [DEPRECATED] Old single-method decode_motor_encoder. Replaced by the split
+    # version below (_package_motor_states + the new decode_motor_encoder /
+    # write_torques_and_read_states pair). Kept here only for reference.
+    # ============================================================================
     # def decode_motor_encoder(self) -> MotorStatesData:
     #     # for motor_index in range(self.motor_count):
     #     # for motor_index in [0]:
