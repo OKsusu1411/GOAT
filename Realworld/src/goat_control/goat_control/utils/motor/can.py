@@ -173,6 +173,27 @@ class CanInterface:
                 self.frame_events[key] = ev
             return ev
 
+    def alias_event_keys(self, key_a: tuple[int, int], key_b: tuple[int, int]) -> threading.Event:
+        """Make two reply keys share ONE arrival Event.
+
+        A motor may answer the same command on either rx_id (0x180+id) or
+        tx_id (0x140+id) depending on its setup. The reader thread (`_rx_loop`)
+        sets the event for whichever key actually arrives, so a hot-path waiter
+        blocking on only one key can miss the wakeup entirely (measured: this
+        hardware replies only on tx_id, so the rx_id event never fired and every
+        tick burned the full 50 ms timeout).
+
+        Pointing both keys at the same Event means a frame on EITHER key wakes
+        the same waiter. Call once at setup, before the hot path starts.
+        Returns the shared Event."""
+        with self._events_lock:
+            ev = (self.frame_events.get(key_a)
+                  or self.frame_events.get(key_b)
+                  or threading.Event())
+            self.frame_events[key_a] = ev
+            self.frame_events[key_b] = ev
+            return ev
+
     def send_only(self, arbitration_id: int, data: bytes) -> None:
         """Fire-and-forget send. No lock, no response wait.
 

@@ -32,6 +32,14 @@ class MotorDriver:
         self.motor_params = motor_params
         self.can_ids = protocol.mg_ids(self.motor_params.node_id)
 
+        # 0xA1 (torque) reply may land on rx_id OR tx_id depending on the motor
+        # setup. Alias both keys to one arrival Event so await_state2() wakes on
+        # whichever arrives. Must run before the hot path arms/awaits events.
+        self.can_interface.alias_event_keys(
+            (self.can_ids.rx_id, 0xA1),
+            (self.can_ids.tx_id, 0xA1),
+        )
+
     def _txrx(self, command_byte: int, payload7: bytes = protocol.E7, timeout: float = 0.05):
         """Low-level helper: send a command and wait for a response."""
         return self.can_interface.txrx(
@@ -135,14 +143,14 @@ class MotorDriver:
         `deadline_monotonic` is an absolute time.monotonic() value shared by
         all 8 motors this tick — keeps total RX wait bounded regardless of
         motor count."""
-        rx_ev = self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1)
+        # rx_id and tx_id 0xA1 events are aliased to one shared Event (see
+        # __init__), so this wakes whether the motor answers on rx_id or tx_id.
+        ev = self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1)
         remaining = max(0.0, deadline_monotonic - time.monotonic())
-        if rx_ev.wait(remaining):
-            msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
-            if msg is not None:
-                return msg
-        # rx_id timed out — try tx_id fallback (mirrors txrx accept_tx_echo_diff).
-        return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1)
+        ev.wait(remaining)  # woken on arrival, or fell through on timeout
+        # Prefer rx_id frame; fall back to tx_id (this hardware replies on tx_id).
+        return (self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
+                or self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1))
 
     # additional command wrappers (not used yet)
 
