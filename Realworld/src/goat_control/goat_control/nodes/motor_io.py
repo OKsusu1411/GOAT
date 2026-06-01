@@ -138,5 +138,6 @@ class MotorIO:
         for can_interface in getattr(self, "cans", []):
             try:
                 can_interface.close()
+                print("[Motor] CAN interface closed successfully.")
             except Exception:
-                pass
+                print("[Motor] Error closing CAN interface")

@@ -432,22 +432,19 @@ class ControllerNode(Node):
 
         # Publish for logging
         self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
-        # self._publish_torque_command(q_ref, v_ref, tau)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
         tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
         tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
-        rx_counts = [getattr(c, "rx_frame_count", 0) for c in self.motor_io.cans]
 
         # # Time logging
-        # self.logger.info(
-        #     f"[timing] total: {total_ms:6.2f} ms | 1/cycle: {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
-        #     f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
-        #     f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms "
-        #     f"| rx_frames: {rx_counts}\r",
-        #     throttle_duration_sec=0.5,
-        # )
+        self.logger.info(
+            f"[timing] total: {total_ms:6.2f} ms | {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
+            f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
+            f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms ",
+            throttle_duration_sec=1.0,
+        )
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
