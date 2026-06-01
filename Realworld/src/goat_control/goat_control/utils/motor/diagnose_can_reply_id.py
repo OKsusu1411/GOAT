@@ -32,7 +32,16 @@ await_state2()는 rx_id Event만 기다리므로, 만약 모터가 tx_id로 답�
 """
 from __future__ import annotations
 
+import os
+import sys
 import time
+
+# 이 스크립트는 프로젝트 자체 모듈 can.py(CanInterface) 와 같은 폴더에 있다.
+# 스크립트를 직접 실행하면 파이썬이 '스크립트 폴더'를 sys.path 맨 앞에 넣어서
+# `import can` 이 진짜 python-can 대신 옆의 can.py 를 잡아버린다(shadowing).
+# → 스크립트 폴더를 sys.path 에서 빼고 import 해서 설치된 python-can 을 쓰게 한다.
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path[:] = [p for p in sys.path if os.path.abspath(p or os.getcwd()) != _script_dir]
 
 try:
     import can
