@@ -42,6 +42,48 @@ except ImportError:
         "(Jetson의 ROS 환경에는 이미 깔려 있을 것 — 그 환경에서 실행하세요.)"
     )
 
+# 'can' 모듈이 진짜 python-can 인지, 버전이 무엇인지 먼저 보여준다.
+# (로컬에 python-can 이 아닌 다른 'can' 패키지가 잡히면 여기서 바로 드러난다.)
+_CAN_VERSION = getattr(can, "__version__", "unknown")
+_CAN_FILE = getattr(can, "__file__", "unknown")
+
+
+def make_bus(channel: str):
+    """python-can 3.x / 4.x 양쪽에서 동작하도록 Bus 를 연다.
+
+      - 4.x: can.Bus(interface="socketcan", ...)
+      - 3.x: can.interface.Bus(bustype="socketcan", ...)
+    어느 버전이 깔려 있든 되는 조합을 순서대로 시도한다.
+    """
+    import importlib
+
+    # 1) Bus 팩토리 찾기 (4.x: can.Bus, 3.x: can.interface.Bus)
+    bus_factory = getattr(can, "Bus", None)
+    if bus_factory is None:
+        try:
+            interface_mod = importlib.import_module("can.interface")
+            bus_factory = getattr(interface_mod, "Bus", None)
+        except Exception:  # noqa: BLE001
+            bus_factory = None
+    if bus_factory is None:
+        raise RuntimeError(
+            "이 'can' 모듈에는 Bus 가 없습니다 (python-can 이 아니거나 손상). "
+            f"version={_CAN_VERSION}, file={_CAN_FILE}\n"
+            "        → 'pip3 install python-can' 또는 ROS 환경에서 실행하세요."
+        )
+
+    # 2) 채널 지정 키워드도 버전마다 다름: interface=(4.x) / bustype=(3.x)
+    last_err = None
+    for kw in ("interface", "bustype"):
+        try:
+            return bus_factory(**{kw: "socketcan"}, channel=channel,
+                               receive_own_messages=False)
+        except TypeError as exc:  # 키워드 불일치 → 다음 조합 시도
+            last_err = exc
+            continue
+    raise RuntimeError(f"Bus 생성 실패 (interface/bustype 모두 거부): {last_err}")
+
+
 # goat_config.yaml 토폴로지와 동일.
 #   motor_node_ids  = [1,2,3,4,5,6,7,8]
 #   motor_bus_index = [0,1,0,1,0,1,0,1]  → can0={1,3,5,7}, can1={2,4,6,8}
@@ -65,8 +107,7 @@ def drain(bus: "can.BusABC") -> None:
 def probe_bus(channel: str, node_ids: list[int]) -> None:
     print(f"\n===== {channel} =====")
     try:
-        bus = can.Bus(interface="socketcan", channel=channel,
-                      receive_own_messages=False)
+        bus = make_bus(channel)
     except Exception as exc:  # noqa: BLE001
         print(f"  [ERR] {channel} 열기 실패: {exc}")
         print(f"        → './setup_can_dual.sh' 로 인터페이스를 먼저 올렸는지 확인.")
@@ -124,6 +165,7 @@ def probe_bus(channel: str, node_ids: list[int]) -> None:
 
 def main() -> None:
     print("CAN 응답 주소 진단 (읽기 전용 0x9C — 모터 안 움직임)")
+    print(f"  python-can version={_CAN_VERSION}  file={_CAN_FILE}")
     for channel, node_ids in BUSES.items():
         probe_bus(channel, node_ids)
     print(
