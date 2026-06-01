@@ -339,6 +339,8 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
+        if rclpy.is_shutdown():
+            return
         self.now_stamp = self.get_clock().now().to_msg()
         now_time = time.perf_counter()
 
