@@ -339,8 +339,6 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        if not rclpy.ok():
-            return
         self.now_stamp = self.get_clock().now().to_msg()
         now_time = time.perf_counter()
 
@@ -452,7 +450,10 @@ class ControllerNode(Node):
         # )
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
-        """Publish joint state and IMU for logging."""
+        """Publish joint state, IMU, and torque commands for logging."""
+        # Interrupting handling
+        if not rclpy.ok():
+            return
         # Update joint state message for logging
         msg_joint = JointState()
         msg_joint.header.stamp = self.now_stamp
