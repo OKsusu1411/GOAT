@@ -120,15 +120,14 @@ class ControllerNode(Node):
                                                    "/imu",
                                                    qos_profile=qos_profile)
 
-        self.torque_command_publisher = self.create_publisher(JointState, 
-                                                              "/commands", 
-                                                              qos_profile=qos_profile)
+        self.torque_command_pub = self.create_publisher(JointState, 
+                                                        "/commands", 
+                                                        qos_profile=qos_profile)
 
         # Messages
+        self.now_stamp = self.get_clock().now().to_msg()
         self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
         self.imu_msg = self.imu_io.latest_imu_state              # seeded by ImuIO's initial read
-        self.prev_imu_rx_time = None
-        self.last_imu_rx_time = None
         
         # Mode switch (None = idle, no torque until keyboard selects a mode)
         self.publish_mode = None
@@ -146,7 +145,7 @@ class ControllerNode(Node):
         self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
 
         # Timing — use ROS clock so it works under sim time too.
-        self.last_tick_time = self.get_clock().now()
+        self.last_tick_time = time.perf_counter()
 
         self.logger.info("Main Controller Node started")
         self.logger.info("===========================================")
@@ -167,11 +166,6 @@ class ControllerNode(Node):
         # Control loop timer
         control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
-
-        # Off-hot-path error-flag poll. State1 (0x9A) used to run every 10th
-        # control tick; moving it here removes the periodic ~4-5 ms spike from
-        # the control loop. 1 Hz is plenty for safety telemetry.
-        self.error_flag_timer = self.create_timer(1.0, self.motor_io.poll_error_flags_once)
 
     # ---------------------------------------------------------------------
     # Callback Functions
@@ -252,7 +246,7 @@ class ControllerNode(Node):
                 self.logger.info("===========================================\r")
                 continue
 
-    def _sensor_data_has_nan(self) -> bool:
+    def _sensor_data_has_nan(self, joint_state_msg, imu_msg) -> bool:
         """Return True if any element of the joint or IMU state is NaN.
 
         A motor that does not answer the state read leaves NaN in joint
@@ -262,14 +256,14 @@ class ControllerNode(Node):
         modify the data — detection only.
         """
         # Joint state: position / velocity / effort arrays.
-        js = self.joint_state_msg
+        js = joint_state_msg
         if js is not None:
             for field in (js.position, js.velocity, js.effort):
                 if np.any(np.isnan(np.asarray(field, dtype=float))):
                     return True
 
         # IMU state: quaternion + gyro / vel / mag vectors.
-        imu = self.imu_msg
+        imu = imu_msg
         if imu is not None:
             imu_values = [
                 imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
@@ -345,32 +339,29 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        now_time = self.get_clock().now()
+        self.now_stamp = self.get_clock().now().to_msg()
+        now_time = time.perf_counter()
 
         # Time - Time → Duration; convert to seconds via nanoseconds.
-        dt_sec = (now_time - self.last_tick_time).nanoseconds * 1e-9
+        dt_sec = (now_time - self.last_tick_time)
         if dt_sec <= 0.0:
             dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
-        # Joint state from the previous tick's CAN transaction (in-process).
-        self.joint_state_msg = self.motor_io.latest_joint_state
-
-        # Stamp header so consumers (rqt, PlotJuggler, rosbag) see a fresh
-        # timestamp each tick — motor_io builds the JointState with an empty header.
-        self.joint_state_msg.header.stamp = self.get_clock().now().to_msg()
-        self.joint_state_msg.header.frame_id = "base_link"
-
-        # Publish joint states
-        self.joint_state_pub.publish(self.joint_state_msg)
+        # Joint state
+        t_joint_start = time.perf_counter()
+        joint_state_msg = self.motor_io.latest_joint_state
+        # self.joint_state_msg = self.motor_io.latest_joint_state
+        # self.joint_state_msg.header.stamp = self.now_stamp
+        # self.joint_state_msg.header.frame_id = "base_link"
+        joint_read_ms = (time.perf_counter() - t_joint_start) * 1e3
 
         # IMU state
-        t_imu_start = time.perf_counter()                                        # [timing] start IMU read window
-        self.imu_msg = self.imu_io.read_imu()
-        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                  # [timing] IMU read duration in ms
-
-        # Publish for logging
-        self.imu_state_pub.publish(self.imu_msg)
+        t_imu_start = time.perf_counter()    
+        imu_msg = self.imu_io.read_imu()
+        # self.imu_msg = self.imu_io.read_imu()
+        # self.imu_msg.header.stamp = self.now_stamp
+        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                 
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -391,8 +382,8 @@ class ControllerNode(Node):
             self._publish_torque_command(q_ref, v_ref, tau)
             return
         
-        # NaN check: a NaN in joint/IMU state would propagate into the torque
-        if self._sensor_data_has_nan():
+        # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
+        if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
             self.motor_io.read_write_motor(tau)
             self._publish_torque_command(q_ref, v_ref, tau)
@@ -403,17 +394,17 @@ class ControllerNode(Node):
         self._switch_mode(self.publish_mode)
 
         # Active controller execution
-        t_ctrl_start = time.perf_counter()                                       # [timing] start controller compute window
+        t_ctrl_start = time.perf_counter()                                    
         if self.publish_mode == 'policy':
             self.policy_controller.set_command(self._base_command)
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(self.joint_state_msg,
-                                                                            self.imu_msg,
+            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
+                                                                            imu_msg,
                                                                             dt_sec)
             v_ref[-2:] = wheel_v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
-            raw_torque, q_ref, _ = self.nominal_controller.compute(self.joint_state_msg,
-                                                                   self.imu_msg,
+            raw_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
+                                                                   imu_msg,
                                                                    dt_sec)
             v_ref[-2:] = 0 # Only for wheel
 
@@ -424,8 +415,8 @@ class ControllerNode(Node):
             return
 
         # Safety Limiter
-        joint_pos = np.asarray(self.joint_state_msg.position, dtype=float).flatten()
-        joint_vel = np.asarray(self.joint_state_msg.velocity, dtype=float).flatten()
+        # joint_pos = np.asarray(joint_state_msg.position, dtype=float).flatten()
+        # joint_vel = np.asarray(joint_state_msg.velocity, dtype=float).flatten()
         # safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
 
         # # Block handling (latching kill switch)
@@ -445,14 +436,13 @@ class ControllerNode(Node):
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
-        self._publish_torque_command(q_ref, v_ref, tau)
+        self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+        # self._publish_torque_command(q_ref, v_ref, tau)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        total_ms = (self.get_clock().now() - now_time).nanoseconds * 1e-6               # [timing] full _control_loop duration in ms
+        total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
         tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
         tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
-        # Step 3 sanity: per-bus reader frame counts. If these stay at 0 the
-        # reader thread is starved (bus dead, wrong arb_id, or send_only failing).
         rx_counts = [getattr(c, "rx_frame_count", 0) for c in self.motor_io.cans]
 
         # # Time logging
@@ -464,12 +454,35 @@ class ControllerNode(Node):
         #     throttle_duration_sec=0.5,
         # )
 
+    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
+        """Publish joint state and IMU for logging."""
+        # Update joint state message for logging
+        joint_state_msg.header.stamp = self.now_stamp
+        # Update IMU message for logging 
+        imu_msg.header.stamp = self.now_stamp
+
+        # Update joint command message
+        msg = JointState()
+        msg.header.stamp = self.now_stamp
+        msg.name = [
+            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
+            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
+        ]
+        msg.position = position.tolist()
+        msg.velocity = velocity.tolist()
+        msg.effort = effort.tolist()
+
+        # Publish
+        self.joint_state_pub.publish(joint_state_msg)
+        self.imu_state_pub.publish(imu_msg)
+        self.torque_command_pub.publish(msg)
+
+
+
     def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish torque command to /commands topic."""
         msg = JointState()
-        # Stamp with cycle-start time T0 (not publish time) so downstream consumers
-        # measure latency from the moment the agent began computing this action.
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = self.now_stamp
         msg.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
             'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
@@ -478,28 +491,7 @@ class ControllerNode(Node):
         msg.velocity = velocity.tolist()
         msg.effort = torque.tolist()
 
-        self.torque_command_publisher.publish(msg)
-
-    def _sensor_data_is_stale(self) -> tuple[bool, str]:
-        """Return (is_stale, reason) using monotonic wall-clock receive age."""
-        if self.joint_state_msg is None:
-            return True, "joint_state_msg is None"
-        if self.imu_msg is None:
-            return True, "imu_msg is None"
-        if self.last_joint_rx_time is None:
-            return True, "last_joint_rx_time is None"
-        if self.last_imu_rx_time is None:
-            return True, "last_imu_rx_time is None"
-
-        # now = self.get_clock().now()
-        joint_age = self.last_joint_rx_time - self.prev_joint_rx_time
-        imu_age = self.last_imu_rx_time - self.prev_imu_rx_time
-
-        if joint_age > self.action_timeout_sec:
-            return True, f"joint state stale: age={joint_age:.4f}s"
-        if imu_age > self.action_timeout_sec:
-            return True, f"imu stale: age={imu_age:.4f}s"
-        return False, ""
+        self.torque_command_pub.publish(msg)
 
 
 def main(args=None):
