@@ -351,16 +351,11 @@ class ControllerNode(Node):
         # Joint state
         t_joint_start = time.perf_counter()
         joint_state_msg = self.motor_io.latest_joint_state
-        # self.joint_state_msg = self.motor_io.latest_joint_state
-        # self.joint_state_msg.header.stamp = self.now_stamp
-        # self.joint_state_msg.header.frame_id = "base_link"
         joint_read_ms = (time.perf_counter() - t_joint_start) * 1e3
 
         # IMU state
         t_imu_start = time.perf_counter()    
         imu_msg = self.imu_io.read_imu()
-        # self.imu_msg = self.imu_io.read_imu()
-        # self.imu_msg.header.stamp = self.now_stamp
         imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                 
 
         # Commands
@@ -373,20 +368,20 @@ class ControllerNode(Node):
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
             self.motor_io.read_write_motor(tau)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
             self.motor_io.read_write_motor(tau)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         
         # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
         if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
             self.motor_io.read_write_motor(tau)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         # ==================================================================
 
@@ -410,7 +405,7 @@ class ControllerNode(Node):
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             self.motor_io.read_write_motor(tau * 0.0)
             return
 
@@ -457,41 +452,37 @@ class ControllerNode(Node):
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
         """Publish joint state and IMU for logging."""
         # Update joint state message for logging
-        joint_state_msg.header.stamp = self.now_stamp
+        msg_joint = JointState()
+        msg_joint.header.stamp = self.now_stamp
+        msg_joint.header.frame_id = "base_link"
+        msg_joint.name = joint_state_msg.name
+        msg_joint.position = joint_state_msg.position
+        msg_joint.velocity = joint_state_msg.velocity
+        msg_joint.effort = joint_state_msg.effort
         # Update IMU message for logging 
-        imu_msg.header.stamp = self.now_stamp
+        msg_imu = ImuState()
+        msg_imu.header.stamp = self.now_stamp
+        msg_imu.quat = imu_msg.quat
+        msg_imu.gyro = imu_msg.gyro
+        msg_imu.vel = imu_msg.vel
+        msg_imu.mag = imu_msg.mag
+        msg_imu.time_ms = imu_msg.time_ms
 
         # Update joint command message
-        msg = JointState()
-        msg.header.stamp = self.now_stamp
-        msg.name = [
+        msg_command = JointState()
+        msg_command.header.stamp = self.now_stamp
+        msg_command.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
             'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
         ]
-        msg.position = position.tolist()
-        msg.velocity = velocity.tolist()
-        msg.effort = effort.tolist()
+        msg_command.position = position.tolist()
+        msg_command.velocity = velocity.tolist()
+        msg_command.effort = effort.tolist()
 
         # Publish
-        self.joint_state_pub.publish(joint_state_msg)
-        self.imu_state_pub.publish(imu_msg)
-        self.torque_command_pub.publish(msg)
-
-
-
-    def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
-        """Publish torque command to /commands topic."""
-        msg = JointState()
-        msg.header.stamp = self.now_stamp
-        msg.name = [
-            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
-            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
-        ]
-        msg.position = position.tolist()
-        msg.velocity = velocity.tolist()
-        msg.effort = torque.tolist()
-
-        self.torque_command_pub.publish(msg)
+        self.joint_state_pub.publish(msg_joint)
+        self.imu_state_pub.publish(msg_imu)
+        self.torque_command_pub.publish(msg_command)
 
 
 def main(args=None):
