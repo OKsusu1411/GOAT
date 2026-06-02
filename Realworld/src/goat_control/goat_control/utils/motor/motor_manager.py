@@ -345,7 +345,7 @@ class MotorManager:
         prev_count = self.motor_prev_encoder_count[motor_index]
         delta_count = current_count - prev_count
 
-        if motor_index == 0:
+        if motor_index == 6:
             print(f"Motor {motor_index}: current_count={current_count}\r")
 
         # Wrap detection — a single-tick step larger than half range means
