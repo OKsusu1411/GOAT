@@ -345,7 +345,8 @@ class MotorManager:
         prev_count = self.motor_prev_encoder_count[motor_index]
         delta_count = current_count - prev_count
 
-        print(f"Motor {motor_index}: current_count={current_count}\r")
+        if motor_index == 0:
+            print(f"Motor {motor_index}: current_count={current_count}\r")
 
         # Wrap detection — a single-tick step larger than half range means
         # the uint encoder field wrapped, not that the motor moved that fast.
