@@ -72,13 +72,6 @@ class MotorDriver:
         '''Read single-turn angle (uint32, position : 0.001°/LSB, degree per second : 0.01/LSB).'''
         return self._txrx(0x94, protocol.E7, timeout)
 
-    # [DEPRECATED] Blocking torque command. Replaced by send_torque_only() +
-    # background reader (latest_state2()) on the hot path. Not called anywhere.
-    # def torque_mode_amp(self, amps: float, timeout: float = 0.05):
-    #     """Set torque mode with specified current (amps)."""
-    #     torque_payload = protocol.payload_torque_mode_from_amp(amps)
-    #     return self._txrx(0xA1, torque_payload, timeout)
-
     # ------------------------
     # Fire-and-forget API (Step 3 — TX/RX decouple)
     # Use these on the control hot path. Responses are consumed by the

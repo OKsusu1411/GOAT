@@ -10,9 +10,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 from goat_control.utils.motor.motor_driver import MotorDriver
-# [DEPRECATED] LPF logic was moved into MotorManager.torque_lpf() — this generic filter is no longer wired into the pipeline.
-# from goat_control.utils.motor.filters import FirstOrderLowPassFilter
-
 
 # Motor current resolution used previously:
 # motor_current_amp = iq_raw_lsb * (66.0 / 4096.0)

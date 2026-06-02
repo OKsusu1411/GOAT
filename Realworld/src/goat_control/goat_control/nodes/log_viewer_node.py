@@ -7,6 +7,7 @@ from typing import List, Optional
 import numpy as np
 import rclpy
 import yaml
+import csv
 from rclpy.node import Node
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 from sensor_msgs.msg import JointState
@@ -37,6 +38,8 @@ class LogViewerNode(Node):
         # Parameters
         self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
         self.declare_parameter("sample_count", 20)
+        self.declare_parameter("csv_path", "joint_pos_log.csv")
+        self.declare_parameter("log_degrees", False)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -63,6 +66,17 @@ class LogViewerNode(Node):
         self._print_count = 0
         self.command_unit = "Nm"
 
+        # CSV logging
+        self.csv_logging_interval_sec = 0.1
+        self.csv_path = str(self.get_parameter("csv_path").value)
+        self.log_degrees = bool(self.get_parameter("log_degrees").value)
+        self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
+        self.csv_writer = csv.writer(self.csv_file)
+
+        header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
+        self.csv_writer.writerow(header)
+        self.csv_file.flush()
+
         # Subscribers
         self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
         self.create_subscription(JointState, "/joint_states", self._on_joint_state, 10)
@@ -75,8 +89,11 @@ class LogViewerNode(Node):
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
+        # Logging interval
+        self.csv_logging_interval = self.csv_logging_interval_sec / period_sec
+
         self.get_logger().info(
-            "LogViewerNOde started."
+            "LogViewerNode started."
             f"(names of Joints: {self.joint_names})."
         )
 
@@ -116,6 +133,19 @@ class LogViewerNode(Node):
 
         joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
         joint_effort_current = np.array(self.joint_current.effort, dtype=float)
+
+        # Save joint position only to CSV
+        if self._print_count % self.csv_logging_interval == 0:
+            if self.log_degrees:
+                joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
+            else:
+                joint_pos_log = np.array(self.joint_current.position, dtype=float)
+
+            now_sec = self.get_clock().now().nanoseconds * 1e-9
+            row = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
+
+            self.csv_writer.writerow(row)
+            self.csv_file.flush()
 
         # Gear ratio
         motor_pos_current = joint_pos_current / self.gear_ratio
@@ -159,5 +189,10 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        # CSV close
+        if hasattr(node, "csv_file") and not node.csv_file.closed:
+            node.csv_file.flush()
+            node.csv_file.close()
+        # Node close
         node.destroy_node()
         rclpy.shutdown()
