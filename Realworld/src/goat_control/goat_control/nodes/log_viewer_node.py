@@ -193,6 +193,7 @@ def main(args=None):
         if hasattr(node, "csv_file") and not node.csv_file.closed:
             node.csv_file.flush()
             node.csv_file.close()
+            print(f"CSV file '{node.csv_path}' closed.\r")
         # Node close
         node.destroy_node()
         rclpy.shutdown()
