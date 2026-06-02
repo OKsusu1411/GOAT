@@ -122,7 +122,7 @@ class MotorManager:
         # field of the 0xA1 reply into a multi-turn motor angle, anchored to
         # the absolute multi-turn read taken once at init.
         # ------------------------------------------------------------------
-        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 16384))
+        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 65536))
         # Per-motor anchor state. `None` until _seed_position_anchor() runs.
         self.motor_anchor_motor_angle_deg: List[Optional[float]] = [None] * self.motor_count
         self.motor_anchor_encoder_count:   List[Optional[int]]   = [None] * self.motor_count
@@ -345,8 +345,6 @@ class MotorManager:
         prev_count = self.motor_prev_encoder_count[motor_index]
         delta_count = current_count - prev_count
 
-        if motor_index == 6:
-            print(f"Motor {motor_index}: current_count={current_count}\r")
 
         # Wrap detection — a single-tick step larger than half range means
         # the uint encoder field wrapped, not that the motor moved that fast.
@@ -367,6 +365,9 @@ class MotorManager:
         self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(
             round(motor_angle_deg / self.angle_deg_per_lsb)
         )
+
+        if motor_index == 0:
+            print(f"Motor {motor_index}: current_count={current_count} | delta_count={delta_count} | wrapping_count={self.motor_encoder_wrap_count}\r")
 
     # =========================================================================
     # [Read Only] 기존과 동일한 읽기 함수 (이제 공통 로직을 재사용합니다)
