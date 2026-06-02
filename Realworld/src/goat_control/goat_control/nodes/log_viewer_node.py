@@ -41,6 +41,7 @@ class LogViewerNode(Node):
         self.declare_parameter("sample_count", 20)
         self.declare_parameter("csv_path", "joint_pos_log.csv")
         self.declare_parameter("log_degrees", False)
+        self.declare_parameter("is_csv_logging", True)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -68,15 +69,28 @@ class LogViewerNode(Node):
         self.command_unit = "Nm"
 
         # CSV logging
+        self.is_csv_logging = bool(self.get_parameter("is_csv_logging").value)
         self.csv_logging_interval_sec = 0.1
         self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve())
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
-        self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
-        self.csv_writer = csv.writer(self.csv_file)
 
-        header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
-        self.csv_writer.writerow(header)
-        self.csv_file.flush()
+        self.csv_file = None
+        self.csv_writer = None
+
+        if self.is_csv_logging:
+            self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
+            self.csv_writer = csv.writer(self.csv_file)
+
+            header = ["time_sec"] + [
+                f"{name}_pos_{'deg' if self.log_degrees else 'rad'}"
+                for name in self.joint_names
+            ]
+            self.csv_writer.writerow(header)
+            self.csv_file.flush()
+
+            self.get_logger().info(f"CSV logging enabled: {self.csv_path}")
+        else:
+            self.get_logger().info("CSV logging disabled.")
 
         # Subscribers
         self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
@@ -136,7 +150,7 @@ class LogViewerNode(Node):
         joint_effort_current = np.array(self.joint_current.effort, dtype=float)
 
         # Save joint position only to CSV
-        if self._print_count % self.csv_logging_interval == 0:
+        if self.is_csv_logging and (self._print_count % self.csv_logging_interval == 0):
             if self.log_degrees:
                 joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
             else:
@@ -193,7 +207,7 @@ def main(args=None):
         pass
 
     finally:
-        if hasattr(node, "csv_file") and not node.csv_file.closed:
+        if getattr(node, "csv_file", None) is not None and not node.csv_file.closed:
             node.csv_file.flush()
             node.csv_file.close()
             print(f"CSV file '{node.csv_path}' closed.")
