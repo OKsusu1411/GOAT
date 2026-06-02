@@ -8,6 +8,7 @@ import numpy as np
 import rclpy
 import yaml
 import csv
+from pathlib import Path
 from rclpy.node import Node
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 from sensor_msgs.msg import JointState
@@ -68,7 +69,7 @@ class LogViewerNode(Node):
 
         # CSV logging
         self.csv_logging_interval_sec = 0.1
-        self.csv_path = str(self.get_parameter("csv_path").value)
+        self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve())
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
         self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
         self.csv_writer = csv.writer(self.csv_file)
