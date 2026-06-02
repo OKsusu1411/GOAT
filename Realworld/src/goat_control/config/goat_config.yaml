@@ -193,7 +193,7 @@ joint_vel_estop_threshold: 4.0
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
-motor_encoder_counts_per_rev: 16384
+motor_encoder_counts_per_rev: 65536
 joint_offsets:
 - 0.019216075064457563
 - 0.04218460802070293
