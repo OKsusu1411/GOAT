@@ -355,10 +355,7 @@ class MotorManager:
         self.motor_prev_encoder_count[motor_index] = current_count
 
         anchor_count = self.motor_anchor_encoder_count[motor_index]
-        total_count_delta = (
-            (current_count - anchor_count)
-            + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
-        )
+        total_count_delta = (current_count - anchor_count) + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
         motor_angle_deg = anchor_angle_deg + total_count_delta * (360.0 / counts_per_rev)
 
         # Write back in the same 0.001 deg/LSB units _package_motor_states reads.
