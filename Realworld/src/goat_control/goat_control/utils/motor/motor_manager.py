@@ -122,7 +122,7 @@ class MotorManager:
         # field of the 0xA1 reply into a multi-turn motor angle, anchored to
         # the absolute multi-turn read taken once at init.
         # ------------------------------------------------------------------
-        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 65536))
+        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 16384))
         # Per-motor anchor state. `None` until _seed_position_anchor() runs.
         self.motor_anchor_motor_angle_deg: List[Optional[float]] = [None] * self.motor_count
         self.motor_anchor_encoder_count:   List[Optional[int]]   = [None] * self.motor_count
