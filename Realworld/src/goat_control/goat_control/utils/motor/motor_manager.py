@@ -43,79 +43,6 @@ class MotorStatesData:
     motor_operating_state: List[int]                   # motor mode/state (device-defined)
 
     timestamp_sec: Optional[float] = None
-# ============================================================================
-# [DEPRECATED] format_motor_states: references MotorStatesData fields that no
-# longer exist (motor_phase_current_amp, motor_speed_deg_per_sec, etc.). The
-# current MotorStatesData carries only joint-space quantities. Never called.
-# ============================================================================
-
-# [DEPRECATED] def format_motor_states(
-# [DEPRECATED]     motor_states_data: MotorStatesData,
-# [DEPRECATED]     max_motor_count: int | None = 8,
-# [DEPRECATED]     show_angles_in_degrees: bool = True,
-# [DEPRECATED]     angle_deg_per_lsb: float = DEFAULT_ANGLE_DEG_PER_LSB,
-# [DEPRECATED] ) -> str:
-# [DEPRECATED]     """Human-readable formatter (core-friendly replacement of motor_states_echo.py)."""
-# [DEPRECATED] 
-# [DEPRECATED]     motor_limit = max_motor_count if (max_motor_count and max_motor_count > 0) else None
-# [DEPRECATED] 
-# [DEPRECATED]     def clip(values: List):
-# [DEPRECATED]         return values if (motor_limit is None) else values[:motor_limit]
-# [DEPRECATED] 
-# [DEPRECATED]     motor_temperature_c = clip(motor_states_data.motor_temperature_c)
-# [DEPRECATED]     motor_phase_current_amp = clip(motor_states_data.motor_phase_current_amp)
-# [DEPRECATED]     motor_speed_deg_per_sec = clip(motor_states_data.motor_speed_deg_per_sec)
-# [DEPRECATED]     motor_encoder_count = clip(motor_states_data.motor_encoder_count)
-# [DEPRECATED] 
-# [DEPRECATED]     motor_single_turn_angle_raw_0p001deg = clip(motor_states_data.motor_single_turn_angle_raw_0p001deg)
-# [DEPRECATED]     motor_multi_turn_angle_raw_0p001deg = clip(motor_states_data.motor_multi_turn_angle_raw_0p001deg)
-# [DEPRECATED] 
-# [DEPRECATED]     motor_error_flags = clip(motor_states_data.motor_error_flags)
-# [DEPRECATED]     motor_operating_state = clip(motor_states_data.motor_operating_state)
-# [DEPRECATED] 
-# [DEPRECATED]     if show_angles_in_degrees:
-# [DEPRECATED]         motor_single_turn_angle_deg = [
-# [DEPRECATED]             raw_value * angle_deg_per_lsb for raw_value in motor_single_turn_angle_raw_0p001deg
-# [DEPRECATED]         ]
-# [DEPRECATED]         motor_multi_turn_angle_deg = [
-# [DEPRECATED]             raw_value * angle_deg_per_lsb for raw_value in motor_multi_turn_angle_raw_0p001deg
-# [DEPRECATED]         ]
-# [DEPRECATED]     else:
-# [DEPRECATED]         motor_single_turn_angle_deg = None
-# [DEPRECATED]         motor_multi_turn_angle_deg = None
-# [DEPRECATED] 
-# [DEPRECATED]     timestamp_string = (
-# [DEPRECATED]         f"{motor_states_data.timestamp_sec:.6f}"
-# [DEPRECATED]         if motor_states_data.timestamp_sec is not None
-# [DEPRECATED]         else "N/A"
-# [DEPRECATED]     )
-# [DEPRECATED] 
-# [DEPRECATED]     lines: List[str] = []
-# [DEPRECATED]     lines.append(f"\n=== MotorStates @ {timestamp_string} ===")
-# [DEPRECATED]     lines.append(f"  motor_temperature_c        : {['{:.1f}'.format(v) for v in motor_temperature_c]} (degC)")
-# [DEPRECATED]     lines.append(f"  motor_phase_current_amp    : {['{:.3f}'.format(v) for v in motor_phase_current_amp]} (A)")
-# [DEPRECATED]     lines.append(f"  motor_speed_deg_per_sec    : {['{:.1f}'.format(v) for v in motor_speed_deg_per_sec]} (deg/s)")
-# [DEPRECATED]     lines.append(f"  motor_encoder_count        : {motor_encoder_count}")
-# [DEPRECATED] 
-# [DEPRECATED]     if show_angles_in_degrees:
-# [DEPRECATED]         lines.append(
-# [DEPRECATED]             "  motor_single_turn_angle    : "
-# [DEPRECATED]             f"{motor_single_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
-# [DEPRECATED]             f"{['{:.2f}'.format(v) for v in motor_single_turn_angle_deg]} (deg)"
-# [DEPRECATED]         )
-# [DEPRECATED]         lines.append(
-# [DEPRECATED]             "  motor_multi_turn_angle     : "
-# [DEPRECATED]             f"{motor_multi_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
-# [DEPRECATED]             f"{['{:.2f}'.format(v) for v in motor_multi_turn_angle_deg]} (deg)"
-# [DEPRECATED]         )
-# [DEPRECATED]     else:
-# [DEPRECATED]         lines.append(f"  motor_single_turn_angle    : {motor_single_turn_angle_raw_0p001deg} (raw)")
-# [DEPRECATED]         lines.append(f"  motor_multi_turn_angle     : {motor_multi_turn_angle_raw_0p001deg} (raw)")
-# [DEPRECATED] 
-# [DEPRECATED]     lines.append(f"  motor_error_flags          : {motor_error_flags}")
-# [DEPRECATED]     lines.append(f"  motor_operating_state      : {motor_operating_state}")
-# [DEPRECATED] 
-# [DEPRECATED]     return "\n".join(lines)
 
 
 class MotorManager:
@@ -209,20 +136,6 @@ class MotorManager:
             max_workers=self.motor_count,
             thread_name_prefix="motor_io",
         )
-
-        # [DEPRECATED] Generic FirstOrderLowPassFilter instances on velocity /
-        # effort. Superseded by the per-joint torque LPF in torque_lpf().
-        # self.joint_velocity_low_pass_filter = (
-        #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
-        #     if joint_velocity_lpf_alpha is not None
-        #     else None
-        # )
-
-        # self.joint_effort_like_low_pass_filter = (
-        #     FirstOrderLowPassFilter(alpha=joint_effort_like_lpf_alpha)
-        #     if joint_effort_like_lpf_alpha is not None
-        #     else None
-        # )
 
     def torque_clipping(self, torque_cmd:np.ndarray) -> np.ndarray:
         clipped_torque = np.clip(torque_cmd, -self.hw_max_torque_per_joint, self.hw_max_torque_per_joint) # [4.5 and 2.5]
@@ -350,102 +263,6 @@ class MotorManager:
         joint_torque_nm = motor_shaft_torque_nm
         return joint_torque_nm
 
-    # ============================================================================
-    # [DEPRECATED] Old single-method decode_motor_encoder. Replaced by the split
-    # version below (_package_motor_states + the new decode_motor_encoder /
-    # write_torques_and_read_states pair). Kept here only for reference.
-    # ============================================================================
-    # def decode_motor_encoder(self) -> MotorStatesData:
-    #     # for motor_index in range(self.motor_count):
-    #     # for motor_index in [0]:
-    #     #     self.poll_state2(motor_index)
-    #     #     self.poll_state1(motor_index)
-    #     #     self.poll_single_or_multi_turn(motor_index)
-
-    #     def fetch_motor_data(motor_index: int):
-    #         self.poll_state2(motor_index)
-    #         self.poll_state1(motor_index)
-    #         self.poll_single_or_multi_turn(motor_index)
-
-    #     with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
-    #         executor.map(fetch_motor_data, range(self.motor_count))
-
-    #     motor_count = len(self.motor_temperature_c)
-    #     joint_count = len(self.joint_names)
-
-    #     # Index mapping validation
-    #     if self.motor_index_for_joint is not None:
-    #         if len(self.motor_index_for_joint) != joint_count:
-    #             raise ValueError(
-    #                 f"joint_indices+wheel_indices length({len(self.motor_index_for_joint)}) "
-    #                 f"must match joint_names length({joint_count})."
-    #             )
-    #     else:
-    #         if joint_count != motor_count:
-    #             raise ValueError(
-    #                 f"joint_names length({joint_count}) != motor_count({motor_count}). "
-    #                 "Provide joint_indices/wheel_indices in YAML."
-    #             )
-        
-    #     # Joint variables
-    #     joint_position_rad: List[float] = [0.0] * joint_count
-    #     joint_velocity_rad_per_sec: List[float] = [0.0] * joint_count
-    #     joint_effort_like: List[float] = [0.0] * joint_count  # current[A] or torque[Nm]
-        
-    #     # gear, direction index validation
-    #     if self.motor_gear_ratio is None or len(self.motor_gear_ratio) != motor_count:
-    #         raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
-    #     if self.motor_direction is None or len(self.motor_direction) != motor_count:
-    #         raise ValueError("motor_direction must be a list with length == motor_count.")
-
-    #     if self.motor_torque_constant_nm_per_amp is None or len(self.motor_torque_constant_nm_per_amp) != motor_count:
-    #         raise ValueError("motor_torque_constant_nm_per_amp must be a list with length == motor_count.")
-
-    #     # Main state computation logic
-    #     for joint_i in range(joint_count):
-    #         motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
-
-    #         gear = float(self.motor_gear_ratio[motor_i])
-    #         direction = float(self.motor_direction[motor_i])
-
-    #         raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_i]
-    #         raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
-
-    #         # Encoder fail safe logic
-    #         if raw_multi != 0:
-    #             motor_angle_deg = raw_multi * self.angle_deg_per_lsb
-    #         elif raw_single != 0:
-    #             motor_angle_deg = raw_single * self.angle_deg_per_lsb
-    #         else:
-    #             motor_angle_deg = 0.0
-
-    #         # Convert motor position into joint position
-    #         joint_angle_deg = motor_angle_deg * gear * direction
-    #         joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
-
-    #         # Convert motor velocity into joint velocity
-    #         motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
-    #         joint_speed_deg_s = motor_speed_deg_s * gear * direction
-    #         joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0       # degree to radian
-
-    #         # Effort-like
-    #         motor_current_amp = self.motor_phase_current_amp[motor_i]
-    #         joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
-
-    #     # Apply joint position offset
-    #     joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
-        
-    #     return MotorStatesData(
-    #         joint_names=self.joint_names,
-    #         joint_position_rad=list(joint_position_rad).copy(),
-    #         joint_velocity_rad_per_sec=list(joint_velocity_rad_per_sec).copy(),
-    #         joint_effort_like=list(joint_effort_like).copy(),
-    #         motor_temperature_c=self.motor_temperature_c.copy(),
-    #         motor_error_flags=self.motor_error_flags.copy(),
-    #         motor_operating_state=self.motor_operating_state.copy(),
-    #         timestamp_sec=time.time()
-    #     )
-
     # =========================================================================
     # [공통 수학 연산 로직] 원시 데이터(Raw data)를 MotorStatesData로 패키징
     # =========================================================================
@@ -527,6 +344,8 @@ class MotorManager:
         current_count = int(self.motor_encoder_count[motor_index])
         prev_count = self.motor_prev_encoder_count[motor_index]
         delta_count = current_count - prev_count
+
+        print(f"Motor {motor_index}: current_count={current_count}\r")
 
         # Wrap detection — a single-tick step larger than half range means
         # the uint encoder field wrapped, not that the motor moved that fast.
