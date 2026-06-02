@@ -367,7 +367,8 @@ class MotorManager:
         )
 
         if motor_index == 0:
-            print(f"Motor {motor_index}: current_count={current_count} | delta_count={delta_count} | wrapping_count={self.motor_encoder_wrap_count[motor_index]} | total_count_delta={total_count_delta}\r")
+            if abs(delta_count) > half_range:
+                print(f"Motor {motor_index}: current_count={current_count} | delta_count={delta_count} | wrapping_count={self.motor_encoder_wrap_count[motor_index]} | total_count_delta={total_count_delta}\r")
 
     # =========================================================================
     # [Read Only] 기존과 동일한 읽기 함수 (이제 공통 로직을 재사용합니다)
