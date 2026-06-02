@@ -90,7 +90,7 @@ class LogViewerNode(Node):
         self.create_timer(period_sec, self._tick)
 
         # Logging interval
-        self.csv_logging_interval = self.csv_logging_interval_sec / period_sec
+        self.csv_logging_interval = max(1, int(round(self.csv_logging_interval_sec / period_sec)))
 
         self.get_logger().info(
             "LogViewerNode started."
@@ -184,16 +184,20 @@ class LogViewerNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = LogViewerNode()
+
     try:
         rclpy.spin(node)
+
     except KeyboardInterrupt:
         pass
+
     finally:
-        # CSV close
         if hasattr(node, "csv_file") and not node.csv_file.closed:
             node.csv_file.flush()
             node.csv_file.close()
-            print(f"CSV file '{node.csv_path}' closed.\r")
-        # Node close
+            print(f"CSV file '{node.csv_path}' closed.")
+
         node.destroy_node()
-        rclpy.shutdown()
+
+        if rclpy.ok():
+            rclpy.shutdown()
