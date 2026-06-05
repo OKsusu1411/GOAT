@@ -410,24 +410,24 @@ class ControllerNode(Node):
             return
 
         # Safety Limiter
-        # joint_pos = np.asarray(joint_state_msg.position, dtype=float).flatten()
-        # joint_vel = np.asarray(joint_state_msg.velocity, dtype=float).flatten()
-        # safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
+        joint_pos = np.asarray(joint_state_msg.position, dtype=float).flatten()
+        joint_vel = np.asarray(joint_state_msg.velocity, dtype=float).flatten()
+        safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
 
-        # # Block handling (latching kill switch)
-        # if is_blocked:
-        #     self._trigger_kill_switch("SafetyLimiter blocked command")
-        #     self._send_to_motors(tau)
-        #     return
+        # Block handling (latching kill switch)
+        if is_blocked:
+            self._trigger_kill_switch("SafetyLimiter blocked command")
+            self.motor_io.read_write_motor(tau)
+            return
 
         # Publish torque command
-        # tau[:] = safe_torque
-        tau[:] = raw_torque
+        tau[:] = safe_torque
+        # tau[:] = raw_torque
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Apply action
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
-        self.motor_io.read_write_motor(tau * 0.0)                                       # NOTE: test for 0
+        self.motor_io.read_write_motor(tau)                                             # NOTE: test for 0
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
