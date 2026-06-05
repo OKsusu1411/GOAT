@@ -25,7 +25,7 @@ def generate_launch_description():
     default_checkpoint_path = PathJoinSubstitution([
         FindPackageShare("goat_control"),
         "checkpoint",
-        "agent_jit_128000.pt"
+        "agent_jit_56000.pt"
     ])
 
     # Arguments
