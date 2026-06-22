@@ -75,6 +75,8 @@ class ControllerNode(Node):
 
         if self.checkpoint_path is not None:
             self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path) # Default is None
+        else:
+            self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
 
         # Logger
         self.logger = self.get_logger()
