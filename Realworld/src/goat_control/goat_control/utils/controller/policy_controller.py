@@ -4,7 +4,7 @@ from typing import List, Any
 
 import os
 import numpy as np
-import torch
+import onnxruntime as ort
 from motor_interfaces.msg import ImuState
 from sensor_msgs.msg import JointState
 
@@ -49,9 +49,13 @@ class PolicyController(BaseController):
         # --- Policy-related information ---
         self.policy_action_scale_factor = np.asarray(cfg["policy_action_scale_factor"], dtype=float).flatten()
         self.policy_observation_info = dict(cfg["policy_observation_info"])
-        self.device = self._resolve_device(str(cfg["policy_device"]))
+        self.providers = self._resolve_providers(str(cfg["policy_device"]))
         self.checkpoint_path = cfg["policy_checkpoint_path"]
         self.decimation = int(cfg["policy_decimation"])
+
+        # --- ONNX Runtime I/O names (populated by _load_agent) ---
+        self._input_name: str | None = None
+        self._output_name: str | None = None
 
         self.logger.info(f"[Policy Controller] Observation Info \r")
         self.policy_observation_name = []
@@ -61,7 +65,7 @@ class PolicyController(BaseController):
             self.policy_observation_dim += v
             self.logger.info(f"Name : {k} | Dim : {v}\r")
 
-        self.agent = self._load_agent(self.checkpoint_path, self.device)
+        self.agent = self._load_agent(self.checkpoint_path, self.providers)
 
         # --- Validate lengths ---
         for name, arr in [
@@ -88,37 +92,41 @@ class PolicyController(BaseController):
     # Initialization Functions
     # ------------------------------------------------------------------
 
-    def _resolve_device(self, device_name: str) -> torch.device:
-        try:
-            device = torch.device(device_name)
-        except Exception:
-            self.logger.info(f"[PolicyController] Invalid torch_device '{device_name}'. Falling back to CPU.\r")
-            return torch.device("cpu")
+    def _resolve_providers(self, device_name: str) -> list[str]:
+        available = ort.get_available_providers()
+        if device_name.startswith("cuda"):
+            if "CUDAExecutionProvider" in available:
+                return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            self.logger.info(f"[Policy Controller] CUDA execution provider unavailable. Falling back to CPU.\r")
+        return ["CPUExecutionProvider"]
 
-        if device.type == "cuda" and not torch.cuda.is_available():
-            self.logger.info(f"[Policy Controller] CUDA requested for torch_device but unavailable. Falling back to CPU.\r")
-            return torch.device("cpu")
-
-        return device
-
-    def _load_agent(self, checkpoint_path: str, device: torch.device):
+    def _load_agent(self, checkpoint_path: str, providers: list[str]):
         if not checkpoint_path:
             self.logger.info(f"[Policy Controller] No policy checkpoint provided; publishing zero actions.\r")
             return None
 
         try:
             path = os.path.abspath(checkpoint_path)
-            model = torch.jit.load(path).to(device)
-            model.eval()
-            self.logger.info(f"[Policy Controller] Loaded policy checkpoint from '{path}' on {device}.\r")
+            session = ort.InferenceSession(path, providers=providers)
+            self._input_name = session.get_inputs()[0].name
+            self._output_name = session.get_outputs()[0].name
 
-            test_obs = torch.randn([1, self.policy_observation_dim], device=device)
-            test_act = model(test_obs).detach().cpu().numpy().reshape(-1)
-            self.logger.info(f"[Policy Controller] Zero test input : {test_obs}\r")
-            self.logger.info(f"[Policy Controller] Zero test result : {test_act}\r")
-            return model
+            # Validate input dimension (batch axis may be dynamic/str, so check last dim only)
+            in_shape = session.get_inputs()[0].shape
+            if isinstance(in_shape[-1], int) and in_shape[-1] != self.policy_observation_dim:
+                raise ValueError(
+                    f"ONNX input dim ({in_shape[-1]}) differs from observation dim ({self.policy_observation_dim})."
+                )
+
+            self.logger.info(f"[Policy Controller] Loaded ONNX policy from '{path}' on {session.get_providers()}.\r")
+
+            test_obs = np.random.randn(1, self.policy_observation_dim).astype(np.float32)
+            test_act = session.run([self._output_name], {self._input_name: test_obs})[0].reshape(-1)
+            self.logger.info(f"[Policy Controller] Random test input : {test_obs}\r")
+            self.logger.info(f"[Policy Controller] Random test result : {test_act}\r")
+            return session
         except Exception as exc:
-            self.logger.info(f"[Policy Controller] Failed to load policy checkpoint '{path}': {exc}\r")
+            self.logger.info(f"[Policy Controller] Failed to load ONNX policy '{checkpoint_path}': {exc}\r")
             return None
 
 
@@ -170,9 +178,8 @@ class PolicyController(BaseController):
             raise ValueError(f"Observation dimension differs from pre-defined setting: ({self.policy_observation_dim} / {observation.shape[1]})")
 
         # Action processing
-        obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.device)
-        policy_action_raw = self.agent(obs_tensor, deterministic=True)
-        policy_action_np_raw = policy_action_raw.detach().cpu().numpy().reshape(-1)
+        obs = observation.astype(np.float32)  # already shape (1, N)
+        policy_action_np_raw = self.agent.run([self._output_name], {self._input_name: obs})[0].reshape(-1)
         policy_action_np = policy_action_np_raw * self.policy_action_scale_factor # ACTION_{JOINT}
 
         # if self.decimation_count <= 10:

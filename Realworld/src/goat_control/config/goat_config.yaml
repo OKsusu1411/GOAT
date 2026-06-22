@@ -101,8 +101,8 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_checkpoint_path: src/goat_control/checkpoint/agent_jit_128000.pt
-policy_device: cuda
+policy_checkpoint_path: src/goat_control/checkpoint/agent_38000.onnx
+policy_device: cpu
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
