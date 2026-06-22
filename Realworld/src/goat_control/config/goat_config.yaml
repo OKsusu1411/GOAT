@@ -169,12 +169,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint:
-- 0.2
-- 0.2
-- 0.2
-- 0.2
-- 0.2
-- 0.2
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
 - 0.0
 - 0.0
 hw_max_torque_per_joint:
