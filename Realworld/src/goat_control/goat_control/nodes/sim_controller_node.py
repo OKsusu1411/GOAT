@@ -16,8 +16,9 @@ from motor_interfaces.msg import ImuState
 from message_filters import Subscriber, TimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
-from goat_control.utils.controller.policy_controller import PolicyController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
+from goat_control.utils.controller.fixed_policy_controller import FixedBasePolicyController
+from goat_control.utils.controller.movable_policy_controller import MovableBasePolicyController
 
 
 class SimControllerNode(Node):
@@ -84,7 +85,12 @@ class SimControllerNode(Node):
         # Controllers
         # ------------------------------------------------------------------
         self.nominal_controller = NominalController(self.cfg, self.logger)
-        self.policy_controller = PolicyController(self.cfg, self.logger)
+        if self.cfg["policy_mode"] == "fixed":
+            self.policy_controller = FixedBasePolicyController(self.cfg, self.logger)
+        elif self.cfg["policy_mode"] == "movable":
+            self.policy_controller = MovableBasePolicyController(self.cfg, self.logger)
+        else:
+            raise RuntimeError(f"Invalid Mode : {self.cfg['policy_mode']}")
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
 
         self.num_joints = len(self.cfg["joint_names"])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import List, Any
 
 import os
@@ -12,20 +13,32 @@ from .base_controller import BaseController
 
 
 class PolicyController(BaseController):
-    """PD (legs) + PI (wheels) torque controller driven by policy actions.
+    """PD (legs) + P (wheels) torque controller driven by policy actions.
 
-    Action space (set via set_targets()):
-        delta_pos:    Delta joint position [rad], shape (num_leg_joints,).
-                      Added to natural_joint_position to form the PD reference.
-        wheel_speed:  Desired wheel speed [rad/s], shape (num_wheel_joints,).
-                      PI controller tracks this on wheel_indices only.
+    Abstract base. The two experiment setups differ only in how the policy
+    observation is assembled and how the raw action is decoded, so subclasses
+    implement just those two hooks:
+
+        - fixed-base  (jig)   : legs only, no base/wheel observation.
+        - movable-base(normal): base observation + wheels.
+
+    Everything else (ONNX session, PD+P torque law, decimation, gains) is
+    shared here. Use :func:`make_policy_controller` to instantiate the right
+    subclass from ``cfg["policy_mode"]``.
 
     YAML keys consumed:
         joint_names, joint_indices, wheel_indices, natural_joint_position,
+        motor_gear_ratio,
         policy_leg_proportional_gain, policy_leg_derivative_gain,
-        policy_wheel_proportional_gain
-        integrator_state_limit
+        policy_wheel_proportional_gain,
+        policy_device, policy_checkpoint_path, policy_decimation,
+        policy_<mode>.observation_info, policy_<mode>.action_scale_factor
     """
+
+    #: Mode key (set by subclass). Selects the ``policy_<MODE>`` config block.
+    MODE: str = ""
+    #: Whether this setup actuates the wheels.
+    HAS_WHEELS: bool = True
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
         self.logger = logger
@@ -46,9 +59,12 @@ class PolicyController(BaseController):
         # --- P gains (wheels) ---
         self._kp_wheel = np.asarray(cfg["policy_wheel_proportional_gain"], dtype=float).flatten() # [n_wheel]
 
-        # --- Policy-related information ---
-        self.policy_action_scale_factor = np.asarray(cfg["policy_action_scale_factor"], dtype=float).flatten()
-        self.policy_observation_info = dict(cfg["policy_observation_info"])
+        # --- Mode-specific config block (policy_fixed / policy_movable) ---
+        mode_cfg = dict(cfg[f"policy_{self.MODE}"])
+        self.policy_observation_info = dict(mode_cfg["observation_info"])
+        self.policy_action_scale_factor = np.asarray(mode_cfg["action_scale_factor"], dtype=float).flatten()
+
+        # --- Common policy-related information ---
         self.providers = self._resolve_providers(str(cfg["policy_device"]))
         self.checkpoint_path = cfg["policy_checkpoint_path"]
         self.decimation = int(cfg["policy_decimation"])
@@ -57,7 +73,7 @@ class PolicyController(BaseController):
         self._input_name: str | None = None
         self._output_name: str | None = None
 
-        self.logger.info(f"[Policy Controller] Observation Info \r")
+        self.logger.info(f"[Policy Controller] Observation Info (mode={self.MODE}) \r")
         self.policy_observation_name = []
         self.policy_observation_dim = 0
         for k, v in self.policy_observation_info.items():
@@ -75,18 +91,18 @@ class PolicyController(BaseController):
                 raise ValueError(f"{name} length must equal num_joints ({self.num_joints}).")
 
         # --- Internal state ---
+        # Raw action dim is defined by the (mode-specific) scale factor length.
+        self._action_dim = int(self.policy_action_scale_factor.size)
         self._delta_pos = np.zeros(self.num_leg_joints, dtype=float)
         self._wheel_speed_ref = np.zeros(self.num_wheel_joints, dtype=float)
         self._base_command = np.zeros(3, dtype=float)  # [v_x, v_y, w_z]
+        self._joint_command = np.zeros(self.num_leg_joints, dtype=float)
 
         # --- Count for decimation processing ---
         self.decimation_count = 0
 
         # --- History information ---
-        self.previous_action = np.zeros(self.num_joints, dtype=float)
-        # self.joint_vel_hist_length = int(cfg["policy_joint_vel_hist_length"])
-        # self.joint_vel_hist = np.zeros((self.joint_vel_hist_length, self.num_joints), dtype=float)
-
+        self.previous_action = np.zeros(self._action_dim, dtype=float)
 
     # ------------------------------------------------------------------
     # Initialization Functions
@@ -129,16 +145,34 @@ class PolicyController(BaseController):
             self.logger.info(f"[Policy Controller] Failed to load ONNX policy '{checkpoint_path}': {exc}\r")
             return None
 
+    # ------------------------------------------------------------------
+    # Mode-specific hooks (implemented by subclasses)
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def _build_observation(self,
+                           base_lin_vel: np.ndarray,
+                           base_ang_vel: np.ndarray,
+                           base_quat: np.ndarray,
+                           joint_pos: np.ndarray,
+                           joint_vel: np.ndarray) -> np.ndarray:
+        """Assemble the policy observation, shape (1, observation_dim) float32."""
+
+    @abstractmethod
+    def _decode_action(self, raw_action: np.ndarray) -> None:
+        """Decode raw policy output into ``_delta_pos`` / ``_wheel_speed_ref``
+        and update ``previous_action``."""
 
     # ------------------------------------------------------------------
     # Main Functions
     # ------------------------------------------------------------------
 
     def reset(self) -> None:
-        """Reset PI integrator and target buffers."""
+        """Reset target buffers and action history."""
         self._delta_pos[:] = 0.0
         self._wheel_speed_ref[:] = 0.0
         self._base_command[:] = 0.0
+        self.previous_action[:] = 0.0
         self.decimation_count = 0
 
     def set_command(self, command: np.ndarray) -> None:
@@ -155,7 +189,7 @@ class PolicyController(BaseController):
                     base_quat: np.ndarray,
                     joint_pos: np.ndarray,
                     joint_vel: np.ndarray) -> None:
-        """Inject policy action before compute().
+        """Run policy inference and update action targets before compute().
 
         Args:
             base_lin_vel:  Base linear velocity             [m/s], shape (3,).
@@ -164,40 +198,15 @@ class PolicyController(BaseController):
             joint_pos:     Joint angle (all joints)         [rad], shape (J,).
             joint_vel:     Joint velocity                   [rad/s], shape (J,).
         """
-        # Observation setting
-        previous_action = self.previous_action.copy()
-        base_command = self._base_command.copy()
-        # NOTE: Non-holonomic command 이므로, v_y는 항상 0
-        # NOTE: joint_pos: legs only (6), joint_vel: all joints (8)
-        observation = np.hstack([base_ang_vel, 
-                                 base_quat, 
-                                 joint_pos[self._joint_indices], 
-                                 joint_vel, 
-                                 previous_action]).reshape(1, -1) # [1, N]
-        if self.policy_observation_dim != observation.shape[1]:
-            raise ValueError(f"Observation dimension differs from pre-defined setting: ({self.policy_observation_dim} / {observation.shape[1]})")
-
-        # Action processing
-        obs = observation.astype(np.float32)  # already shape (1, N)
-        policy_action_np_raw = self.agent.run([self._output_name], {self._input_name: obs})[0].reshape(-1)
-        policy_action_np = policy_action_np_raw * self.policy_action_scale_factor # ACTION_{JOINT}
-
-        # if self.decimation_count <= 10:
-        #     obs_str = ", ".join(f"{x}" for x in observation.reshape(-1))
-        #     act_str = ", ".join(f"{x}" for x in policy_action_np)
-
-        #     self.logger.info(f"[step {self.decimation_count}] policy observation : [{obs_str}]\r")
-        #     self.logger.info(f"[step {self.decimation_count}] policy action : [{act_str}]\r")
-
-        self._delta_pos = policy_action_np[self._joint_indices]
-        self._wheel_speed_ref = policy_action_np[self._wheel_indices]
-        self.previous_action = policy_action_np_raw
+        observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
+        raw_action = self.agent.run([self._output_name], {self._input_name: observation})[0].reshape(-1)
+        self._decode_action(raw_action)
 
     def compute(self,
                 joint_state: JointState,
                 base_state: ImuState,
                 dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Compute raw torque: PD on legs + P on wheels."""
+        """Compute raw torque: PD on legs + P on wheels (wheels only if HAS_WHEELS)."""
         # Data processing
         base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
         base_ang_vel = np.asarray([base_state.gyro.x, base_state.gyro.y, base_state.gyro.z])
@@ -229,31 +238,23 @@ class PolicyController(BaseController):
         leg_pos_err /= self.gear_ratio[self._joint_indices] # Joint -> Motor
         leg_vel_err /= self.gear_ratio[self._joint_indices] # Joint -> Motor
 
-        wheel_vel_err = self._wheel_speed_ref - joint_wheel_vel
-        wheel_vel_err /= self.gear_ratio[self._wheel_indices] # Joint -> Motor
-        
         # --- Leg PD (Joint Space) ---
         tau_leg = self._kp * leg_pos_err + self._kd * leg_vel_err
         tau_leg /= self.gear_ratio[self._joint_indices] # Motor -> Joint
-
+        tau_cmd[self._joint_indices] = tau_leg # Joint torque
 
         # --- Wheel P (Joint Space) ---
-        tau_wheel = self._kp_wheel * wheel_vel_err
-        tau_wheel /= self.gear_ratio[self._wheel_indices] # Motor -> Joint
+        if self.HAS_WHEELS:
+            wheel_vel_err = self._wheel_speed_ref - joint_wheel_vel
+            wheel_vel_err /= self.gear_ratio[self._wheel_indices] # Joint -> Motor
+            tau_wheel = self._kp_wheel * wheel_vel_err
+            tau_wheel /= self.gear_ratio[self._wheel_indices] # Motor -> Joint
+            tau_cmd[self._wheel_indices] = tau_wheel # Joint torque
 
         # --- Data inserting ---
-        tau_cmd[self._joint_indices] = tau_leg # Joint torque
-        tau_cmd[self._wheel_indices] = tau_wheel # Joint torque
-
         target_pos[self._joint_indices] = target_leg_pos
-        
+
         # Update decimation step
         self.decimation_count += 1
-
-        # if self.decimation_count <= 1:
-        #     target_str = ", ".join(f"{x}" for x in target_leg_pos.reshape(-1))
-        #     torque_str = ", ".join(f"{x}" for x in tau_cmd.reshape(-1))
-        #     self.logger.info(f"[step {self.decimation_count}] target : [{target_str}]\r")
-        #     self.logger.info(f"[step {self.decimation_count}] torque : [{torque_str}]\r")
 
         return tau_cmd, target_pos, self._wheel_speed_ref.copy()

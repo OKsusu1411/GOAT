@@ -19,8 +19,9 @@ from motor_interfaces.msg import ImuState
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
-from goat_control.utils.controller.policy_controller import PolicyController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
+from goat_control.utils.controller.fixed_policy_controller import FixedBasePolicyController
+from goat_control.utils.controller.movable_policy_controller import MovableBasePolicyController
 from goat_control.nodes.motor_io import MotorIO
 from goat_control.nodes.imu_io import ImuIO
 
@@ -79,9 +80,14 @@ class ControllerNode(Node):
         self.logger = self.get_logger()
 
         # Controller
-        self.nominal_controller = NominalController(self.cfg, self.logger)
-        self.policy_controller = PolicyController(self.cfg, self.logger)
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
+        self.nominal_controller = NominalController(self.cfg, self.logger)
+        if self.cfg["policy_mode"] == "fixed":
+            self.policy_controller = FixedBasePolicyController(self.cfg, self.logger)
+        elif self.cfg["policy_mode"] == "movable":
+            self.policy_controller = MovableBasePolicyController(self.cfg, self.logger)
+        else:
+            raise RuntimeError(f"Invalid Mode : {self.cfg['policy_mode']}")
 
         self.num_joints = len(self.cfg["joint_names"])
 
@@ -421,7 +427,7 @@ class ControllerNode(Node):
             return
 
         # Publish torque command
-        tau[:] = safe_torque
+        tau[:] = safe_torque * 0.0
         # tau[:] = raw_torque
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
