@@ -43,7 +43,6 @@ class ControllerNode(Node):
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
-        self.declare_parameter("checkpoint_path", "")
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("imu_port", "/dev/ttyUSB0")
         self.declare_parameter("imu_baudrate", 115200)
@@ -60,7 +59,6 @@ class ControllerNode(Node):
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.checkpoint_path = self.get_parameter("checkpoint_path").value or None
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
         imu_port = str(self.get_parameter("imu_port").value)
         imu_baudrate = int(self.get_parameter("imu_baudrate").value)
@@ -73,10 +71,8 @@ class ControllerNode(Node):
             raise ValueError("YAML root must be a mapping/dict.")
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path) # URDF path should be assigned in runtime
 
-        if self.checkpoint_path is not None:
-            self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path) # Default is None
-        else:
-            self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
+        # Checkpoint path
+        self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
 
         # Logger
         self.logger = self.get_logger()

@@ -22,12 +22,6 @@ def generate_launch_description():
         "WF_GOAT.urdf",
     ])
 
-    default_checkpoint_path = PathJoinSubstitution([
-        FindPackageShare("goat_control"),
-        "checkpoint",
-        None
-    ])
-
     # Arguments
     yaml_path_arg = DeclareLaunchArgument(
         "yaml_path",
@@ -38,11 +32,6 @@ def generate_launch_description():
         "urdf_path",
         default_value=default_urdf_path,
         description="Path to goat URDF (default: package share/urdf/WF_GOAT.urdf).",
-    )
-    checkpoint_path_arg = DeclareLaunchArgument(
-        "checkpoint_path",
-        default_value=default_checkpoint_path,
-        description="Path to RL agent checkpoint. Empty string disables checkpoint loading.",
     )
     can_channel_arg = DeclareLaunchArgument(
         "can_channel",
@@ -80,7 +69,6 @@ def generate_launch_description():
         parameters=[{
             "yaml_path": LaunchConfiguration("yaml_path"),
             "urdf_path": LaunchConfiguration("urdf_path"),
-            "checkpoint_path": LaunchConfiguration("checkpoint_path"),
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
             "imu_port": LaunchConfiguration("imu_port"),
             "imu_baudrate": LaunchConfiguration("imu_baudrate"),
@@ -90,7 +78,6 @@ def generate_launch_description():
     return LaunchDescription([
         yaml_path_arg,
         urdf_path_arg,
-        checkpoint_path_arg,
         can_channel_arg,
         can_interface_arg,
         control_rate_arg,
