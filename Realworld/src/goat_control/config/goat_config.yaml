@@ -101,7 +101,7 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_mode: fixed # fixed or movable
+policy_mode: fixed
 policy_checkpoint_path: src/goat_control/checkpoint/agent_38000.onnx
 policy_device: cpu
 policy_command_vx_limit: 1.0
@@ -109,7 +109,6 @@ policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
 policy_decimation: 2.0
-# --- Mode-specific policy I/O (dimensions differ per mode) ---
 policy_fixed:
   observation_info:
     joint_pos: 6
@@ -211,14 +210,14 @@ angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
 motor_encoder_counts_per_rev: 65536
 joint_offsets:
-- 0.02675589743307306
-- 0.04019493267342941
-- 2.1520206383062916
-- -2.104315553861532
-- 1.1485226409211289
-- -0.383475016601934
-- -0.09028588220566647
-- -2.382147536169499
+- -0.007225663103256524
+- 0.04061381169390806
+- 2.0835391544457904
+- -2.024494665850823
+- -0.561655679938035
+- 1.076920508358061
+- 1.7535672060637428
+- 2.9998195584502927
 imu_offsets:
 - 1.0
 - 0.0
