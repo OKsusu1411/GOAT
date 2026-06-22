@@ -38,7 +38,7 @@ class PolicyController(BaseController):
     #: Mode key (set by subclass). Selects the ``policy_<MODE>`` config block.
     MODE: str = ""
     #: Whether this setup actuates the wheels.
-    HAS_WHEELS: bool = True
+    HAS_WHEELS: bool = True 
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
         self.logger = logger

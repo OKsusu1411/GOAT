@@ -425,7 +425,7 @@ class ControllerNode(Node):
             return
 
         # Publish torque command
-        tau[:] = safe_torque * 0.0
+        tau[:] = safe_torque
         # tau[:] = raw_torque
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
