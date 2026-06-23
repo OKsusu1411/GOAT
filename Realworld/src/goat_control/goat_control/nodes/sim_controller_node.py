@@ -313,6 +313,7 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         if self.publish_mode is None:
             self._publish_joint_command(q_ref, v_ref, tau)
+            return
         
         # --------------------------------------------------------------
         # Mode switch detection

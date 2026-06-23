@@ -54,13 +54,13 @@ class CalibrationNode(Node):
         # Print UI
         self.get_logger().info("Calibration Node Started.")
         self.get_logger().info(f"Target YAML: {self.yaml_path}")
-        print("="*30)
+        print("=============================================")
         print("[CONTROLS]")
         print("'j': All Joint Position Calibration")
         print("'w': Wheel Position Calibration")
         print("'i': IMU Calibration")
         print("'q': Quit")
-        print("="*30)
+        print("=============================================\r")
 
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
@@ -83,19 +83,19 @@ class CalibrationNode(Node):
             key = self._get_key()
             
             if key == 'j':
-                self.get_logger().info("Key 'j' pressed: Starting Joint Calibration")
+                self.get_logger().info("Key 'j' pressed: Starting Joint Calibration\r")
                 self._joint_calibration()
             
             elif key == 'w':
-                self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration")
+                self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration\r")
                 self._joint_calibration()
 
             elif key == 'i':
-                self.get_logger().info("Key 'i' pressed: Starting IMU Calibration")
+                self.get_logger().info("Key 'i' pressed: Starting IMU Calibration\r")
                 self._imu_calibration()
                 
             elif key == 'q':
-                self.get_logger().info("Key 'q' pressed: Shutting down node...")
+                self.get_logger().info("Key 'q' pressed: Shutting down node...\r")
                 rclpy.shutdown()
                 break
             
@@ -107,13 +107,13 @@ class CalibrationNode(Node):
             # Execption
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
-                print("="*30)
+                print("=============================================")
                 print("[CONTROLS]")
                 print("'j': All Joint Position Calibration")
                 print("'w': Wheel Position Calibration")
                 print("'i': IMU Calibration")
                 print("'q': Quit")
-                print("="*30)
+                print("=============================================\r")
                 continue
 
     def _joint_calibration(self, is_wheel_mode:bool = False):
