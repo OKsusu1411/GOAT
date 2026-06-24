@@ -38,7 +38,10 @@ class PolicyController(BaseController):
     #: Mode key (set by subclass). Selects the ``policy_<MODE>`` config block.
     MODE: str = ""
     #: Whether this setup actuates the wheels.
-    HAS_WHEELS: bool = True 
+    HAS_WHEELS: bool = True
+    #: Tracking command semantics this controller consumes (set by subclass):
+    #: "joint_position" (fixed) or "base_velocity" (movable).
+    COMMAND_TYPE: str = ""
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
         self.logger = logger
@@ -96,7 +99,7 @@ class PolicyController(BaseController):
         self._delta_pos = np.zeros(self.num_leg_joints, dtype=float)
         self._wheel_speed_ref = np.zeros(self.num_wheel_joints, dtype=float)
         self._base_command = np.zeros(3, dtype=float)  # [v_x, v_y, w_z]
-        self._joint_command = np.zeros(self.num_leg_joints, dtype=float)
+        self._joint_command = np.zeros(self.num_leg_joints, dtype=float) # [L_hip, R_hip, L_thigh, R_thigh, L_knee, R_knee]
 
         # --- Count for decimation processing ---
         self.decimation_count = 0
@@ -172,6 +175,7 @@ class PolicyController(BaseController):
         self._delta_pos[:] = 0.0
         self._wheel_speed_ref[:] = 0.0
         self._base_command[:] = 0.0
+        self._joint_command[:] = 0.0
         self.previous_action[:] = 0.0
         self.decimation_count = 0
 
@@ -182,6 +186,25 @@ class PolicyController(BaseController):
             command: [v_x, v_y, w_z] shape (3,). v_y should be 0 (non-holonomic).
         """
         self._base_command[:] = command
+
+    # ------------------------------------------------------------------
+    # Keyboard command interface (interpreted per subclass)
+    # ------------------------------------------------------------------
+    # Key token convention: the node reads raw terminal input and forwards a
+    # canonical token. Arrow keys are normalized to "UP"/"DOWN"/"LEFT"/"RIGHT";
+    # all other keys are passed through as their single-character string.
+
+    def handle_key(self, key: str) -> str | None:
+        """Interpret a keyboard token and update this controller's command buffer.
+
+        Returns a log string describing the resulting command, or None if the
+        key is not handled by this controller. Default: ignore everything.
+        """
+        return None
+
+    def command_help(self) -> list[str]:
+        """Per-mode key guide lines, used by the node startup menu."""
+        return []
 
     def set_targets(self,
                     base_lin_vel: np.ndarray,
@@ -201,6 +224,10 @@ class PolicyController(BaseController):
         observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
         raw_action = self.agent.run([self._output_name], {self._input_name: observation})[0].reshape(-1)
         self._decode_action(raw_action)
+
+        if self.decimation_count == 0:
+            self.logger.info(f"[{self.decimation_count}] observation : {observation}\r")
+            self.logger.info(f"[{self.decimation_count}] action : {raw_action}\r")
 
     def compute(self,
                 joint_state: JointState,
@@ -240,7 +267,7 @@ class PolicyController(BaseController):
 
         # --- Leg PD (Joint Space) ---
         tau_leg = self._kp * leg_pos_err + self._kd * leg_vel_err
-        tau_leg /= self.gear_ratio[self._joint_indices] # Motor -> Joint
+        # tau_leg /= self.gear_ratio[self._joint_indices] # Motor -> Joint
         tau_cmd[self._joint_indices] = tau_leg # Joint torque
 
         # --- Wheel P (Joint Space) ---
@@ -248,13 +275,17 @@ class PolicyController(BaseController):
             wheel_vel_err = self._wheel_speed_ref - joint_wheel_vel
             wheel_vel_err /= self.gear_ratio[self._wheel_indices] # Joint -> Motor
             tau_wheel = self._kp_wheel * wheel_vel_err
-            tau_wheel /= self.gear_ratio[self._wheel_indices] # Motor -> Joint
+            # tau_wheel /= self.gear_ratio[self._wheel_indices] # Motor -> Joint
             tau_cmd[self._wheel_indices] = tau_wheel # Joint torque
 
         # --- Data inserting ---
         target_pos[self._joint_indices] = target_leg_pos
 
+        if self.decimation_count == 0:
+            self.logger.info(f"[{self.decimation_count}] torque : {tau_cmd}\r")
+
         # Update decimation step
         self.decimation_count += 1
+
 
         return tau_cmd, target_pos, self._wheel_speed_ref.copy()

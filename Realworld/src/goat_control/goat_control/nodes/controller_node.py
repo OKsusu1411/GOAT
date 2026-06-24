@@ -141,26 +141,11 @@ class ControllerNode(Node):
         self.kill_switch_on = False
         self.kill_reason = ""
 
-        # Base command state [v_x, v_y, w_z]
-        self._base_command = np.zeros(3, dtype=np.float64)
-        self._vx_step  = float(self.cfg.get("policy_command_vx_step",  0.1))
-        self._wz_step  = float(self.cfg.get("policy_command_wz_step",  0.01))
-        self._vx_limit = float(self.cfg.get("policy_command_vx_limit", 1.0))
-        self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
-
         # Timing — use ROS clock so it works under sim time too.
         self.last_tick_time = time.perf_counter()
 
         self.logger.info("Main Controller Node started")
-        self.logger.info("===========================================")
-        self.logger.info("[Keydown Menu]")
-        self.logger.info("'p': Policy Control Mode")
-        self.logger.info("'n': Nominal Control Mode")
-        self.logger.info("'r': Controller reset")
-        self.logger.info("'q': Quit")
-        self.logger.info("--- Policy Command ---")
-        self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-")
-        self.logger.info("===========================================\r")
+        self._print_menu()
 
         self.tty = open("/dev/tty", "rb+", buffering=0)
         self.settings = termios.tcgetattr(self.tty.fileno())
@@ -175,16 +160,43 @@ class ControllerNode(Node):
     # Callback Functions
     # ---------------------------------------------------------------------
 
+    def _print_menu(self) -> None:
+        """Print the keyboard menu. Command keys are described by the active
+        policy controller (per its tracking mode)."""
+        self.logger.info("===========================================")
+        self.logger.info("[Keydown Menu]")
+        self.logger.info("'p': Policy Control Mode")
+        self.logger.info("'n': Nominal Control Mode")
+        self.logger.info("'r': Controller reset")
+        self.logger.info("'q': Quit")
+        self.logger.info("[Command Mode]")
+        for line in self.policy_controller.command_help():
+            self.logger.info(line)
+        self.logger.info("===========================================\r")
+
     def _get_key(self):
-        """Read a single character from the terminal immediately (Blocking)."""
+        """Read a key from the terminal immediately (Blocking).
+
+        Arrow keys arrive as 3-byte escape sequences (ESC '[' 'A'..'D') and are
+        normalized to 'UP'/'DOWN'/'RIGHT'/'LEFT' tokens. All other keys are
+        returned as their single-character string.
+        """
         try:
             # NOTE: stdin -> tty
             tty.setraw(self.tty.fileno())
-            key = self.tty.read(1).decode(errors="ignore")
+            ch = self.tty.read(1).decode(errors="ignore")
+            if ch == "\x1b":
+                seq = self.tty.read(2).decode(errors="ignore")
+                return {
+                    "[A": "UP",
+                    "[B": "DOWN",
+                    "[C": "RIGHT",
+                    "[D": "LEFT",
+                }.get(seq, "\x1b")
+            return ch
         finally:
             # NOTE: stdin -> tty
             termios.tcsetattr(self.tty.fileno(), termios.TCSADRAIN, self.settings)
-        return key
 
     def _keyboard_listener_loop(self):
         """Main loop to monitor keyboard input."""
@@ -218,37 +230,16 @@ class ControllerNode(Node):
                 rclpy.shutdown()
                 break
 
-            elif key == 'w':
-                self._base_command[0] = float(np.clip(
-                    self._base_command[0] + self._vx_step, -self._vx_limit, self._vx_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
-            elif key == 's':
-                self._base_command[0] = float(np.clip(
-                    self._base_command[0] - self._vx_step, 0, self._vx_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
-            elif key == 'a':
-                self._base_command[2] = float(np.clip(
-                    self._base_command[2] + self._wz_step, -self._wz_limit, self._wz_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
-            elif key == 'd':
-                self._base_command[2] = float(np.clip(
-                    self._base_command[2] - self._wz_step, -self._wz_limit, self._wz_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
             else:
-                self.logger.info("Wrong key! Please enter the right key")
-                self.logger.info("===========================================")
-                self.logger.info("[Keydown Menu]")
-                self.logger.info("'p': Policy Control Mode")
-                self.logger.info("'n': Nominal Control Mode")
-                self.logger.info("'r': Controller reset")
-                self.logger.info("'q': Quit")
-                self.logger.info("--- Policy Command ---")
-                self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-")
-                self.logger.info("===========================================\r")
+                # Delegate command keys to the active policy controller, which
+                # interprets them per its tracking mode (joint position / base
+                # velocity) and returns a log string (or None if unhandled).
+                log = self.policy_controller.handle_key(key)
+                if log is not None:
+                    self.logger.info(log)
+                else:
+                    self.logger.info("Wrong key! Please enter the right key")
+                    self._print_menu()
                 continue
 
     def _sensor_data_has_nan(self, joint_state_msg, imu_msg) -> bool:
@@ -286,7 +277,6 @@ class ControllerNode(Node):
         # Prevent automatic controller re-entry.
         self.publish_mode = None
         self._prev_mode = None
-        self._base_command[:] = 0.0
 
         # Reset stateful memories to avoid unsafe recovery transients.
         self.safety_limiter.reset()
@@ -333,7 +323,7 @@ class ControllerNode(Node):
 
         # Reset command to zero on policy entry for safety
         if new_mode == 'policy':
-            self._base_command[:] = 0.0
+            self.policy_controller.reset()
 
         self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
@@ -396,7 +386,7 @@ class ControllerNode(Node):
         # Active controller execution
         t_ctrl_start = time.perf_counter()                                    
         if self.publish_mode == 'policy':
-            self.policy_controller.set_command(self._base_command)
+            # Command is owned and updated by the controller itself (handle_key).
             raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                             imu_msg,
                                                                             dt_sec)

@@ -108,6 +108,7 @@ policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
+policy_command_joint_step: 5.0
 policy_decimation: 2.0
 policy_fixed:
   observation_info:
@@ -126,6 +127,7 @@ policy_movable:
   observation_info:
     base_ang_vel: 3
     base_quat: 4
+    base_command: 3
     joint_pos: 6
     joint_vel: 8
     previous_action: 8
@@ -168,12 +170,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint:
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
 - 0.0
 - 0.0
 hw_max_torque_per_joint:
