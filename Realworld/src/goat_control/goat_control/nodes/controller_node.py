@@ -387,15 +387,15 @@ class ControllerNode(Node):
         t_ctrl_start = time.perf_counter()                                    
         if self.publish_mode == 'policy':
             # Command is owned and updated by the controller itself (handle_key).
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
-                                                                            imu_msg,
-                                                                            dt_sec)
+            joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
+                                                                                            imu_msg,
+                                                                                            dt_sec)
             v_ref[-2:] = wheel_v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
-            raw_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
-                                                                   imu_msg,
-                                                                   dt_sec)
+            joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
+                                                                                   imu_msg,
+                                                                                   dt_sec)
             v_ref[-2:] = 0 # Only for wheel
 
         else:
@@ -407,7 +407,7 @@ class ControllerNode(Node):
         # Safety Limiter
         joint_pos = np.asarray(joint_state_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_state_msg.velocity, dtype=float).flatten()
-        safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
+        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
         # Block handling (latching kill switch)
         if is_blocked:
@@ -417,7 +417,6 @@ class ControllerNode(Node):
 
         # Publish torque command
         tau[:] = safe_torque
-        # tau[:] = raw_torque
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Apply action
@@ -438,7 +437,7 @@ class ControllerNode(Node):
             f"[timing] total: {total_ms:6.2f} ms | {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
             f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
             f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms \r",
-            throttle_duration_sec=0.5,
+            throttle_duration_sec=5.0,
         )
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:

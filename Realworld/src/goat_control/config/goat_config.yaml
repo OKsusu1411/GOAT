@@ -53,8 +53,8 @@ motor_gear_ratio:
 - 1
 - 1
 - 1
-- 0.5
-- 0.5
+- 2
+- 2
 - 1
 - 1
 motor_direction:
@@ -169,16 +169,16 @@ torque_lpf_alpha_per_joint:
 - 1.0
 - 0.0
 - 0.0
-sw_max_torque_per_joint:
+sw_max_torque_per_joint: # Motor Space
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
 - 0.0
 - 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-hw_max_torque_per_joint:
+hw_max_torque_per_joint: # Motor Space
 - 4.5
 - 4.5
 - 4.5
@@ -187,7 +187,7 @@ hw_max_torque_per_joint:
 - 4.5
 - 2.5
 - 2.5
-joint_pos_limit:
+joint_pos_limit: # Motor Space
 - -1.22173
 - 0.750492
 - -0.750492

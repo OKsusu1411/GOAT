@@ -232,7 +232,7 @@ class PolicyController(BaseController):
     def compute(self,
                 joint_state: JointState,
                 base_state: ImuState,
-                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Compute raw torque: PD on legs + P on wheels (wheels only if HAS_WHEELS)."""
         # Data processing
         base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
@@ -248,11 +248,11 @@ class PolicyController(BaseController):
         joint_wheel_vel = joint_vel[self._wheel_indices]
 
         # Computed torque
-        tau_cmd = np.zeros(self.num_joints, dtype=float)
+        joint_cmd = np.zeros(self.num_joints, dtype=float)
         target_pos = np.zeros(self.num_joints, dtype=float)
 
         if self.agent is None:
-            return tau_cmd, self._natural_pos.copy(), np.zeros(len(self._wheel_indices))
+            return joint_cmd, self._natural_pos.copy(), np.zeros(len(self._wheel_indices))
 
         # --- Reference Generation (decimation) ---
         if self.decimation_count % self.decimation == 0:
@@ -262,30 +262,25 @@ class PolicyController(BaseController):
         target_leg_pos = default_leg_pos + self._delta_pos
         leg_pos_err = target_leg_pos - joint_leg_pos
         leg_vel_err = -joint_leg_vel
-        leg_pos_err /= self.gear_ratio[self._joint_indices] # Joint -> Motor
-        leg_vel_err /= self.gear_ratio[self._joint_indices] # Joint -> Motor
+        leg_pos_err *= self.gear_ratio[self._joint_indices] # Joint -> Motor
+        leg_vel_err *= self.gear_ratio[self._joint_indices] # Joint -> Motor
 
-        # --- Leg PD (Joint Space) ---
+        # --- Leg PD (Motor Space) ---
         tau_leg = self._kp * leg_pos_err + self._kd * leg_vel_err
-        # tau_leg /= self.gear_ratio[self._joint_indices] # Motor -> Joint
-        tau_cmd[self._joint_indices] = tau_leg # Joint torque
+        joint_cmd[self._joint_indices] = tau_leg * self.gear_ratio[self._joint_indices] # Motor -> Joint
 
-        # --- Wheel P (Joint Space) ---
+        # --- Wheel P (Motor Space) ---
         if self.HAS_WHEELS:
             wheel_vel_err = self._wheel_speed_ref - joint_wheel_vel
-            wheel_vel_err /= self.gear_ratio[self._wheel_indices] # Joint -> Motor
+            wheel_vel_err *= self.gear_ratio[self._wheel_indices] # Joint -> Motor
             tau_wheel = self._kp_wheel * wheel_vel_err
-            # tau_wheel /= self.gear_ratio[self._wheel_indices] # Motor -> Joint
-            tau_cmd[self._wheel_indices] = tau_wheel # Joint torque
+            joint_cmd[self._wheel_indices] = tau_wheel * self.gear_ratio # Motor -> Joint
 
         # --- Data inserting ---
         target_pos[self._joint_indices] = target_leg_pos
-
-        if self.decimation_count == 0:
-            self.logger.info(f"[{self.decimation_count}] torque : {tau_cmd}\r")
 
         # Update decimation step
         self.decimation_count += 1
 
 
-        return tau_cmd, target_pos, self._wheel_speed_ref.copy()
+        return joint_cmd, target_pos, self._wheel_speed_ref.copy()
