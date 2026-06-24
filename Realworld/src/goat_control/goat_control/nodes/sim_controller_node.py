@@ -121,13 +121,6 @@ class SimControllerNode(Node):
         self.publish_mode = None
         self._prev_mode = None
 
-        # Base command state [v_x, v_y, w_z]
-        self._base_command = np.zeros(3, dtype=np.float64)
-        self._vx_step = float(self.cfg.get("policy_command_vx_step", 0.1))
-        self._wz_step = float(self.cfg.get("policy_command_wz_step", 0.01))
-        self._vx_limit = float(self.cfg.get("policy_command_vx_limit", 1.0))
-        self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
-
         # Timing
         self.last_tick_time = self.get_clock().now()
 
@@ -137,8 +130,10 @@ class SimControllerNode(Node):
         self.logger.info("'p': Policy Control Mode")
         self.logger.info("'n': Nominal Control Mode")
         self.logger.info("'q': Quit")
-        self.logger.info("--- Policy Command ---")
-        self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-  |  'space': reset")
+        # Command keys are interpreted by the active policy controller.
+        self.logger.info("[Command Mode]")
+        for line in self.policy_controller.command_help():
+            self.logger.info(line)
         self.logger.info("===========================================\r")
 
         # Keyboard input
@@ -154,13 +149,26 @@ class SimControllerNode(Node):
     # Keyboard
     # ----------------------------------------------------------------------
     def _get_key(self):
-        """Read a single character from the terminal immediately."""
+        """Read a key from the terminal immediately.
+
+        Arrow keys arrive as 3-byte escape sequences (ESC '[' 'A'..'D') and are
+        normalized to 'UP'/'DOWN'/'RIGHT'/'LEFT' tokens. All other keys are
+        returned as their single-character string.
+        """
         try:
             tty.setraw(self.tty.fileno())
-            key = self.tty.read(1).decode(errors="ignore")
+            ch = self.tty.read(1).decode(errors="ignore")
+            if ch == "\x1b":
+                seq = self.tty.read(2).decode(errors="ignore")
+                return {
+                    "[A": "UP",
+                    "[B": "DOWN",
+                    "[C": "RIGHT",
+                    "[D": "LEFT",
+                }.get(seq, "\x1b")
+            return ch
         finally:
             termios.tcsetattr(self.tty.fileno(), termios.TCSADRAIN, self.settings)
-        return key
 
     def _keyboard_listener_loop(self):
         """Main loop to monitor keyboard input."""
@@ -184,64 +192,15 @@ class SimControllerNode(Node):
                 rclpy.shutdown()
                 break
 
-            elif key == "w":
-                self._base_command[0] = float(
-                    np.clip(
-                        self._base_command[0] + self._vx_step,
-                        -self._vx_limit,
-                        self._vx_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == "s":
-                self._base_command[0] = float(
-                    np.clip(
-                        self._base_command[0] - self._vx_step,
-                        0.0,
-                        self._vx_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == "a":
-                self._base_command[2] = float(
-                    np.clip(
-                        self._base_command[2] + self._wz_step,
-                        -self._wz_limit,
-                        self._wz_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == "d":
-                self._base_command[2] = float(
-                    np.clip(
-                        self._base_command[2] - self._wz_step,
-                        -self._wz_limit,
-                        self._wz_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == " ":
-                self._base_command[:] = 0.0
-                self.logger.info("Command reset to zero\r")
-
             else:
-                self.logger.info("Wrong key! Please enter the right key\r")
+                # Delegate command keys to the active policy controller, which
+                # interprets them per its tracking mode (joint position / base
+                # velocity) and returns a log string (or None if unhandled).
+                log = self.policy_controller.handle_key(key)
+                if log is not None:
+                    self.logger.info(log)
+                else:
+                    self.logger.info("Wrong key! Please enter the right key\r")
 
     # ----------------------------------------------------------------------
     # Reset / mode switch
@@ -251,7 +210,6 @@ class SimControllerNode(Node):
         # Prevent automatic controller re-entry.
         self.publish_mode = None
         self._prev_mode = None
-        self._base_command[:] = 0.0
 
         # Reset stateful memories to avoid unsafe recovery transients.
         self.safety_limiter.reset()
@@ -274,7 +232,7 @@ class SimControllerNode(Node):
 
         # Reset command to zero on policy entry for safety
         if new_mode == 'policy':
-            self._base_command[:] = 0.0
+            self.policy_controller.reset()
 
         self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
@@ -324,9 +282,9 @@ class SimControllerNode(Node):
         # Controller execution
         # --------------------------------------------------------------
         if self.publish_mode == "policy":
-            self.policy_controller.set_command(self._base_command)
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg, 
-                                                                            imu_msg, 
+            # Command is owned and updated by the controller itself (handle_key).
+            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
+                                                                            imu_msg,
                                                                             dt_sec)
 
             v_ref[-2:] = wheel_v_ref
@@ -357,9 +315,9 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
-        self._publish_joint_command(q_ref, v_ref, safe_torque)
+        self._publish_joint_command(q_ref, v_ref, tau)
 
-        self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
+        # self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
 
     def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish command to /joint_command.
