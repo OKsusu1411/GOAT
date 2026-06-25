@@ -135,6 +135,7 @@ class MotorManager:
         )
 
     def torque_clipping(self, torque_cmd:np.ndarray) -> np.ndarray:
+        # Motor Space
         clipped_torque = np.clip(torque_cmd, -self.hw_max_torque_per_joint, self.hw_max_torque_per_joint) # [4.5 and 2.5]
         clipped_torque = np.clip(clipped_torque, -self.sw_max_torque_per_joint, self.sw_max_torque_per_joint) # [Arbitrary]
         
@@ -147,17 +148,13 @@ class MotorManager:
         return filtered
 
     def torque_to_current(self, torque_cmd:np.ndarray) -> np.ndarray:
-        # Convert torque into current
+        # Convert torque into current (Joint -> Motor)
         torque_constant = np.asarray(self.motor_torque_constant_nm_per_amp, dtype=float)
         gear_ratio = np.asarray(self.motor_gear_ratio, dtype=float)
-        direction = np.asarray(self.motor_direction, dtype=float)
 
-        denominator = gear_ratio * torque_constant  # gear ratio
+        denominator = gear_ratio * torque_constant
         denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
-        current_command_amp = torque_cmd / denominator
-
-        zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
-        current_command_amp = np.where(zero_mask, 0.0, current_command_amp)
+        current_command_amp = torque_cmd / denominator # Joint -> Motor
 
         return current_command_amp
 
@@ -283,11 +280,11 @@ class MotorManager:
             elif raw_single != 0: motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else: motor_angle_deg = 0.0
 
-            joint_angle_deg = motor_angle_deg * gear * direction
+            joint_angle_deg = (motor_angle_deg * direction) / gear # Motor -> Joint
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
 
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
-            joint_speed_deg_s = motor_speed_deg_s * gear * direction
+            joint_speed_deg_s = (motor_speed_deg_s * direction) / gear # Motor -> Joint
             joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
 
             motor_current_amp = self.motor_phase_current_amp[motor_i]

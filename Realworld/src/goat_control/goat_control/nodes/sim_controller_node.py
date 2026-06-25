@@ -283,27 +283,27 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         if self.publish_mode == "policy":
             # Command is owned and updated by the controller itself (handle_key).
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
+            joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
                                                                             imu_msg,
                                                                             dt_sec)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
-            raw_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
+            joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
                                                                    imu_msg, 
                                                                    dt_sec)
             v_ref[-2:] = 0.0
 
         else:
-            raw_torque = tau
+            joint_torque = tau
 
         # # --------------------------------------------------------------
         # # Safety limiter
         # # --------------------------------------------------------------
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
-        safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
+        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
         if is_blocked:
             q_ref = np.zeros(self.num_joints, dtype=np.float32)
