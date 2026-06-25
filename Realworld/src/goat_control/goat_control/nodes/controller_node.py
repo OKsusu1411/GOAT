@@ -231,9 +231,7 @@ class ControllerNode(Node):
                 break
 
             else:
-                # Delegate command keys to the active policy controller, which
-                # interprets them per its tracking mode (joint position / base
-                # velocity) and returns a log string (or None if unhandled).
+                # Delegate command keys to the active policy controller
                 log = self.policy_controller.handle_key(key)
                 if log is not None:
                     self.logger.info(log)
@@ -344,9 +342,7 @@ class ControllerNode(Node):
         self.last_tick_time = now_time
 
         # Joint state
-        t_joint_start = time.perf_counter()
         joint_state_msg = self.motor_io.latest_joint_state
-        joint_read_ms = (time.perf_counter() - t_joint_start) * 1e3
 
         # IMU state
         t_imu_start = time.perf_counter()    
@@ -421,7 +417,7 @@ class ControllerNode(Node):
 
         # Apply action
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
-        self.motor_io.read_write_motor(tau)                                             # NOTE: test for 0
+        self.motor_io.read_write_motor(tau)                                     
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging

@@ -237,7 +237,7 @@ class PolicyController(BaseController):
         # Data processing
         base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
         base_ang_vel = np.asarray([base_state.gyro.x, base_state.gyro.y, base_state.gyro.z])
-        base_quat = np.asarray([base_state.quat.w, base_state.quat.x, base_state.quat.y, base_state.quat.z]) # NOTE: Isaacsim quaternion convention
+        base_quat = np.asarray([base_state.quat.w, base_state.quat.x, base_state.quat.y, base_state.quat.z])
         joint_pos = np.asarray(joint_state.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_state.velocity, dtype=float).flatten()
         # Leg extraction
@@ -246,7 +246,6 @@ class PolicyController(BaseController):
         joint_leg_vel = joint_vel[self._joint_indices]
         # wheel extraction
         joint_wheel_vel = joint_vel[self._wheel_indices]
-
         # Computed torque
         joint_cmd = np.zeros(self.num_joints, dtype=float)
         target_pos = np.zeros(self.num_joints, dtype=float)

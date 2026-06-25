@@ -85,10 +85,6 @@ class MotorManager:
 
         # YAML cfg
         self.cfg = cfg
-        # [DEPRECATED] Velocity / effort LPFs were removed in favor of a single
-        # torque-side LPF (see torque_lpf_alpha_per_joint below).
-        # joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
-        # joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
         self.motor_gear_ratio = self.cfg["motor_gear_ratio"]
         self.motor_direction = self.cfg["motor_direction"]
         self.motor_torque_constant_nm_per_amp = self.cfg["motor_torque_constant_nm_per_amp"]
@@ -115,7 +111,7 @@ class MotorManager:
         self.prev_torque = np.zeros(self.num_joints, dtype=float)
 
         # ------------------------------------------------------------------
-        # Encoder integration (Option B): convert the per-tick uint16 encoder
+        # Encoder integration : convert the per-tick uint16 encoder
         # field of the 0xA1 reply into a multi-turn motor angle, anchored to
         # the absolute multi-turn read taken once at init.
         # ------------------------------------------------------------------
@@ -261,7 +257,7 @@ class MotorManager:
     # [공통 수학 연산 로직] 원시 데이터(Raw data)를 MotorStatesData로 패키징
     # =========================================================================
     def _package_motor_states(self) -> MotorStatesData:
-        """내부 버퍼의 Raw 데이터를 이용해 물리량으로 변환하고 MotorStatesData를 생성합니다."""
+        """Raw Data -> MotorStatesData."""
         joint_count = len(self.joint_names)
         
         joint_position_rad: List[float] = [0.0] * joint_count
@@ -304,7 +300,7 @@ class MotorManager:
         )
 
     # =========================================================================
-    # Encoder integration helpers (Option B)
+    # Encoder integration helpers
     # =========================================================================
     def _seed_position_anchor(self) -> None:
         """Capture absolute motor angle + matching encoder count as the
@@ -339,7 +335,6 @@ class MotorManager:
         prev_count = self.motor_prev_encoder_count[motor_index]
         delta_count = current_count - prev_count
 
-
         # Wrap detection — a single-tick step larger than half range means
         # the uint encoder field wrapped, not that the motor moved that fast.
         if delta_count > half_range:
@@ -357,14 +352,10 @@ class MotorManager:
             round(motor_angle_deg / self.angle_deg_per_lsb)
         )
 
-        # if motor_index == 0:
-        #     print(f"Motor {motor_index}: current_count={current_count} | anchor_count={anchor_count} | delta_count={delta_count} | wrapping_count={self.motor_encoder_wrap_count[motor_index]} | total_count_delta={total_count_delta}\r")
-
     # =========================================================================
-    # [Read Only] 기존과 동일한 읽기 함수 (이제 공통 로직을 재사용합니다)
+    # [Read]
     # =========================================================================
     def decode_motor_encoder(self, perform_slow_poll: bool = True) -> MotorStatesData:
-        """모터의 상태만 읽어옵니다. (주로 초기화나 대기 상태일 때 사용)"""
         def fetch_motor_data(motor_index: int):
             # Order matters: 0x92 multi-turn (anchor_motor_angle_deg) and
             # 0x9C state2 (anchor_encoder_count) must be adjacent in time
@@ -388,11 +379,10 @@ class MotorManager:
         if perform_slow_poll:
             self._seed_position_anchor()
 
-        # 데이터를 읽어온 후 패키징하여 반환합니다.
         return self._package_motor_states()
 
     # =========================================================================
-    # [Write + Read] 토크 명령과 상태 읽기를 동시에 처리하는 함수
+    # [Write + Read]
     # =========================================================================
     def write_torques_and_read_states(
         self,
