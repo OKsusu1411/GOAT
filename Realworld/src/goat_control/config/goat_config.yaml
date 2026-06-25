@@ -170,12 +170,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint: # Motor Space
-- 2.0
-- 2.0
-- 2.0
-- 2.0
-- 2.0
-- 2.0
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
 - 0.0
 - 0.0
 hw_max_torque_per_joint: # Motor Space
@@ -187,7 +187,7 @@ hw_max_torque_per_joint: # Motor Space
 - 4.5
 - 2.5
 - 2.5
-joint_pos_limit: # Motor Space
+joint_pos_limit: # Joint Space
 - -1.22173
 - 0.750492
 - -0.750492
