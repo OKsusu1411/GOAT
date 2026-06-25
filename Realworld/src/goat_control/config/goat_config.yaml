@@ -141,19 +141,19 @@ policy_movable:
   - 5.0
   - 5.0
 policy_leg_proportional_gain:
-- 5.0
-- 5.0
-- 5.0
-- 5.0
-- 5.0
-- 5.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
 policy_leg_derivative_gain:
-- 0.1
-- 0.1
-- 0.1
-- 0.1
-- 0.1
-- 0.1
+- 0.5
+- 0.5
+- 0.5
+- 0.5
+- 0.5
+- 0.5
 policy_wheel_proportional_gain:
 - 0.02
 - 0.02
@@ -170,12 +170,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint: # Motor Space
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
+- 2.0
+- 2.0
+- 2.0
+- 2.0
+- 2.0
+- 2.0
 - 0.0
 - 0.0
 hw_max_torque_per_joint: # Motor Space
@@ -197,8 +197,8 @@ joint_pos_limit: # Motor Space
 - -2.05949
 - 0.261799
 - -0.0
-- 4.45059
-- -4.45059
+- 2.22530
+- -2.22530
 - 0.0
 - -.inf
 - .inf
@@ -206,7 +206,7 @@ joint_pos_limit: # Motor Space
 - .inf
 joint_pos_limit_margin: 0.087267
 joint_pos_soft_limit_coeff: 0.95
-joint_vel_estop_threshold: 3.14
+joint_vel_estop_threshold: 4.0
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01

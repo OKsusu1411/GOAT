@@ -232,7 +232,7 @@ class PolicyController(BaseController):
     def compute(self,
                 joint_state: JointState,
                 base_state: ImuState,
-                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute raw torque: PD on legs + P on wheels (wheels only if HAS_WHEELS)."""
         # Data processing
         base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
@@ -258,29 +258,25 @@ class PolicyController(BaseController):
         if self.decimation_count % self.decimation == 0:
             self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
 
-        # --- Error Calculation (Motor Space) ---
+        # --- Error Calculation (Joint Space) ---
         target_leg_pos = default_leg_pos + self._delta_pos
         leg_pos_err = target_leg_pos - joint_leg_pos
         leg_vel_err = -joint_leg_vel
-        leg_pos_err *= self.gear_ratio[self._joint_indices] # Joint -> Motor
-        leg_vel_err *= self.gear_ratio[self._joint_indices] # Joint -> Motor
 
-        # --- Leg PD (Motor Space) ---
+        # --- Leg PD (Joint Space) ---
         tau_leg = self._kp * leg_pos_err + self._kd * leg_vel_err
-        joint_cmd[self._joint_indices] = tau_leg * self.gear_ratio[self._joint_indices] # Motor -> Joint
+        joint_cmd[self._joint_indices] = tau_leg
 
-        # --- Wheel P (Motor Space) ---
+        # --- Wheel P (Joint Space) ---
         if self.HAS_WHEELS:
             wheel_vel_err = self._wheel_speed_ref - joint_wheel_vel
-            wheel_vel_err *= self.gear_ratio[self._wheel_indices] # Joint -> Motor
             tau_wheel = self._kp_wheel * wheel_vel_err
-            joint_cmd[self._wheel_indices] = tau_wheel * self.gear_ratio # Motor -> Joint
+            joint_cmd[self._wheel_indices] = tau_wheel
 
         # --- Data inserting ---
         target_pos[self._joint_indices] = target_leg_pos
 
         # Update decimation step
         self.decimation_count += 1
-
 
         return joint_cmd, target_pos, self._wheel_speed_ref.copy()

@@ -388,14 +388,14 @@ class ControllerNode(Node):
         if self.publish_mode == 'policy':
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
-                                                                                            imu_msg,
-                                                                                            dt_sec)
+                                                                              imu_msg,
+                                                                              dt_sec)
             v_ref[-2:] = wheel_v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
-                                                                                   imu_msg,
-                                                                                   dt_sec)
+                                                                     imu_msg,
+                                                                     dt_sec)
             v_ref[-2:] = 0 # Only for wheel
 
         else:
