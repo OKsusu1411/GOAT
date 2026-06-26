@@ -102,7 +102,7 @@ nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
 policy_mode: fixed
-policy_checkpoint_path: src/goat_control/checkpoint/agent_38000.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/joint_track_hip.onnx
 policy_device: cpu
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
@@ -170,12 +170,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint:
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
 - 0.0
 - 0.0
 hw_max_torque_per_joint:
@@ -188,18 +188,18 @@ hw_max_torque_per_joint:
 - 2.5
 - 2.5
 joint_pos_limit:
-- -1.22173
-- 0.750492
-- -0.750492
-- 1.22173
-- -0.261799
-- 2.05949
-- -2.05949
-- 0.261799
-- -0.262
-- 2.2253
-- -2.2253
-- 0.262
+- -1.22173        # Left Hip min
+- 0.750492        # Left Hip max
+- -0.750492       # Right Hip min
+- 1.22173         # Right Hip max
+- -0.261799       # Left Thigh min
+- 2.05949         # Left Thigh max
+- -2.05949        # Right Thigh min
+- 0.261799        # Right Thigh max
+- -0.262          # Left Knee min
+- 2.2253          # Left Knee max
+- -2.2253         # Right Knee min
+- 0.262           # Right Knee max
 - -.inf
 - .inf
 - -.inf
