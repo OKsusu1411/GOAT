@@ -42,7 +42,13 @@ class ImuTfPublisher(Node):
 
     def cb(self, msg: ImuState):
         t = TransformStamped()
-        t.header.stamp = self.get_clock().now().to_msg()
+        # Use the source message stamp (sim clock) so the TF timeline stays
+        # consistent with /joint_states under use_sim_time. Falls back to the
+        # current clock only if the incoming header has no stamp.
+        if msg.header.stamp.sec == 0 and msg.header.stamp.nanosec == 0:
+            t.header.stamp = self.get_clock().now().to_msg()
+        else:
+            t.header.stamp = msg.header.stamp
         t.header.frame_id = self.parent_frame
         t.child_frame_id = self.child_frame
 

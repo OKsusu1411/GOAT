@@ -16,8 +16,9 @@ from motor_interfaces.msg import ImuState
 from message_filters import Subscriber, TimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
-from goat_control.utils.controller.policy_controller import PolicyController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
+from goat_control.utils.controller.fixed_policy_controller import FixedBasePolicyController
+from goat_control.utils.controller.movable_policy_controller import MovableBasePolicyController
 
 
 class SimControllerNode(Node):
@@ -38,10 +39,9 @@ class SimControllerNode(Node):
         # ------------------------------------------------------------------
         # Parameters
         # ------------------------------------------------------------------
+        self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
-        self.declare_parameter("checkpoint_path", "")
-        self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("sync_queue_size", 10)
 
         # use simulation time.
@@ -55,11 +55,9 @@ class SimControllerNode(Node):
             ]
         )
 
+        self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.checkpoint_path = self.get_parameter("checkpoint_path").value or None
-        self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
-        self.sync_queue_size = int(self.get_parameter("sync_queue_size").value)
 
         # ------------------------------------------------------------------
         # YAML config
@@ -72,8 +70,8 @@ class SimControllerNode(Node):
 
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
-        if self.checkpoint_path is not None:
-            self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path)
+        # Checkpoint path
+        self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
 
         # ------------------------------------------------------------------
         # Logger
@@ -83,9 +81,14 @@ class SimControllerNode(Node):
         # ------------------------------------------------------------------
         # Controllers
         # ------------------------------------------------------------------
-        self.nominal_controller = NominalController(self.cfg, self.logger)
-        self.policy_controller = PolicyController(self.cfg, self.logger)
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
+        self.nominal_controller = NominalController(self.cfg, self.logger)
+        if self.cfg["policy_mode"] == "fixed":
+            self.policy_controller = FixedBasePolicyController(self.cfg, self.logger)
+        elif self.cfg["policy_mode"] == "movable":
+            self.policy_controller = MovableBasePolicyController(self.cfg, self.logger)
+        else:
+            raise RuntimeError(f"Invalid Mode : {self.cfg['policy_mode']}")
 
         self.num_joints = len(self.cfg["joint_names"])
 
@@ -101,49 +104,22 @@ class SimControllerNode(Node):
         # ------------------------------------------------------------------
         # synchronized subscribers
         # ------------------------------------------------------------------
-        self._joint_states_sub_filter = Subscriber(
-            self,
-            JointState,
-            "/joint_states",
-            qos_profile=sim_qos_profile,
-        )
+        self._joint_states_sub = Subscriber(self, JointState, "/joint_states", qos_profile=sim_qos_profile)
+        self._imu_sub = Subscriber(self, ImuState, "/imu", qos_profile=sim_qos_profile)
 
-        self._imu_sub_filter = Subscriber(
-            self,
-            ImuState,
-            "/imu",
-            qos_profile=sim_qos_profile,
-        )
-
-        self.sync = TimeSynchronizer(
-            [self._joint_states_sub_filter, self._imu_sub_filter],
-            self.sync_queue_size,
-        )
+        self.sync = TimeSynchronizer([self._joint_states_sub, self._imu_sub], 10)
         self.sync.registerCallback(self._tick)
 
         # ------------------------------------------------------------------
         # command publisher
         # ------------------------------------------------------------------
-        self.joint_command_publisher = self.create_publisher(
-            JointState,
-            "/commands",
-            qos_profile=sim_qos_profile,
-        )
-
-        self.joint_command_msg = JointState()
+        self.joint_command_publisher = self.create_publisher(JointState, "/commands", qos_profile=sim_qos_profile)
 
         # ------------------------------------------------------------------
         # Mode switch
         # ------------------------------------------------------------------
         self.publish_mode = None
         self._prev_mode = None
-
-        # Base command state [v_x, v_y, w_z]
-        self._base_command = np.zeros(3, dtype=np.float64)
-        self._vx_step = float(self.cfg.get("policy_command_vx_step", 0.1))
-        self._wz_step = float(self.cfg.get("policy_command_wz_step", 0.01))
-        self._vx_limit = float(self.cfg.get("policy_command_vx_limit", 1.0))
-        self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
 
         # Timing
         self.last_tick_time = self.get_clock().now()
@@ -154,8 +130,10 @@ class SimControllerNode(Node):
         self.logger.info("'p': Policy Control Mode")
         self.logger.info("'n': Nominal Control Mode")
         self.logger.info("'q': Quit")
-        self.logger.info("--- Policy Command ---")
-        self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-  |  'space': reset")
+        # Command keys are interpreted by the active policy controller.
+        self.logger.info("[Command Mode]")
+        for line in self.policy_controller.command_help():
+            self.logger.info(line)
         self.logger.info("===========================================\r")
 
         # Keyboard input
@@ -171,13 +149,26 @@ class SimControllerNode(Node):
     # Keyboard
     # ----------------------------------------------------------------------
     def _get_key(self):
-        """Read a single character from the terminal immediately."""
+        """Read a key from the terminal immediately.
+
+        Arrow keys arrive as 3-byte escape sequences (ESC '[' 'A'..'D') and are
+        normalized to 'UP'/'DOWN'/'RIGHT'/'LEFT' tokens. All other keys are
+        returned as their single-character string.
+        """
         try:
             tty.setraw(self.tty.fileno())
-            key = self.tty.read(1).decode(errors="ignore")
+            ch = self.tty.read(1).decode(errors="ignore")
+            if ch == "\x1b":
+                seq = self.tty.read(2).decode(errors="ignore")
+                return {
+                    "[A": "UP",
+                    "[B": "DOWN",
+                    "[C": "RIGHT",
+                    "[D": "LEFT",
+                }.get(seq, "\x1b")
+            return ch
         finally:
             termios.tcsetattr(self.tty.fileno(), termios.TCSADRAIN, self.settings)
-        return key
 
     def _keyboard_listener_loop(self):
         """Main loop to monitor keyboard input."""
@@ -201,94 +192,53 @@ class SimControllerNode(Node):
                 rclpy.shutdown()
                 break
 
-            elif key == "w":
-                self._base_command[0] = float(
-                    np.clip(
-                        self._base_command[0] + self._vx_step,
-                        -self._vx_limit,
-                        self._vx_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == "s":
-                self._base_command[0] = float(
-                    np.clip(
-                        self._base_command[0] - self._vx_step,
-                        0.0,
-                        self._vx_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == "a":
-                self._base_command[2] = float(
-                    np.clip(
-                        self._base_command[2] + self._wz_step,
-                        -self._wz_limit,
-                        self._wz_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == "d":
-                self._base_command[2] = float(
-                    np.clip(
-                        self._base_command[2] - self._wz_step,
-                        -self._wz_limit,
-                        self._wz_limit,
-                    )
-                )
-                self.logger.info(
-                    f"Command: vx={self._base_command[0]:.2f} "
-                    f"wz={self._base_command[2]:.2f}\r"
-                )
-
-            elif key == " ":
-                self._base_command[:] = 0.0
-                self.logger.info("Command reset to zero\r")
-
             else:
-                self.logger.info("Wrong key! Please enter the right key\r")
+                # Delegate command keys to the active policy controller, which
+                # interprets them per its tracking mode (joint position / base
+                # velocity) and returns a log string (or None if unhandled).
+                log = self.policy_controller.handle_key(key)
+                if log is not None:
+                    self.logger.info(log)
+                else:
+                    self.logger.info("Wrong key! Please enter the right key\r")
 
     # ----------------------------------------------------------------------
     # Reset / mode switch
     # ----------------------------------------------------------------------
     def reset(self) -> None:
         """Reset internal states."""
+        # Prevent automatic controller re-entry.
+        self.publish_mode = None
+        self._prev_mode = None
+
+        # Reset stateful memories to avoid unsafe recovery transients.
         self.safety_limiter.reset()
         self.policy_controller.reset()
         self.nominal_controller.reset()
 
     def _switch_mode(self, new_mode: str) -> None:
-        """Handle mode transition."""
+        """Handle mode transition: reset previous controller + safety limiter"""
         if new_mode == self._prev_mode:
             return
 
-        if self._prev_mode == "policy":
+        # Reset previous controller state
+        if self._prev_mode == 'policy':
             self.policy_controller.reset()
-        elif self._prev_mode == "nominal":
+        elif self._prev_mode == 'nominal':
             self.nominal_controller.reset()
 
+        # Reset LPF to prevent torque jump on mode switch
         self.safety_limiter.reset()
 
-        if new_mode == "policy":
-            self._base_command[:] = 0.0
+        # Reset command to zero on policy entry for safety
+        if new_mode == 'policy':
+            self.policy_controller.reset()
 
         self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
 
     # ----------------------------------------------------------------------
-    # H1-style synchronized control tick
+    # Synchronized control tick
     # ----------------------------------------------------------------------
     def _tick(self, joint_msg: JointState, imu_msg: ImuState) -> None:
         """Control tick called by TimeSynchronizer.
@@ -308,13 +258,8 @@ class SimControllerNode(Node):
 
         dt_sec = (now_time - self.last_tick_time).nanoseconds * 1e-9
         if dt_sec <= 0.0:
-            dt_sec = 1e-3
-
+            dt_sec = 1.0  / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
-
-        # Mode switch detection
-        if self.publish_mode is not None:
-            self._switch_mode(self.publish_mode)
 
         # Default command buffers
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -322,59 +267,59 @@ class SimControllerNode(Node):
         tau = np.zeros(self.num_joints, dtype=np.float32)
 
         # --------------------------------------------------------------
-        # Active controller execution
+        # Proactive condition check
+        # --------------------------------------------------------------
+        if self.publish_mode is None:
+            self._publish_joint_command(q_ref, v_ref, tau)
+            return
+        
+        # --------------------------------------------------------------
+        # Mode switch detection
+        # --------------------------------------------------------------
+        self._switch_mode(self.publish_mode)
+
+        # --------------------------------------------------------------
+        # Controller execution
         # --------------------------------------------------------------
         if self.publish_mode == "policy":
-            self.policy_controller.set_command(self._base_command)
-
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(
-                joint_msg,
-                imu_msg,
-                dt_sec,
-            )
+            # Command is owned and updated by the controller itself (handle_key).
+            joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
+                                                                            imu_msg,
+                                                                            dt_sec)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
-            raw_torque, q_ref, _ = self.nominal_controller.compute(
-                joint_msg,
-                imu_msg,
-                dt_sec,
-            )
+            joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
+                                                                   imu_msg, 
+                                                                   dt_sec)
             v_ref[-2:] = 0.0
 
         else:
-            raw_torque = tau
+            joint_torque = tau
 
         # # --------------------------------------------------------------
         # # Safety limiter
         # # --------------------------------------------------------------
-        # if self.publish_mode is not None:
-        #     joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
-        #     joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
+        joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
+        joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
+        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
-        #     safe_torque, is_blocked = self.safety_limiter.apply(
-        #         raw_torque,
-        #         joint_pos,
-        #         joint_vel,
-        #     )
+        if is_blocked:
+            q_ref = np.zeros(self.num_joints, dtype=np.float32)
+            v_ref = np.zeros(self.num_joints, dtype=np.float32)
+            safe_torque = np.zeros(self.num_joints, dtype=np.float32)
 
-        #     if is_blocked:
-        #         safe_torque = np.zeros(self.num_joints, dtype=np.float32)
-
-        #     tau[:] = safe_torque
+        tau[:] = safe_torque
 
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
-        self._publish_joint_command(q_ref, v_ref, raw_torque)
+        self._publish_joint_command(q_ref, v_ref, tau)
 
-    def _publish_joint_command(
-        self,
-        position: np.ndarray,
-        velocity: np.ndarray,
-        torque: np.ndarray,
-    ) -> None:
+        # self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
+
+    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish command to /joint_command.
 
         Message semantic:

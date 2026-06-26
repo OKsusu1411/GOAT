@@ -19,8 +19,9 @@ from motor_interfaces.msg import ImuState
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
-from goat_control.utils.controller.policy_controller import PolicyController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
+from goat_control.utils.controller.fixed_policy_controller import FixedBasePolicyController
+from goat_control.utils.controller.movable_policy_controller import MovableBasePolicyController
 from goat_control.nodes.motor_io import MotorIO
 from goat_control.nodes.imu_io import ImuIO
 
@@ -42,7 +43,6 @@ class ControllerNode(Node):
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
-        self.declare_parameter("checkpoint_path", "")
         self.declare_parameter("action_timeout_sec", 0.05)
         self.declare_parameter("imu_port", "/dev/ttyUSB0")
         self.declare_parameter("imu_baudrate", 115200)
@@ -59,7 +59,6 @@ class ControllerNode(Node):
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.checkpoint_path = self.get_parameter("checkpoint_path").value or None
         self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
         imu_port = str(self.get_parameter("imu_port").value)
         imu_baudrate = int(self.get_parameter("imu_baudrate").value)
@@ -72,16 +71,21 @@ class ControllerNode(Node):
             raise ValueError("YAML root must be a mapping/dict.")
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path) # URDF path should be assigned in runtime
 
-        if self.checkpoint_path is not None:
-            self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path) # Default is None
+        # Checkpoint path
+        self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
 
         # Logger
         self.logger = self.get_logger()
 
         # Controller
-        self.nominal_controller = NominalController(self.cfg, self.logger)
-        self.policy_controller = PolicyController(self.cfg, self.logger)
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
+        self.nominal_controller = NominalController(self.cfg, self.logger)
+        if self.cfg["policy_mode"] == "fixed":
+            self.policy_controller = FixedBasePolicyController(self.cfg, self.logger)
+        elif self.cfg["policy_mode"] == "movable":
+            self.policy_controller = MovableBasePolicyController(self.cfg, self.logger)
+        else:
+            raise RuntimeError(f"Invalid Mode : {self.cfg['policy_mode']}")
 
         self.num_joints = len(self.cfg["joint_names"])
 
@@ -120,15 +124,14 @@ class ControllerNode(Node):
                                                    "/imu",
                                                    qos_profile=qos_profile)
 
-        self.torque_command_publisher = self.create_publisher(JointState, 
-                                                              "/commands", 
-                                                              qos_profile=qos_profile)
+        self.torque_command_pub = self.create_publisher(JointState, 
+                                                        "/commands", 
+                                                        qos_profile=qos_profile)
 
         # Messages
+        self.now_stamp = self.get_clock().now().to_msg()
         self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
         self.imu_msg = self.imu_io.latest_imu_state              # seeded by ImuIO's initial read
-        self.prev_imu_rx_time = None
-        self.last_imu_rx_time = None
         
         # Mode switch (None = idle, no torque until keyboard selects a mode)
         self.publish_mode = None
@@ -138,26 +141,11 @@ class ControllerNode(Node):
         self.kill_switch_on = False
         self.kill_reason = ""
 
-        # Base command state [v_x, v_y, w_z]
-        self._base_command = np.zeros(3, dtype=np.float64)
-        self._vx_step  = float(self.cfg.get("policy_command_vx_step",  0.1))
-        self._wz_step  = float(self.cfg.get("policy_command_wz_step",  0.01))
-        self._vx_limit = float(self.cfg.get("policy_command_vx_limit", 1.0))
-        self._wz_limit = float(self.cfg.get("policy_command_wz_limit", 0.5))
-
         # Timing — use ROS clock so it works under sim time too.
-        self.last_tick_time = self.get_clock().now()
+        self.last_tick_time = time.perf_counter()
 
         self.logger.info("Main Controller Node started")
-        self.logger.info("===========================================")
-        self.logger.info("[Keydown Menu]")
-        self.logger.info("'p': Policy Control Mode")
-        self.logger.info("'n': Nominal Control Mode")
-        self.logger.info("'r': Controller reset")
-        self.logger.info("'q': Quit")
-        self.logger.info("--- Policy Command ---")
-        self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-")
-        self.logger.info("===========================================\r")
+        self._print_menu()
 
         self.tty = open("/dev/tty", "rb+", buffering=0)
         self.settings = termios.tcgetattr(self.tty.fileno())
@@ -168,25 +156,47 @@ class ControllerNode(Node):
         control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.control_timer = self.create_timer(control_period_sec, self._control_loop)
 
-        # Off-hot-path error-flag poll. State1 (0x9A) used to run every 10th
-        # control tick; moving it here removes the periodic ~4-5 ms spike from
-        # the control loop. 1 Hz is plenty for safety telemetry.
-        self.error_flag_timer = self.create_timer(1.0, self.motor_io.poll_error_flags_once)
-
     # ---------------------------------------------------------------------
     # Callback Functions
     # ---------------------------------------------------------------------
 
+    def _print_menu(self) -> None:
+        """Print the keyboard menu. Command keys are described by the active
+        policy controller (per its tracking mode)."""
+        self.logger.info("===========================================")
+        self.logger.info("[Keydown Menu]")
+        self.logger.info("'p': Policy Control Mode")
+        self.logger.info("'n': Nominal Control Mode")
+        self.logger.info("'r': Controller reset")
+        self.logger.info("'q': Quit")
+        self.logger.info("[Command Mode]")
+        for line in self.policy_controller.command_help():
+            self.logger.info(line)
+        self.logger.info("===========================================\r")
+
     def _get_key(self):
-        """Read a single character from the terminal immediately (Blocking)."""
+        """Read a key from the terminal immediately (Blocking).
+
+        Arrow keys arrive as 3-byte escape sequences (ESC '[' 'A'..'D') and are
+        normalized to 'UP'/'DOWN'/'RIGHT'/'LEFT' tokens. All other keys are
+        returned as their single-character string.
+        """
         try:
             # NOTE: stdin -> tty
             tty.setraw(self.tty.fileno())
-            key = self.tty.read(1).decode(errors="ignore")
+            ch = self.tty.read(1).decode(errors="ignore")
+            if ch == "\x1b":
+                seq = self.tty.read(2).decode(errors="ignore")
+                return {
+                    "[A": "UP",
+                    "[B": "DOWN",
+                    "[C": "RIGHT",
+                    "[D": "LEFT",
+                }.get(seq, "\x1b")
+            return ch
         finally:
             # NOTE: stdin -> tty
             termios.tcsetattr(self.tty.fileno(), termios.TCSADRAIN, self.settings)
-        return key
 
     def _keyboard_listener_loop(self):
         """Main loop to monitor keyboard input."""
@@ -209,6 +219,7 @@ class ControllerNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
 
@@ -219,40 +230,17 @@ class ControllerNode(Node):
                 rclpy.shutdown()
                 break
 
-            elif key == 'w':
-                self._base_command[0] = float(np.clip(
-                    self._base_command[0] + self._vx_step, -self._vx_limit, self._vx_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
-            elif key == 's':
-                self._base_command[0] = float(np.clip(
-                    self._base_command[0] - self._vx_step, 0, self._vx_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
-            elif key == 'a':
-                self._base_command[2] = float(np.clip(
-                    self._base_command[2] + self._wz_step, -self._wz_limit, self._wz_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
-            elif key == 'd':
-                self._base_command[2] = float(np.clip(
-                    self._base_command[2] - self._wz_step, -self._wz_limit, self._wz_limit))
-                self.logger.info(f"Command: vx={self._base_command[0]:.2f} wz={self._base_command[2]:.2f}\r")
-
             else:
-                self.logger.info("Wrong key! Please enter the right key")
-                self.logger.info("===========================================")
-                self.logger.info("[Keydown Menu]")
-                self.logger.info("'p': Policy Control Mode")
-                self.logger.info("'n': Nominal Control Mode")
-                self.logger.info("'r': Controller reset")
-                self.logger.info("'q': Quit")
-                self.logger.info("--- Policy Command ---")
-                self.logger.info("'w'/'s': v_x +/-  |  'a'/'d': w_z +/-")
-                self.logger.info("===========================================\r")
+                # Delegate command keys to the active policy controller
+                log = self.policy_controller.handle_key(key)
+                if log is not None:
+                    self.logger.info(log)
+                else:
+                    self.logger.info("Wrong key! Please enter the right key")
+                    self._print_menu()
                 continue
 
-    def _sensor_data_has_nan(self) -> bool:
+    def _sensor_data_has_nan(self, joint_state_msg, imu_msg) -> bool:
         """Return True if any element of the joint or IMU state is NaN.
 
         A motor that does not answer the state read leaves NaN in joint
@@ -262,14 +250,14 @@ class ControllerNode(Node):
         modify the data — detection only.
         """
         # Joint state: position / velocity / effort arrays.
-        js = self.joint_state_msg
+        js = joint_state_msg
         if js is not None:
             for field in (js.position, js.velocity, js.effort):
                 if np.any(np.isnan(np.asarray(field, dtype=float))):
                     return True
 
         # IMU state: quaternion + gyro / vel / mag vectors.
-        imu = self.imu_msg
+        imu = imu_msg
         if imu is not None:
             imu_values = [
                 imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
@@ -287,7 +275,6 @@ class ControllerNode(Node):
         # Prevent automatic controller re-entry.
         self.publish_mode = None
         self._prev_mode = None
-        self._base_command[:] = 0.0
 
         # Reset stateful memories to avoid unsafe recovery transients.
         self.safety_limiter.reset()
@@ -334,7 +321,7 @@ class ControllerNode(Node):
 
         # Reset command to zero on policy entry for safety
         if new_mode == 'policy':
-            self._base_command[:] = 0.0
+            self.policy_controller.reset()
 
         self.logger.info(f"Controller switched: {self._prev_mode} -> {new_mode}\r")
         self._prev_mode = new_mode
@@ -345,32 +332,22 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        now_time = self.get_clock().now()
+        self.now_stamp = self.get_clock().now().to_msg()
+        now_time = time.perf_counter()
 
         # Time - Time → Duration; convert to seconds via nanoseconds.
-        dt_sec = (now_time - self.last_tick_time).nanoseconds * 1e-9
+        dt_sec = (now_time - self.last_tick_time)
         if dt_sec <= 0.0:
             dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
-        # Joint state from the previous tick's CAN transaction (in-process).
-        self.joint_state_msg = self.motor_io.latest_joint_state
-
-        # Stamp header so consumers (rqt, PlotJuggler, rosbag) see a fresh
-        # timestamp each tick — motor_io builds the JointState with an empty header.
-        self.joint_state_msg.header.stamp = self.get_clock().now().to_msg()
-        self.joint_state_msg.header.frame_id = "base_link"
-
-        # Publish joint states
-        self.joint_state_pub.publish(self.joint_state_msg)
+        # Joint state
+        joint_state_msg = self.motor_io.latest_joint_state
 
         # IMU state
-        t_imu_start = time.perf_counter()                                        # [timing] start IMU read window
-        self.imu_msg = self.imu_io.read_imu()
-        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                  # [timing] IMU read duration in ms
-
-        # Publish for logging
-        self.imu_state_pub.publish(self.imu_msg)
+        t_imu_start = time.perf_counter()    
+        imu_msg = self.imu_io.read_imu()
+        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                 
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -382,20 +359,20 @@ class ControllerNode(Node):
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
             self.motor_io.read_write_motor(tau)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
             self.motor_io.read_write_motor(tau)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         
-        # NaN check: a NaN in joint/IMU state would propagate into the torque
-        if self._sensor_data_has_nan():
+        # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
+        if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
             self.motor_io.read_write_motor(tau)
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         # ==================================================================
 
@@ -403,101 +380,99 @@ class ControllerNode(Node):
         self._switch_mode(self.publish_mode)
 
         # Active controller execution
-        t_ctrl_start = time.perf_counter()                                       # [timing] start controller compute window
+        t_ctrl_start = time.perf_counter()                                    
         if self.publish_mode == 'policy':
-            self.policy_controller.set_command(self._base_command)
-            raw_torque, q_ref, wheel_v_ref = self.policy_controller.compute(self.joint_state_msg,
-                                                                            self.imu_msg,
-                                                                            dt_sec)
+            # Command is owned and updated by the controller itself (handle_key).
+            joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
+                                                                              imu_msg,
+                                                                              dt_sec)
             v_ref[-2:] = wheel_v_ref # Only for wheel
 
         elif self.publish_mode == 'nominal':
-            raw_torque, q_ref, _ = self.nominal_controller.compute(self.joint_state_msg,
-                                                                   self.imu_msg,
-                                                                   dt_sec)
+            joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
+                                                                     imu_msg,
+                                                                     dt_sec)
             v_ref[-2:] = 0 # Only for wheel
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._publish_torque_command(q_ref, v_ref, tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             self.motor_io.read_write_motor(tau * 0.0)
             return
 
         # Safety Limiter
-        joint_pos = np.asarray(self.joint_state_msg.position, dtype=float).flatten()
-        joint_vel = np.asarray(self.joint_state_msg.velocity, dtype=float).flatten()
-        # safe_torque, is_blocked = self.safety_limiter.apply(raw_torque, joint_pos, joint_vel)
+        joint_pos = np.asarray(joint_state_msg.position, dtype=float).flatten()
+        joint_vel = np.asarray(joint_state_msg.velocity, dtype=float).flatten()
+        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
-        # # Block handling (latching kill switch)
-        # if is_blocked:
-        #     self._trigger_kill_switch("SafetyLimiter blocked command")
-        #     self._send_to_motors(tau)
-        #     return
+        # Block handling (latching kill switch)
+        if is_blocked:
+            self._trigger_kill_switch("SafetyLimiter blocked command")
+            self.motor_io.read_write_motor(tau)
+            return
 
         # Publish torque command
-        # tau[:] = safe_torque
-        tau[:] = raw_torque
-        ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3             # [timing] controller compute duration in ms
+        tau[:] = safe_torque
+        ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Apply action
-        t_can_start = time.perf_counter()                                        # [timing] start CAN write+read window
-        self.motor_io.read_write_motor(tau * 0.0)                               # NOTE: test for 0
-        can_io_ms = (time.perf_counter() - t_can_start) * 1e3                   # [timing] CAN write+read duration in ms
+        t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
+        self.motor_io.read_write_motor(tau)                                     
+        can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
-        self._publish_torque_command(q_ref, v_ref, tau)
+        self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        total_ms = (self.get_clock().now() - now_time).nanoseconds * 1e-6        # [timing] full _control_loop duration in ms
+        total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
         tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
         tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
-        # Step 3 sanity: per-bus reader frame counts. If these stay at 0 the
-        # reader thread is starved (bus dead, wrong arb_id, or send_only failing).
-        rx_counts = [getattr(c, "rx_frame_count", 0) for c in self.motor_io.cans]
+
+        # # Time logging
         self.logger.info(
-            f"[timing] total: {total_ms:6.2f} ms | 1/cycle: {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
+            f"[timing] total: {total_ms:6.2f} ms | {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
             f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
-            f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms "
-            f"| rx_frames: {rx_counts}\r",
-            throttle_duration_sec=0.5,
+            f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms \r",
+            throttle_duration_sec=5.0,
         )
 
-    def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
-        """Publish torque command to /commands topic."""
-        msg = JointState()
-        # Stamp with cycle-start time T0 (not publish time) so downstream consumers
-        # measure latency from the moment the agent began computing this action.
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.name = [
+    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
+        """Publish joint state, IMU, and torque commands for logging."""
+        # Interrupting handling
+        if not rclpy.ok():
+            return
+        # Update joint state message for logging
+        msg_joint = JointState()
+        msg_joint.header.stamp = self.now_stamp
+        msg_joint.header.frame_id = "base_link"
+        msg_joint.name = joint_state_msg.name
+        msg_joint.position = joint_state_msg.position
+        msg_joint.velocity = joint_state_msg.velocity
+        msg_joint.effort = joint_state_msg.effort
+        # Update IMU message for logging 
+        msg_imu = ImuState()
+        msg_imu.header.stamp = self.now_stamp
+        msg_imu.quat = imu_msg.quat
+        msg_imu.gyro = imu_msg.gyro
+        msg_imu.vel = imu_msg.vel
+        msg_imu.mag = imu_msg.mag
+        msg_imu.time_ms = imu_msg.time_ms
+
+        # Update joint command message
+        msg_command = JointState()
+        msg_command.header.stamp = self.now_stamp
+        msg_command.name = [
             'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
             'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
         ]
-        msg.position = position.tolist()
-        msg.velocity = velocity.tolist()
-        msg.effort = torque.tolist()
+        msg_command.position = position.tolist()
+        msg_command.velocity = velocity.tolist()
+        msg_command.effort = effort.tolist()
 
-        self.torque_command_publisher.publish(msg)
-
-    def _sensor_data_is_stale(self) -> tuple[bool, str]:
-        """Return (is_stale, reason) using monotonic wall-clock receive age."""
-        if self.joint_state_msg is None:
-            return True, "joint_state_msg is None"
-        if self.imu_msg is None:
-            return True, "imu_msg is None"
-        if self.last_joint_rx_time is None:
-            return True, "last_joint_rx_time is None"
-        if self.last_imu_rx_time is None:
-            return True, "last_imu_rx_time is None"
-
-        # now = self.get_clock().now()
-        joint_age = self.last_joint_rx_time - self.prev_joint_rx_time
-        imu_age = self.last_imu_rx_time - self.prev_imu_rx_time
-
-        if joint_age > self.action_timeout_sec:
-            return True, f"joint state stale: age={joint_age:.4f}s"
-        if imu_age > self.action_timeout_sec:
-            return True, f"imu stale: age={imu_age:.4f}s"
-        return False, ""
+        # Publish
+        self.joint_state_pub.publish(msg_joint)
+        self.imu_state_pub.publish(msg_imu)
+        self.torque_command_pub.publish(msg_command)
 
 
 def main(args=None):

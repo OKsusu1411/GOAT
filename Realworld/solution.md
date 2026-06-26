@@ -1,228 +1,355 @@
-# solution.md — End-to-End Action Latency Measurement
+# solution.md — Restore synchronous 200 Hz joint observation
 
 ## Conclusion
 
-**What:** Add timing instrumentation that measures the *total* time from the moment
-`controller_node` begins a control cycle (agent computes the action) until
-`motor_io_node` finishes writing that action onto the CAN bus.
+The three symptoms (position ≠ 0° after calibration, huge CMD_POS / CMD_TAU,
+±1080° spikes at certain joint positions) all come from the same regression
+introduced by `5a6db0c freq amplify`: the control hot-path was switched from
+**synchronous TX/RX per tick** to **fire-and-forget TX + cached "latest
+frame" RX**.
 
-**Why:** Before sim2real we need to know the real actuation latency of the pipeline.
-The policy assumes a fixed 200 Hz (5 ms) loop, but the pipeline crosses two ROS2
-processes (`controller_node` → `/commands` → `motor_io_node` → CAN). Currently only
-the CAN write time (`dt_command`) is printed in `motor_io_node.py:218`; the agent
-compute time and the cross-process transport time are not measured. We need both.
+A 200 Hz feedback controller with single-turn → multi-turn encoder
+integration depends on a **constant Δt between successive observations**.
+The cache violates that invariant — tick-to-tick staleness is variable —
+which means:
 
-**Result of this change — two numbers get logged:**
-1. `controller_internal` (in `controller_node.py`) — time spent inside the controller
-   process: agent inference + safety limiter.
-2. `e2e` end-to-end latency (in `motor_io_node.py`) — agent start → CAN write done,
-   reported as rolling mean / min / max / std plus an effective rate `1/mean`.
+- the wrap detector cannot tell "real wrap" from "stale cache catching up"
+  (root cause of the ±1080° spikes),
+- the very first hot-path tick differences a cached 0xA1 reply against an
+  init 0x9C count taken ~ms earlier on a different command (root cause of
+  "position ≠ 0° after calibration"),
+- a momentarily stalled reader thread leaves velocity and position frozen
+  for several ticks — unsafe for a balance controller.
+
+The right fix is **not** the speed-aware wrap detector + 1 Hz re-anchor I
+previously proposed in `solution.md` — those were band-aids. The right fix
+is to put the hot path back on synchronous TX/RX (1 ms typical, 2 ms
+worst-case on 1 Mbps CAN), while keeping the parts of `freq amplify` that
+were actually right (move 0x9A error-flag poll off the hot path, reuse a
+persistent thread pool, keep both buses busy in parallel).
+
+We change one design choice: replace the "latest frame" cache with **per-key
+`threading.Event` dispatch**, so the hot path can fire all 8 0xA1 commands,
+then wait for *this tick's* 8 replies with a tight shared deadline. Each
+reply is consumed exactly once. Staleness is impossible by construction.
 
 ---
 
 ## Logic
 
-### How to share a clock across two processes
+### What `freq amplify` got right vs. what it broke
 
-`controller_node` and `motor_io_node` are **separate processes**, so `time.monotonic()`
-(used today for `dt_sec` and `dt_command`) is *not* comparable between them — each
-process has its own monotonic origin.
+`5a6db0c` made three changes; the first two are correct and we keep them.
 
-The ROS clock (`self.get_clock().now()`) returns system wall-clock time. Both nodes
-run with `use_sim_time = False` (explicit in `controller_node.py:46-52`, default in
-`motor_io_node`), so their ROS clocks share the same epoch and **are** comparable.
+| Change in `freq amplify`                              | Verdict       |
+|--------------------------------------------------------|---------------|
+| Move 0x9A (error-flag) poll off the hot path → 1 Hz timer | ✅ keep       |
+| Reuse persistent `_io_pool` instead of spawning threads/tick | ✅ keep       |
+| Replace blocking `txrx()` with `send_only()` + cached `latest_state2()` | ❌ revert     |
 
-The `JointState` message on `/commands` already carries a `header.stamp` field. We use
-it as the carrier for the shared timestamp `T0`.
+The third change is the cause of all three reported symptoms. We undo only
+that one, and only on the hot path.
 
-### Definition of T0 and T1
+### Bandwidth budget confirms sync is feasible
 
-- **T0** = start of the controller cycle, captured at the top of
-  `controller_node._control_loop()`. This is the moment "the agent calculates the
-  action". We stamp the outgoing `/commands` message header with **T0** instead of the
-  current publish-time stamp.
-- **T1** = the instant `motor_io_node._tick()` finishes the CAN write
-  (`write_torques_and_read_states` returns) — i.e. the action is on the bus.
+On 1 Mbps CAN with standard 8-byte frames:
 
-`e2e_latency = T1 - T0` covers:
-agent inference + safety limiter + `/commands` publish + DDS transport +
-wait for the next `motor_io_node` tick + torque clip/LPF/convert + CAN read+write.
+- One frame on the wire = ~111 µs
+- TX(0xA1) + RX(reply) per motor = ~222 µs
+- 4 motors on one bus, serialized = ~0.9 ms
+- Two buses in parallel (separate SocketCAN sockets / kernel rings) = **~0.9 ms total per tick**
 
-### Why the latency includes a "tick wait"
+A 200 Hz control tick has 5 ms of budget. CAN consumes <1 ms typical, <2 ms
+worst case (with one motor briefly silent). Margin is comfortable. The OLD
+code (pre-`freq amplify`) was already achieving this — its only real
+problem was the periodic 4-5 ms spike from running 0x9A every 10th tick,
+and that fix is independently preserved.
 
-`motor_io_node` writes CAN inside its own 200 Hz timer (`_tick`), **not** inside the
-`_on_command` subscription callback. So a freshly received command waits up to one
-`motor_io` period before it is sent. That wait is real actuation delay, so it is
-correctly included in `e2e_latency`. (If you later want the pure pipeline cost without
-this async wait, the alternative is to write CAN directly inside `_on_command` — that
-is an architecture change, out of scope here.)
+### Why per-key `Event` dispatch beats "latest frame" cache
 
-### Frequency vs. latency
+The reader thread is already draining the bus into a dict
+(`latest_rx_frames_by_key`). The problem is not the reader thread — it's
+that the hot path *reads from* a "give me whatever you have right now"
+cache. We want "give me **this tick's** reply, or `None` after deadline."
 
-The user asked for "frequency", but the meaningful quantity for a pipeline is
-**latency** (how long one action takes to reach the bus). We report:
-- `e2e` latency stats (mean/min/max/std) — the primary metric.
-- `eff_rate = 1 / mean(e2e_latency)` — a convenience figure.
-- The actual *throughput* frequency (how often a new command lands on CAN) is still
-  the `/commands` publish rate / `motor_io` tick rate, measurable independently with
-  `ros2 topic hz /commands`. Latency ≠ 1/throughput because the pipeline is deeper
-  than one stage.
+Add a parallel dict of `threading.Event` keyed the same way
+`((arb_id, cmd_byte))`. The reader thread, when it caches a frame, also
+**sets** the corresponding event. Hot-path callers **clear** the events
+they care about before sending the request, then **wait** on them.
 
-### Statistics buffering
+Properties this gives us, by construction:
 
-`motor_io_node` collects each tick's `e2e_latency` into a list and, every 200 samples
-(~1 s at the 200 Hz target), prints aggregate stats and clears the buffer. This avoids
-flooding the console at 200 Hz while still giving live numbers.
+- Reply consumed exactly once: cleared → set → consumed → cleared next tick.
+- Tick-bounded latency: per-tick deadline of ~3 ms total RX wait, shared
+  across all 8 motors. Pipeline keeps both buses busy.
+- Failsafe on motor silence: deadline elapses → driver returns `None` →
+  we inject `NaN` into the joint state slot → existing
+  `controller_node._sensor_data_has_nan()` kill switch fires.
+- The reader thread keeps its role as the sole `bus.recv()` owner —
+  unchanged for the 1 Hz 0x9A slow-poll, which is already happy with the
+  cache (1-second staleness is fine for safety telemetry).
+
+### Why this kills all three symptoms
+
+| Symptom | How sync fixes it |
+|---|---|
+| **(3) ±1080° spikes** | Δt between successive observations is back to a constant 5 ms. Max realistic motor speed (≈10 rev/s) produces ≤820 counts/tick, well under the 8192 half-range threshold. The original wrap detector works as written; no speed-aware logic needed. |
+| **(1) Position ≠ 0° after calibration** | The init multi-turn anchor (0x92) and the first hot-path encoder count (0xA1) are now both fresh, deterministic reads on a stationary robot. With Change 4 below pairing 0x92 ↔ 0x9C tightly at init, the first tick produces `delta_count = 0` exactly and `motor_angle_deg == anchor_angle_deg` exactly. After rebuild + restart, the same anchor reproduces, so `joint_state.position == joint_offsets`, so published position = 0. |
+| **(2) Huge CMD_POS / CMD_TAU** | Was a downstream consequence of (3) and (1). With clean position, `NominalController` builds `q_ref_traj` from a clean start. |
+
+### What we delete from the prior solution.md
+
+All three patches from the previous version become unnecessary and are
+removed: the speed-aware wrap detector, the 1 Hz 0x92 re-anchor, and the
+"skip first delta" hack. They were treating symptoms of the broken
+invariant; the invariant is now restored at the source.
+
+### One trade-off worth naming
+
+Sync means the slowest motor sets the tick deadline. If one motor is
+intermittently silent (cable, EMI, brownout), the tick blocks until its
+per-motor deadline elapses (~2 ms). At a 5 ms tick budget this is fine —
+and the OLD code already had this property. The cache approach traded
+correctness for jitter immunity to a single slow motor; for a balance
+controller that was the wrong trade.
 
 ---
 
 ## Code
 
-All line numbers refer to the files **before** editing.
+### Change 1 — Add per-key event dispatch to `CanInterface`
 
-### Change 1 — `controller_node.py`: capture T0 at cycle start
+**File:** `src/goat_control/goat_control/utils/motor/can.py`
 
-File: `src/goat_control/goat_control/nodes/controller_node.py`
-
-**1a. Initialize the stamp field in `__init__`** (insert after `self.last_tick_time = time.monotonic()` at line 126):
-
-```python
-        # Timing
-        self.last_tick_time = time.monotonic()
-
-        # ROS-clock timestamp marking the start of the current control cycle (T0).
-        # Carried in the /commands header so motor_io_node can measure end-to-end latency.
-        self._cycle_start_stamp = self.get_clock().now()
-```
-
-**1b. Set T0 at the top of `_control_loop`** (insert inside `_control_loop`, right after `self.last_tick_time = now_time` at line 303):
+**1a.** Add an events dict next to the existing frame cache (in `__init__`,
+right after `self._rx_first_keys_seen` declaration at can.py:58):
 
 ```python
-        self.last_tick_time = now_time
-
-        # T0: start of this control cycle (moment the agent begins computing).
-        # ROS clock is used because it is comparable across processes.
-        self._cycle_start_stamp = self.get_clock().now()
+# Per-key arrival events for synchronous hot-path dispatch. Hot-path
+# callers clear the event before sending a request, then wait on it for
+# THIS tick's reply. The reader thread sets the event when a frame for
+# that key is cached. Decouples the hot path from the slow-poll path
+# which still uses the cache directly.
+self.frame_events: dict[tuple[int, int], threading.Event] = {}
+self._events_lock = threading.Lock()
 ```
 
-**1c. Log the controller-internal time** (insert in `_control_loop` right after `tau[:] = safe_torque` at line 361, before `self._publish_torque_command(...)`):
+**1b.** Add an `event_for_key` helper after `get_latest_frame`
+(can.py:150):
 
 ```python
-        # Publish torque command
-        tau[:] = safe_torque
-
-        # Time spent inside controller_node this cycle: agent inference + safety limiter.
-        controller_internal_sec = (self.get_clock().now() - self._cycle_start_stamp).nanoseconds * 1e-9
-        self.logger.info(
-            f"[timing] controller_internal: {controller_internal_sec * 1e3:.3f} ms\r",
-            throttle_duration_sec=1.0,
-        )
-
-        self._publish_torque_command(q_ref, v_ref, tau)
+def event_for_key(self, arbitration_id: int, cmd_byte: int) -> threading.Event:
+    """Return (creating if needed) the arrival Event for one reply key.
+    Lazily allocated so we only carry events for keys the hot path uses."""
+    key = (arbitration_id, cmd_byte)
+    with self._events_lock:
+        ev = self.frame_events.get(key)
+        if ev is None:
+            ev = threading.Event()
+            self.frame_events[key] = ev
+        return ev
 ```
 
-**1d. Stamp the outgoing message with T0 instead of publish-time** — in `_publish_torque_command`, replace line 370:
+**1c.** Make the reader thread set the event whenever it caches a frame.
+**Modify** the body of `_rx_loop` (can.py:119-145), replacing the cache
+write section:
 
 ```python
-    def _publish_torque_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
-        """Publish torque command to /commands topic."""
-        msg = JointState()
-        # Stamp with cycle-start time T0 (not publish time) so motor_io_node measures
-        # latency from the moment the agent began computing this action.
-        msg.header.stamp = self._cycle_start_stamp.to_msg()
+key = (msg.arbitration_id, msg.data[0])
+with self._rx_lock:
+    self.latest_rx_frames_by_key[key] = msg
+    self.rx_frame_count += 1
+# Wake any hot-path waiter on this exact key. Cheap no-op if no waiter
+# was ever registered for this key.
+ev = self.frame_events.get(key)
+if ev is not None:
+    ev.set()
 ```
 
-> Note: every `_publish_torque_command` call path (idle / kill-switch / stale / normal)
-> already runs after step 1b sets `self._cycle_start_stamp`, so the stamp is always
-> valid for the current cycle.
+### Change 2 — Add a synchronous `await_state2` to `MotorDriver`
 
-### Change 2 — `motor_io_node.py`: measure T1 and report e2e latency
-
-File: `src/goat_control/goat_control/nodes/motor_io_node.py`
-
-**2a. Import the ROS `Time` helper** (add near the top imports, after line 8 `import rclpy`):
+**File:** `src/goat_control/goat_control/utils/motor/motor_driver.py`
+**Insert after motor_driver.py:112** (alongside the existing
+`latest_state2`). Keep `send_torque_only` and `latest_state2` — the
+manager will compose them into a single sync call.
 
 ```python
-import rclpy
-from rclpy.node import Node
-from rclpy.time import Time          # for reconstructing a ROS time from a header stamp
+def clear_state2_event(self) -> None:
+    """Arm this motor for a fresh 0xA1 reply.
+
+    Must be called BEFORE send_torque_only() each tick so the subsequent
+    wait blocks until THIS tick's reply lands (not the previous one's)."""
+    self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1).clear()
+    self.can_interface.event_for_key(self.can_ids.tx_id, 0xA1).clear()
+
+def await_state2(self, deadline_monotonic: float):
+    """Block until a fresh 0xA1 reply arrives for this motor, or the
+    shared deadline elapses. Returns the can.Message or None on timeout.
+
+    `deadline_monotonic` is an absolute time.monotonic() value shared by
+    all 8 motors this tick — keeps total RX wait bounded regardless of
+    motor count."""
+    import time
+    rx_ev = self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1)
+    remaining = max(0.0, deadline_monotonic - time.monotonic())
+    if rx_ev.wait(remaining):
+        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
+        if msg is not None:
+            return msg
+    # rx_id timed out — try tx_id fallback (mirrors txrx's accept_tx_echo_diff).
+    return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1)
 ```
 
-**2b. Add state buffers in `__init__`** (replace lines 140-142):
+### Change 3 — Rewrite `write_torques_and_read_states` as sync pipeline
+
+**File:** `src/goat_control/goat_control/utils/motor/motor_manager.py`
+**Lines:** 566-618 (replace the entire method body)
 
 ```python
-        # Latest command buffer
-        self._latest_torque_cmd: Optional[np.ndarray] = None
-        self._latest_torque_cmd_time_sec: float = 0.0
+def write_torques_and_read_states(
+    self,
+    current_cmd_amp: Sequence[float],
+    timeout: float = 0.003,         # total RX deadline shared across all 8 motors
+    perform_slow_poll: bool = False,  # kept for API compatibility; ignored
+) -> MotorStatesData:
+    """Synchronous fire-all-then-wait-all torque + state2 pass.
 
-        # Header stamp (T0) of the latest /commands message — controller cycle start.
-        self._latest_torque_cmd_stamp = None
-        # Rolling buffer of end-to-end latencies [sec], flushed as stats every N ticks.
-        self._e2e_latency_buf: list[float] = []
+    Phase 1 — clear each motor's 0xA1 reply event, then send its torque
+              command. TXs are non-blocking (kernel ring); both buses run
+              in parallel by virtue of separate CanInterface instances.
+    Phase 2 — for each motor, wait on its arrival event until the shared
+              deadline. On timeout, inject NaN so the kill switch fires
+              instead of letting stale data drive the controller.
+
+    Δt between successive ticks is now constant (the control timer period),
+    so the encoder wrap detector in _update_motor_angle_from_encoder works
+    as originally designed without any speed-sign disambiguation.
+    """
+    # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
+    # kernel TX ring without blocking on the wire.
+    t_submit = time.perf_counter()                                       # [timing]
+    for motor_index, amp in enumerate(current_cmd_amp):
+        driver = self.motor_drivers[motor_index]
+        driver.clear_state2_event()
+        driver.send_torque_only(float(amp))
+    t_fired = time.perf_counter()                                        # [timing]
+
+    # Phase 2 — bounded wait, one shared deadline so total RX time is
+    # bounded by `timeout` rather than 8 × per-motor timeout.
+    deadline_monotonic = time.monotonic() + float(timeout)
+    for motor_index in range(self.motor_count):
+        driver = self.motor_drivers[motor_index]
+        response_message = driver.await_state2(deadline_monotonic)
+        if response_message is None:
+            # Motor silent this tick. Mark its slot NaN so
+            # controller_node._sensor_data_has_nan() trips the kill switch
+            # — far safer than re-using stale state for a balance loop.
+            self.motor_speed_deg_per_sec[motor_index] = float("nan")
+            self.motor_phase_current_amp[motor_index] = float("nan")
+            continue
+
+        response_data = response_message.data
+
+        # 0xA1 reply has the same byte layout as 0x9C state2.
+        self.motor_temperature_c[motor_index] = float(struct.unpack("<b", response_data[1:2])[0])
+
+        motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
+        self.motor_phase_current_amp[motor_index] = float(motor_current_raw_lsb) * self.motor_current_amp_per_lsb
+
+        speed_raw_lsb = struct.unpack("<h", response_data[4:6])[0]
+        self.motor_speed_deg_per_sec[motor_index] = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
+
+        self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
+
+        self._update_motor_angle_from_encoder(motor_index)
+    t_done = time.perf_counter()                                         # [timing]
+
+    # Surface timings (read by controller_node timing log).
+    self._last_tx_submit_ms = (t_fired - t_submit) * 1e3
+    self._last_tx_wait_ms = (t_done - t_fired) * 1e3
+
+    return self._package_motor_states()
 ```
 
-**2c. Capture T0 from the incoming message** in `_on_command` (insert after line 167-168):
+### Change 4 — Tighten anchor pairing at init
+
+**File:** `src/goat_control/goat_control/utils/motor/motor_manager.py`
+
+The init `fetch_motor_data` currently reads in order: state2 → state1 →
+multi-turn. The anchor then pairs encoder_count (from state2, oldest) with
+motor_angle_deg (from multi-turn, newest), with ~ms between them. Reverse
+the order so multi-turn and state2 are adjacent.
+
+**Replace motor_manager.py:541-545** (`fetch_motor_data` body in
+`decode_motor_encoder`):
 
 ```python
-        self._latest_torque_cmd = torque
-        self._latest_torque_cmd_time_sec = time.time()
-        # Keep the controller's cycle-start stamp (T0) for end-to-end latency.
-        self._latest_torque_cmd_stamp = msg.header.stamp
+def fetch_motor_data(motor_index: int):
+    if perform_slow_poll:
+        self.poll_state1(motor_index)                # 0x9A (oldest, doesn't feed anchor)
+        self.poll_single_or_multi_turn(motor_index)  # 0x92 (feeds anchor_motor_angle_deg)
+    self.poll_state2(motor_index)                    # 0x9C (feeds anchor_encoder_count) — last so it pairs tightly with 0x92
 ```
 
-**2d. Measure T1 and log stats** in `_tick`, right after `t2_command = time.monotonic()` (line 204) and the existing `dt_command` block:
+Now `anchor_motor_angle_deg` and `anchor_encoder_count` are captured ~200 µs
+apart on the same bus, instead of ~1-3 ms. On a held-still robot the
+remaining mismatch is sub-count; the very first hot-path tick produces
+`delta_count = 0` exactly, and the published joint position is `−joint_offset`
+exactly, which (after calibration writes that same value as the offset) is
+zero.
+
+### Change 5 — Revert the band-aids from the previous solution.md
+
+If any of Changes 1/2/3 from the prior version of this file were already
+applied, undo them now — they are no longer needed and add cost without
+benefit once the sync invariant is restored.
+
+Specifically remove, from
+`src/goat_control/goat_control/utils/motor/motor_manager.py`:
+
+- the speed-sign branches inside `_update_motor_angle_from_encoder` (return
+  to the original `|delta_count| > half_range` form),
+- `reanchor_from_multi_turn()`,
+- `motor_first_encoder_update_skipped` and the "skip first delta" block.
+
+And from `src/goat_control/goat_control/utils/motor/motor_driver.py`:
+
+- `send_multi_turn_request()` and `latest_multi_turn()` (no caller).
+
+And in `src/goat_control/goat_control/nodes/motor_io.py`,
+`poll_error_flags_once()` returns to its pre-band-aid body:
 
 ```python
-        t2_command = time.monotonic()
-
-        # ... existing JointState publish code stays here ...
-
-        dt_command = t2_command - t1_command
-        print(f"dt_command : {dt_command:.4f}")   # CAN read+write portion only
-
-        # --- End-to-end latency: T0 (agent start) -> T1 (CAN write done) ---
-        if self._latest_torque_cmd_stamp is not None:
-            # T1 now, T0 from the carried header stamp; ROS clock is cross-process safe.
-            cmd_stamp = Time.from_msg(self._latest_torque_cmd_stamp)
-            e2e_latency_sec = (self.get_clock().now() - cmd_stamp).nanoseconds * 1e-9
-            self._e2e_latency_buf.append(e2e_latency_sec)
-
-            # Flush rolling stats once per ~200 ticks (~1 s at the 200 Hz target).
-            if len(self._e2e_latency_buf) >= 200:
-                latency_arr = np.asarray(self._e2e_latency_buf)
-                self.get_logger().info(
-                    f"[timing] e2e  mean={latency_arr.mean() * 1e3:.3f}ms "
-                    f"min={latency_arr.min() * 1e3:.3f}ms "
-                    f"max={latency_arr.max() * 1e3:.3f}ms "
-                    f"std={latency_arr.std() * 1e3:.3f}ms "
-                    f"eff_rate={1.0 / latency_arr.mean():.1f}Hz"
-                )
-                self._e2e_latency_buf.clear()
+def poll_error_flags_once(self) -> None:
+    """Read 0x9A error flags on every motor — call from a ~1 Hz timer.
+    After Step 3 poll_state1 is fire-and-forget; no need for the thread
+    pool. Sequential send_only is essentially free (<1 ms total)."""
+    mm = self.motor_manager
+    for motor_index in range(mm.motor_count):
+        mm.poll_state1(motor_index)
 ```
 
-> Place this block *after* the `js` JointState publish so the measurement does not
-> delay the state publication. `dt_command` (CAN-only) and `e2e` (full pipeline) are
-> complementary: `e2e - dt_command` ≈ transport + tick-wait + torque processing.
+(The 1 Hz `error_flag_timer` in `controller_node.py:174` stays as-is.)
 
-### How to run and read the result
+---
 
-1. Rebuild: `colcon build --packages-select goat_control && source install/setup.bash`
-2. Launch as usual: `ros2 launch goat_control goat_control_system.launch.py`
-3. In the `controller_node` terminal, press `p` or `n` to enter a control mode
-   (no `/commands` are published while idle, so no timing prints until then).
-4. Read the logs:
-   - `controller_node` terminal → `[timing] controller_internal: X.XXX ms` (once/sec)
-   - `motor_io_node` terminal → `[timing] e2e mean=... eff_rate=...Hz` (once/sec)
-5. Optional cross-check of throughput frequency:
-   `ros2 topic hz /commands`
+## Verification
 
-### Interpretation checklist for sim2real
+1. `colcon build` and `ros2 launch goat_control goat_control_system.launch.py`.
+2. Watch the existing `[timing]` line. Expect `can:` to read **~1.0-1.5 ms**
+   (tx ~0.2 / rx ~0.8-1.3) at 200 Hz. If it goes >3 ms consistently, one
+   bus is dropping replies — investigate motor health, not the code.
+3. Hold the robot in the calibration pose. `ros2 topic echo /joint_states`:
+   every `position` value should print within ±0.01 rad of 0 immediately.
+4. Power-cycle the robot, repeat step 3 without re-calibrating. Position
+   should still be near 0 (proves the anchor reproduces deterministically).
+5. Rotate one leg joint by hand through ≥360° motor at a normal pace.
+   Position should track smoothly. No ±360° / ±1080° steps anywhere on
+   the trajectory.
+6. Spin a wheel by hand for ≥5 s — position should accumulate monotonically.
+7. Pull a CAN cable on one motor mid-run. Expect: within ~2-3 ms,
+   `_sensor_data_has_nan()` trips the kill switch, controller goes to
+   zero torque, log prints "NaN detected in joint/IMU state". Reconnect,
+   press `r` for manual reset, control resumes cleanly.
 
-- `controller_internal` should be well under 5 ms; if not, the agent inference or
-  safety limiter is the bottleneck.
-- `e2e mean` is the real actuation delay the trained policy is *not* aware of.
-  Compare it against the sim control period (5 ms). A large gap (e.g. e2e ≈ 8-12 ms)
-  is a genuine sim-to-real discrepancy to compensate or retrain against.
-- `e2e - controller_internal - dt_command` isolates DDS transport + the
-  `motor_io` tick-wait; if this dominates, consider writing CAN directly in
-  `_on_command` instead of the timer `_tick`.
+Tell me when you've reviewed this and I'll apply Changes 1–5 in order.

@@ -79,7 +79,7 @@ class MotorIO:
         # otherwise lose responses to the background reader.
         self.latest_joint_state: JointState = self._read_initial_state()
 
-        # Step 3: switch every bus into background-reader mode. From here on
+        # Switch every bus into background-reader mode. From here on
         # the hot path uses send_only() + get_latest_frame() — no more
         # per-motor recv() blocking the control loop.
         for can_interface in self.cans:
@@ -138,5 +138,6 @@ class MotorIO:
         for can_interface in getattr(self, "cans", []):
             try:
                 can_interface.close()
+                print("[Motor] CAN interface closed successfully.")
             except Exception:
-                pass
+                print("[Motor] Error closing CAN interface")

@@ -99,6 +99,7 @@ class SafetyLimiter:
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
             self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
+            # self._is_blocked = self._check_joint_vel_estop(joint_vel)
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
@@ -113,22 +114,20 @@ class SafetyLimiter:
 
     def _check_joint_pos(self, pos: np.ndarray) -> bool:
         """Return True if any joint position is outside its allowed range."""
-        motor_pos = pos / self.motor_gear_ratio
-        result = bool(np.any(motor_pos < self._pos_lower) or np.any(motor_pos > self._pos_upper))
+        joint_pos = pos
+        result = bool(np.any(joint_pos < self._pos_lower) or np.any(joint_pos > self._pos_upper))
         if result:
-            self.logger.info("[SafetyLimiter] Joint pos stop.\r")
-            self.logger.info(f"Limiter Results: {np.logical_or((motor_pos < self._pos_lower), (motor_pos > self._pos_upper).tolist())}\r")
-            self.logger.info(f"Joint pos : {motor_pos.tolist()}\r")
+            self.logger.info("[SafetyLimiter] Position limiter activation.\r")
+            self.logger.info(f"Limiter Results: {np.logical_or((joint_pos < self._pos_lower), (joint_pos > self._pos_upper).tolist())}\r")
+            self.logger.info(f"Joint pos : {joint_pos.tolist()}\r")
         return result
 
     def _check_joint_vel_estop(self, vel: np.ndarray) -> bool:
         """Return True if any estop joint exceeds the velocity threshold."""
-        if self._estop_indices.size == 0:
-            return False
-        motor_vel = vel / self.motor_gear_ratio
-        result = bool(np.any(np.abs(motor_vel[self._estop_indices]) > self._estop_threshold))
+        joint_vel = vel
+        result = bool(np.any(np.abs(joint_vel[self._estop_indices]) > self._estop_threshold))
         if result:
-            self.logger.info("[SafetyLimiter] Joint vel stop.\r")
-            self.logger.info(f"Limiter Results: {np.abs(motor_vel[self._estop_indices]) > self._estop_threshold}.\r")
-            self.logger.info(f"Joint vel: {motor_vel[self._estop_indices].tolist()}.\r")
+            self.logger.info("[SafetyLimiter] Velocity limiter activation.\r")
+            self.logger.info(f"Limiter Results: {np.abs(joint_vel[self._estop_indices]) > self._estop_threshold}.\r")
+            self.logger.info(f"Joint vel: {joint_vel[self._estop_indices].tolist()}.\r")
         return result

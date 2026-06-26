@@ -172,160 +172,160 @@ def payload_torque_mode_from_amp(current_amp: float) -> bytes:
     return b"\x00\x00\x00" + packed_current_lsb_bytes + b"\x00\x00"
 
 
-# -----------------------
-# Additional command payload builders (not used yet)
-# NOTE: payload7 corresponds to DATA[1]..DATA[7]
-# Full CAN data = [command_byte] + payload7  (8 bytes)
-# -----------------------
-def payload_all_zeros_7bytes() -> bytes:
-    """Return 7 bytes of zeros (DATA[1..7])."""
-    return E7
-
-
-def payload_open_loop_power_control(power_control_int16: int) -> bytes:
-    """
-    Command 0xA0 (open-loop):
-      DATA[4..5] = int16 powerControl
-      others = 0
-    payload7 = DATA[1..7] = 00 00 00 + power(2B) + 00 00
-    """
-    if power_control_int16 < -850:
-        power_control_int16 = -850
-    if power_control_int16 > 850:
-        power_control_int16 = 850
-
-    power_control_bytes = pack_int16_little_endian_signed(power_control_int16)
-    payload7_bytes = b"\x00\x00\x00" + power_control_bytes + b"\x00\x00"
-    return payload7_bytes
-
-
-def payload_speed_closed_loop(iq_limit_amps: float, target_speed_deg_per_sec: float) -> bytes:
-    """
-    Command 0xA2 (speed closed-loop):
-      DATA[2..3] = int16 iqControl (same LSB encoding as A1 iq)
-      DATA[4..7] = int32 speedControl (scaled by YAML: speed_deg_per_sec_per_lsb)
-
-    payload7 = DATA[1..7] = [DATA1] + [DATA2..3] + [DATA4..7]
-             = 00 + iq(2B) + speed(4B)
-    """
-    motor_current_lsb_bytes = pack_iq_from_amp(iq_limit_amps)
-
-    target_speed_lsb_int = speed_deg_per_sec_to_lsb(target_speed_deg_per_sec)
-    target_speed_lsb_bytes = pack_int32_little_endian_signed(target_speed_lsb_int)
-
-    payload7_bytes = b"\x00" + motor_current_lsb_bytes + target_speed_lsb_bytes
-    return payload7_bytes
-
-
-def payload_position_multi_turn_mode1(target_angle_deg: float) -> bytes:
-    """
-    Command 0xA3 (multi-turn position closed-loop #1):
-      DATA[4..7] = int32 angleControl (scaled by YAML: angle_deg_per_lsb)
-
-    payload7 = 00 00 00 + angle(4B)
-    """
-    target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
-    target_angle_lsb_bytes = pack_int32_little_endian_signed(target_angle_lsb_int)
-
-    payload7_bytes = b"\x00\x00\x00" + target_angle_lsb_bytes
-    return payload7_bytes
-
-
-def payload_position_multi_turn_mode2(max_speed_dps_uint16: int, target_angle_deg: float) -> bytes:
-    """
-    Command 0xA4 (multi-turn position closed-loop #2):
-      DATA[2..3] = uint16 maxSpeed (1 dps/LSB per your table examples)
-      DATA[4..7] = int32 angleControl (scaled by YAML: angle_deg_per_lsb)
-
-    payload7 = [DATA1]=00 + [DATA2..3]=maxSpeed(2B) + [DATA4..7]=angle(4B)
-    """
-    max_speed_bytes = pack_uint16_little_endian(max_speed_dps_uint16)
-
-    target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
-    target_angle_bytes = pack_int32_little_endian_signed(target_angle_lsb_int)
-
-    payload7_bytes = b"\x00" + max_speed_bytes + target_angle_bytes
-    return payload7_bytes
-
-
-def payload_position_single_turn_mode1(spin_direction_uint8: int, target_angle_deg: float) -> bytes:
-    """
-    Command 0xA5 (single-turn position #1):
-      DATA[1]   = uint8 spinDirection (0:CW, 1:CCW)
-      DATA[4..7]= uint32 angleControl (scaled by YAML: angle_deg_per_lsb)
-
-    payload7 = [DATA1]=spinDir + [DATA2..3]=00 00 + [DATA4..7]=angle(4B)
-    """
-    spin_direction_byte = bytes([int(spin_direction_uint8) & 0xFF])
-
-    # single-turn is usually non-negative; keep it non-negative for uint32
-    if float(target_angle_deg) < 0.0:
-        target_angle_deg = 0.0
-
-    target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
-    target_angle_lsb_uint32_bytes = pack_uint32_little_endian(target_angle_lsb_int)
-
-    payload7_bytes = spin_direction_byte + b"\x00\x00" + target_angle_lsb_uint32_bytes
-    return payload7_bytes
-
-
-def payload_position_single_turn_mode2(
-    spin_direction_uint8: int,
-    max_speed_dps_uint16: int,
-    target_angle_deg: float
-) -> bytes:
-    """
-    Command 0xA6 (single-turn position #2):
-      DATA[1]   = uint8  spinDirection (0:CW, 1:CCW)
-      DATA[2..3]= uint16 maxSpeed (1 dps/LSB)
-      DATA[4..7]= uint32 angleControl (scaled by YAML: angle_deg_per_lsb)
-    """
-    spin_direction_byte = bytes([int(spin_direction_uint8) & 0xFF])
-    max_speed_bytes = pack_uint16_little_endian(max_speed_dps_uint16)
-
-    if float(target_angle_deg) < 0.0:
-        target_angle_deg = 0.0
-
-    target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
-    target_angle_lsb_uint32_bytes = pack_uint32_little_endian(target_angle_lsb_int)
-
-    payload7_bytes = spin_direction_byte + max_speed_bytes + target_angle_lsb_uint32_bytes
-    return payload7_bytes
-
-
-def payload_increment_position_mode1(delta_angle_deg: float) -> bytes:
-    """
-    Command 0xA7 (incremental position #1):
-      DATA[4..7] = int32 angleIncrement (scaled by YAML: angle_deg_per_lsb)
-    """
-    delta_angle_lsb_int = angle_deg_to_lsb(delta_angle_deg)
-    delta_angle_bytes = pack_int32_little_endian_signed(delta_angle_lsb_int)
-
-    payload7_bytes = b"\x00\x00\x00" + delta_angle_bytes
-    return payload7_bytes
-
-
-def payload_increment_position_mode2(max_speed_dps_uint16: int, delta_angle_deg: float) -> bytes:
-    """
-    Command 0xA8 (incremental position #2):
-      DATA[2..3] = uint16 maxSpeed (1 dps/LSB)
-      DATA[4..7] = int32 angleIncrement (scaled by YAML: angle_deg_per_lsb)
-    """
-    max_speed_bytes = pack_uint16_little_endian(max_speed_dps_uint16)
-
-    delta_angle_lsb_int = angle_deg_to_lsb(delta_angle_deg)
-    delta_angle_bytes = pack_int32_little_endian_signed(delta_angle_lsb_int)
-
-    payload7_bytes = b"\x00" + max_speed_bytes + delta_angle_bytes
-    return payload7_bytes
-
-
-def payload_write_int32_into_data4_to_data7(value_int32: int) -> bytes:
-    """
-    For commands like 0x34(accel) / 0x38(max torque) examples:
-      DATA[4..7] = int32 value
-    payload7 = 00 00 00 + int32(4B)
-    """
-    value_bytes = pack_int32_little_endian_signed(value_int32)
-    payload7_bytes = b"\x00\x00\x00" + value_bytes
-    return payload7_bytes
+# ============================================================================
+# [DEPRECATED] Additional command payload builders (not used yet). The MG-
+# series command bodies below are wired up to MotorDriver methods that are
+# themselves deprecated; nothing in the live control path constructs them.
+# ============================================================================
+# [DEPRECATED] def payload_all_zeros_7bytes() -> bytes:
+# [DEPRECATED]     """Return 7 bytes of zeros (DATA[1..7])."""
+# [DEPRECATED]     return E7
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_open_loop_power_control(power_control_int16: int) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA0 (open-loop):
+# [DEPRECATED]       DATA[4..5] = int16 powerControl
+# [DEPRECATED]       others = 0
+# [DEPRECATED]     payload7 = DATA[1..7] = 00 00 00 + power(2B) + 00 00
+# [DEPRECATED]     """
+# [DEPRECATED]     if power_control_int16 < -850:
+# [DEPRECATED]         power_control_int16 = -850
+# [DEPRECATED]     if power_control_int16 > 850:
+# [DEPRECATED]         power_control_int16 = 850
+# [DEPRECATED] 
+# [DEPRECATED]     power_control_bytes = pack_int16_little_endian_signed(power_control_int16)
+# [DEPRECATED]     payload7_bytes = b"\x00\x00\x00" + power_control_bytes + b"\x00\x00"
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_speed_closed_loop(iq_limit_amps: float, target_speed_deg_per_sec: float) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA2 (speed closed-loop):
+# [DEPRECATED]       DATA[2..3] = int16 iqControl (same LSB encoding as A1 iq)
+# [DEPRECATED]       DATA[4..7] = int32 speedControl (scaled by YAML: speed_deg_per_sec_per_lsb)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7 = DATA[1..7] = [DATA1] + [DATA2..3] + [DATA4..7]
+# [DEPRECATED]              = 00 + iq(2B) + speed(4B)
+# [DEPRECATED]     """
+# [DEPRECATED]     motor_current_lsb_bytes = pack_iq_from_amp(iq_limit_amps)
+# [DEPRECATED] 
+# [DEPRECATED]     target_speed_lsb_int = speed_deg_per_sec_to_lsb(target_speed_deg_per_sec)
+# [DEPRECATED]     target_speed_lsb_bytes = pack_int32_little_endian_signed(target_speed_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = b"\x00" + motor_current_lsb_bytes + target_speed_lsb_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_position_multi_turn_mode1(target_angle_deg: float) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA3 (multi-turn position closed-loop #1):
+# [DEPRECATED]       DATA[4..7] = int32 angleControl (scaled by YAML: angle_deg_per_lsb)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7 = 00 00 00 + angle(4B)
+# [DEPRECATED]     """
+# [DEPRECATED]     target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
+# [DEPRECATED]     target_angle_lsb_bytes = pack_int32_little_endian_signed(target_angle_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = b"\x00\x00\x00" + target_angle_lsb_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_position_multi_turn_mode2(max_speed_dps_uint16: int, target_angle_deg: float) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA4 (multi-turn position closed-loop #2):
+# [DEPRECATED]       DATA[2..3] = uint16 maxSpeed (1 dps/LSB per your table examples)
+# [DEPRECATED]       DATA[4..7] = int32 angleControl (scaled by YAML: angle_deg_per_lsb)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7 = [DATA1]=00 + [DATA2..3]=maxSpeed(2B) + [DATA4..7]=angle(4B)
+# [DEPRECATED]     """
+# [DEPRECATED]     max_speed_bytes = pack_uint16_little_endian(max_speed_dps_uint16)
+# [DEPRECATED] 
+# [DEPRECATED]     target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
+# [DEPRECATED]     target_angle_bytes = pack_int32_little_endian_signed(target_angle_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = b"\x00" + max_speed_bytes + target_angle_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_position_single_turn_mode1(spin_direction_uint8: int, target_angle_deg: float) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA5 (single-turn position #1):
+# [DEPRECATED]       DATA[1]   = uint8 spinDirection (0:CW, 1:CCW)
+# [DEPRECATED]       DATA[4..7]= uint32 angleControl (scaled by YAML: angle_deg_per_lsb)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7 = [DATA1]=spinDir + [DATA2..3]=00 00 + [DATA4..7]=angle(4B)
+# [DEPRECATED]     """
+# [DEPRECATED]     spin_direction_byte = bytes([int(spin_direction_uint8) & 0xFF])
+# [DEPRECATED] 
+# [DEPRECATED]     # single-turn is usually non-negative; keep it non-negative for uint32
+# [DEPRECATED]     if float(target_angle_deg) < 0.0:
+# [DEPRECATED]         target_angle_deg = 0.0
+# [DEPRECATED] 
+# [DEPRECATED]     target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
+# [DEPRECATED]     target_angle_lsb_uint32_bytes = pack_uint32_little_endian(target_angle_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = spin_direction_byte + b"\x00\x00" + target_angle_lsb_uint32_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_position_single_turn_mode2(
+# [DEPRECATED]     spin_direction_uint8: int,
+# [DEPRECATED]     max_speed_dps_uint16: int,
+# [DEPRECATED]     target_angle_deg: float
+# [DEPRECATED] ) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA6 (single-turn position #2):
+# [DEPRECATED]       DATA[1]   = uint8  spinDirection (0:CW, 1:CCW)
+# [DEPRECATED]       DATA[2..3]= uint16 maxSpeed (1 dps/LSB)
+# [DEPRECATED]       DATA[4..7]= uint32 angleControl (scaled by YAML: angle_deg_per_lsb)
+# [DEPRECATED]     """
+# [DEPRECATED]     spin_direction_byte = bytes([int(spin_direction_uint8) & 0xFF])
+# [DEPRECATED]     max_speed_bytes = pack_uint16_little_endian(max_speed_dps_uint16)
+# [DEPRECATED] 
+# [DEPRECATED]     if float(target_angle_deg) < 0.0:
+# [DEPRECATED]         target_angle_deg = 0.0
+# [DEPRECATED] 
+# [DEPRECATED]     target_angle_lsb_int = angle_deg_to_lsb(target_angle_deg)
+# [DEPRECATED]     target_angle_lsb_uint32_bytes = pack_uint32_little_endian(target_angle_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = spin_direction_byte + max_speed_bytes + target_angle_lsb_uint32_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_increment_position_mode1(delta_angle_deg: float) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA7 (incremental position #1):
+# [DEPRECATED]       DATA[4..7] = int32 angleIncrement (scaled by YAML: angle_deg_per_lsb)
+# [DEPRECATED]     """
+# [DEPRECATED]     delta_angle_lsb_int = angle_deg_to_lsb(delta_angle_deg)
+# [DEPRECATED]     delta_angle_bytes = pack_int32_little_endian_signed(delta_angle_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = b"\x00\x00\x00" + delta_angle_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_increment_position_mode2(max_speed_dps_uint16: int, delta_angle_deg: float) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     Command 0xA8 (incremental position #2):
+# [DEPRECATED]       DATA[2..3] = uint16 maxSpeed (1 dps/LSB)
+# [DEPRECATED]       DATA[4..7] = int32 angleIncrement (scaled by YAML: angle_deg_per_lsb)
+# [DEPRECATED]     """
+# [DEPRECATED]     max_speed_bytes = pack_uint16_little_endian(max_speed_dps_uint16)
+# [DEPRECATED] 
+# [DEPRECATED]     delta_angle_lsb_int = angle_deg_to_lsb(delta_angle_deg)
+# [DEPRECATED]     delta_angle_bytes = pack_int32_little_endian_signed(delta_angle_lsb_int)
+# [DEPRECATED] 
+# [DEPRECATED]     payload7_bytes = b"\x00" + max_speed_bytes + delta_angle_bytes
+# [DEPRECATED]     return payload7_bytes
+# [DEPRECATED] 
+# [DEPRECATED] 
+# [DEPRECATED] def payload_write_int32_into_data4_to_data7(value_int32: int) -> bytes:
+# [DEPRECATED]     """
+# [DEPRECATED]     For commands like 0x34(accel) / 0x38(max torque) examples:
+# [DEPRECATED]       DATA[4..7] = int32 value
+# [DEPRECATED]     payload7 = 00 00 00 + int32(4B)
+# [DEPRECATED]     """
+# [DEPRECATED]     value_bytes = pack_int32_little_endian_signed(value_int32)
+# [DEPRECATED]     payload7_bytes = b"\x00\x00\x00" + value_bytes
+# [DEPRECATED]     return payload7_bytes

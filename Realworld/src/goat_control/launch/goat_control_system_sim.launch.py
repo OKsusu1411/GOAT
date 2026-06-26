@@ -33,11 +33,6 @@ def generate_launch_description():
         default_value=default_urdf_path,
         description="Path to goat URDF (default: package share/urdf/WF_GOAT.urdf).",
     )
-    checkpoint_path_arg = DeclareLaunchArgument(
-        "checkpoint_path",
-        default_value="",
-        description="Path to RL agent checkpoint. Empty string disables checkpoint loading.",
-    )
     control_rate_arg = DeclareLaunchArgument(
         "control_rate_hz",
         default_value="200.0",
@@ -62,25 +57,10 @@ def generate_launch_description():
         parameters=[{
             "yaml_path": LaunchConfiguration("yaml_path"),
             "urdf_path": LaunchConfiguration("urdf_path"),
-            "checkpoint_path": LaunchConfiguration("checkpoint_path"),
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
-            "command_unit": LaunchConfiguration("command_unit"),
             "use_sim_time": True,
         }],
     )
-
-    # controller_node = Node(
-    #     package="goat_control",
-    #     executable="controller_node",
-    #     name="controller_node",
-    #     output="screen",
-    #     parameters=[{
-    #         "yaml_path": LaunchConfiguration("yaml_path"),
-    #         "urdf_path": LaunchConfiguration("urdf_path"),
-    #         "checkpoint_path": LaunchConfiguration("checkpoint_path"),
-    #         "control_rate_hz": LaunchConfiguration("control_rate_hz"),
-    #     }],
-    # )
 
     topic_converter_node = Node(
         package="goat_control",
@@ -95,10 +75,9 @@ def generate_launch_description():
     return LaunchDescription([
         yaml_path_arg,
         urdf_path_arg,
-        checkpoint_path_arg,
         control_rate_arg,
         estimation_rate_arg,
         command_unit_arg,
         controller_node,
-        # topic_converter_node,
+        topic_converter_node,
     ])

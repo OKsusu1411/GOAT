@@ -11,15 +11,22 @@ def generate_launch_description():
 
     pkg_share = get_package_share_directory('goat_description')
     urdf_file = os.path.join(pkg_share, 'urdf', 'WF_GOAT.urdf')
+    rviz_config_file = os.path.join(pkg_share, 'rviz', 'goat.rviz')
 
     with open(urdf_file, 'r') as infp:
         robot_description = infp.read()
 
-    params = {'robot_description': robot_description}
+    use_sim_time = LaunchConfiguration("use_sim_time")
 
     # -------------------------------
     # Launch Arguments
     # -------------------------------
+    use_sim_time_arg = DeclareLaunchArgument(
+        "use_sim_time",
+        default_value="true",
+        description="Use simulation (Isaac Sim) clock. Must match the controller pipeline.",
+    )
+
     use_gui_arg = DeclareLaunchArgument(
         "use_gui",
         default_value="false",
@@ -33,7 +40,10 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        parameters=[params],
+        parameters=[{
+            'robot_description': robot_description,
+            'use_sim_time': use_sim_time,
+        }],
     )
 
     # -------------------------------
@@ -43,6 +53,7 @@ def generate_launch_description():
         package='joint_state_publisher_gui',
         executable='joint_state_publisher_gui',
         output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(LaunchConfiguration("use_gui")),
     )
 
@@ -60,6 +71,7 @@ def generate_launch_description():
                 "parent_frame": "odom",
                 "child_frame": "base_Link",
                 "use_translation_zero": True,
+                "use_sim_time": use_sim_time,
             }
         ],
     )
@@ -71,9 +83,12 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         output='screen',
+        arguments=['-d', rviz_config_file],
+        parameters=[{'use_sim_time': use_sim_time}],
     )
 
     return LaunchDescription([
+        use_sim_time_arg,
         use_gui_arg,
         robot_state_publisher_node,
         joint_state_publisher_gui_node,

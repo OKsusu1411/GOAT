@@ -57,6 +57,14 @@ class CanInterface:
         self.rx_frame_count: int = 0
         self._rx_first_keys_seen: set[tuple[int, int]] = set()
 
+        # Per-key arrival events for synchronous hot-path dispatch. Hot-path
+        # callers clear the event before sending a request, then wait on it
+        # for THIS tick's reply. The reader thread sets the event when a
+        # frame for that key is cached. Slow-poll path (0x9A) keeps using
+        # the cache directly.
+        self.frame_events: dict[tuple[int, int], threading.Event] = {}
+        self._events_lock = threading.Lock()
+
     def open(self) -> None:
         """Open the CAN bus if it is not already opened."""
         if self.bus is not None:
@@ -134,6 +142,11 @@ class CanInterface:
             with self._rx_lock:
                 self.latest_rx_frames_by_key[key] = msg
                 self.rx_frame_count += 1
+            # Wake any hot-path waiter on this exact key. Cheap no-op if no
+            # waiter was ever registered for this key.
+            ev = self.frame_events.get(key)
+            if ev is not None:
+                ev.set()
             # One-shot diagnostic: log each new (arb_id, cmd_byte) the first
             # time we see it, up to 16 distinct keys. Lets us verify whether
             # motor replies are on rx_id (0x180+id) or tx_id (0x140+id).
@@ -148,6 +161,38 @@ class CanInterface:
         """Return the most recent cached frame for (arbitration_id, cmd_byte)."""
         with self._rx_lock:
             return self.latest_rx_frames_by_key.get((arbitration_id, cmd_byte))
+
+    def event_for_key(self, arbitration_id: int, cmd_byte: int) -> threading.Event:
+        """Return (creating if needed) the arrival Event for one reply key.
+        Lazily allocated so we only carry events for keys the hot path uses."""
+        key = (arbitration_id, cmd_byte)
+        with self._events_lock:
+            ev = self.frame_events.get(key)
+            if ev is None:
+                ev = threading.Event()
+                self.frame_events[key] = ev
+            return ev
+
+    def alias_event_keys(self, key_a: tuple[int, int], key_b: tuple[int, int]) -> threading.Event:
+        """Make two reply keys share ONE arrival Event.
+
+        A motor may answer the same command on either rx_id (0x180+id) or
+        tx_id (0x140+id) depending on its setup. The reader thread (`_rx_loop`)
+        sets the event for whichever key actually arrives, so a hot-path waiter
+        blocking on only one key can miss the wakeup entirely (measured: this
+        hardware replies only on tx_id, so the rx_id event never fired and every
+        tick burned the full 50 ms timeout).
+
+        Pointing both keys at the same Event means a frame on EITHER key wakes
+        the same waiter. Call once at setup, before the hot path starts.
+        Returns the shared Event."""
+        with self._events_lock:
+            ev = (self.frame_events.get(key_a)
+                  or self.frame_events.get(key_b)
+                  or threading.Event())
+            self.frame_events[key_a] = ev
+            self.frame_events[key_b] = ev
+            return ev
 
     def send_only(self, arbitration_id: int, data: bytes) -> None:
         """Fire-and-forget send. No lock, no response wait.

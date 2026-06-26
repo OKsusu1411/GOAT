@@ -53,8 +53,8 @@ motor_gear_ratio:
 - 1
 - 1
 - 1
-- 0.5
-- 0.5
+- 2
+- 2
 - 1
 - 1
 motor_direction:
@@ -101,42 +101,59 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_checkpoint_path: src/goat_control/checkpoint/agent_jit_128000.pt
-policy_device: cuda
+policy_mode: fixed
+policy_checkpoint_path: src/goat_control/checkpoint/agent_38000.onnx
+policy_device: cpu
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
+policy_command_joint_step: 5.0
 policy_decimation: 2.0
-policy_observation_info:
-  base_ang_vel: 3
-  base_quat: 4
-  joint_pos: 6
-  joint_vel: 8
-  previous_action: 8
-policy_action_scale_factor:
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 5.0
-- 5.0
+policy_fixed:
+  observation_info:
+    joint_pos: 6
+    joint_vel: 6
+    previous_action: 6
+    joint_command: 6
+  action_scale_factor:
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+policy_movable:
+  observation_info:
+    base_ang_vel: 3
+    base_quat: 4
+    base_command: 3
+    joint_pos: 6
+    joint_vel: 8
+    previous_action: 8
+  action_scale_factor:
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 5.0
+  - 5.0
 policy_leg_proportional_gain:
-- 5.0
-- 5.0
-- 5.0
-- 5.0
-- 5.0
-- 5.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
 policy_leg_derivative_gain:
-- 0.1
-- 0.1
-- 0.1
-- 0.1
-- 0.1
-- 0.1
+- 0.5
+- 0.5
+- 0.5
+- 0.5
+- 0.5
+- 0.5
 policy_wheel_proportional_gain:
 - 0.02
 - 0.02
@@ -144,21 +161,21 @@ policy_wheel_integral_gain:
 - 0.0
 - 0.0
 torque_lpf_alpha_per_joint:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
 - 0.0
 - 0.0
 sw_max_torque_per_joint:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
+- 1.0
 - 0.0
 - 0.0
 hw_max_torque_per_joint:
@@ -179,10 +196,10 @@ joint_pos_limit:
 - 2.05949
 - -2.05949
 - 0.261799
-- -0.0
-- 4.45059
-- -4.45059
-- 0.0
+- -0.262
+- 2.2253
+- -2.2253
+- 0.262
 - -.inf
 - .inf
 - -.inf
@@ -193,19 +210,16 @@ joint_vel_estop_threshold: 4.0
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
-# Encoder counts per motor-shaft revolution (14-bit absolute encoder -> 16384).
-# Used by MotorManager to integrate the 0xA1-reply encoder field into a
-# multi-turn motor angle without extra CAN reads.
-motor_encoder_counts_per_rev: 16384
+motor_encoder_counts_per_rev: 65536
 joint_offsets:
-- 0.012322024519079962
-- 0.015009831567151239
-- 2.100311768557456
-- -2.0478471712425064
-- 1.002141876556364
-- -0.2750900700530862
-- -1.2306142022886815
-- 1.286080765917062
+- 0.016685347649065797
+- 0.040072759625789815
+- 2.078198446934688
+- -2.061757445380901
+- -0.44460517365303537
+- 1.4282552867845197
+- -3.5009559465754245
+- -0.628719956445917
 imu_offsets:
 - 1.0
 - 0.0

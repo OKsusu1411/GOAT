@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 from goat_control.utils.motor.motor_driver import MotorDriver
-from goat_control.utils.motor.filters import FirstOrderLowPassFilter
-
 
 # Motor current resolution used previously:
 # motor_current_amp = iq_raw_lsb * (66.0 / 4096.0)
@@ -42,74 +40,6 @@ class MotorStatesData:
     motor_operating_state: List[int]                   # motor mode/state (device-defined)
 
     timestamp_sec: Optional[float] = None
-
-def format_motor_states(
-    motor_states_data: MotorStatesData,
-    max_motor_count: int | None = 8,
-    show_angles_in_degrees: bool = True,
-    angle_deg_per_lsb: float = DEFAULT_ANGLE_DEG_PER_LSB,
-) -> str:
-    """Human-readable formatter (core-friendly replacement of motor_states_echo.py)."""
-
-    motor_limit = max_motor_count if (max_motor_count and max_motor_count > 0) else None
-
-    def clip(values: List):
-        return values if (motor_limit is None) else values[:motor_limit]
-
-    motor_temperature_c = clip(motor_states_data.motor_temperature_c)
-    motor_phase_current_amp = clip(motor_states_data.motor_phase_current_amp)
-    motor_speed_deg_per_sec = clip(motor_states_data.motor_speed_deg_per_sec)
-    motor_encoder_count = clip(motor_states_data.motor_encoder_count)
-
-    motor_single_turn_angle_raw_0p001deg = clip(motor_states_data.motor_single_turn_angle_raw_0p001deg)
-    motor_multi_turn_angle_raw_0p001deg = clip(motor_states_data.motor_multi_turn_angle_raw_0p001deg)
-
-    motor_error_flags = clip(motor_states_data.motor_error_flags)
-    motor_operating_state = clip(motor_states_data.motor_operating_state)
-
-    if show_angles_in_degrees:
-        motor_single_turn_angle_deg = [
-            raw_value * angle_deg_per_lsb for raw_value in motor_single_turn_angle_raw_0p001deg
-        ]
-        motor_multi_turn_angle_deg = [
-            raw_value * angle_deg_per_lsb for raw_value in motor_multi_turn_angle_raw_0p001deg
-        ]
-    else:
-        motor_single_turn_angle_deg = None
-        motor_multi_turn_angle_deg = None
-
-    timestamp_string = (
-        f"{motor_states_data.timestamp_sec:.6f}"
-        if motor_states_data.timestamp_sec is not None
-        else "N/A"
-    )
-
-    lines: List[str] = []
-    lines.append(f"\n=== MotorStates @ {timestamp_string} ===")
-    lines.append(f"  motor_temperature_c        : {['{:.1f}'.format(v) for v in motor_temperature_c]} (degC)")
-    lines.append(f"  motor_phase_current_amp    : {['{:.3f}'.format(v) for v in motor_phase_current_amp]} (A)")
-    lines.append(f"  motor_speed_deg_per_sec    : {['{:.1f}'.format(v) for v in motor_speed_deg_per_sec]} (deg/s)")
-    lines.append(f"  motor_encoder_count        : {motor_encoder_count}")
-
-    if show_angles_in_degrees:
-        lines.append(
-            "  motor_single_turn_angle    : "
-            f"{motor_single_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
-            f"{['{:.2f}'.format(v) for v in motor_single_turn_angle_deg]} (deg)"
-        )
-        lines.append(
-            "  motor_multi_turn_angle     : "
-            f"{motor_multi_turn_angle_raw_0p001deg} (raw, 0.001deg/LSB) -> "
-            f"{['{:.2f}'.format(v) for v in motor_multi_turn_angle_deg]} (deg)"
-        )
-    else:
-        lines.append(f"  motor_single_turn_angle    : {motor_single_turn_angle_raw_0p001deg} (raw)")
-        lines.append(f"  motor_multi_turn_angle     : {motor_multi_turn_angle_raw_0p001deg} (raw)")
-
-    lines.append(f"  motor_error_flags          : {motor_error_flags}")
-    lines.append(f"  motor_operating_state      : {motor_operating_state}")
-
-    return "\n".join(lines)
 
 
 class MotorManager:
@@ -155,8 +85,6 @@ class MotorManager:
 
         # YAML cfg
         self.cfg = cfg
-        # joint_velocity_lpf_alpha = self.cfg["joint_velocity_lpf_alpha"]
-        # joint_effort_like_lpf_alpha = self.cfg["joint_effort_like_lpf_alpha"]
         self.motor_gear_ratio = self.cfg["motor_gear_ratio"]
         self.motor_direction = self.cfg["motor_direction"]
         self.motor_torque_constant_nm_per_amp = self.cfg["motor_torque_constant_nm_per_amp"]
@@ -183,11 +111,11 @@ class MotorManager:
         self.prev_torque = np.zeros(self.num_joints, dtype=float)
 
         # ------------------------------------------------------------------
-        # Encoder integration (Option B): convert the per-tick uint16 encoder
+        # Encoder integration : convert the per-tick uint16 encoder
         # field of the 0xA1 reply into a multi-turn motor angle, anchored to
         # the absolute multi-turn read taken once at init.
         # ------------------------------------------------------------------
-        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 16384))
+        self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 65536))
         # Per-motor anchor state. `None` until _seed_position_anchor() runs.
         self.motor_anchor_motor_angle_deg: List[Optional[float]] = [None] * self.motor_count
         self.motor_anchor_encoder_count:   List[Optional[int]]   = [None] * self.motor_count
@@ -202,19 +130,8 @@ class MotorManager:
             thread_name_prefix="motor_io",
         )
 
-        # self.joint_velocity_low_pass_filter = (
-        #     FirstOrderLowPassFilter(alpha=joint_velocity_lpf_alpha)
-        #     if joint_velocity_lpf_alpha is not None
-        #     else None
-        # )
-
-        # self.joint_effort_like_low_pass_filter = (
-        #     FirstOrderLowPassFilter(alpha=joint_effort_like_lpf_alpha)
-        #     if joint_effort_like_lpf_alpha is not None
-        #     else None
-        # )
-
     def torque_clipping(self, torque_cmd:np.ndarray) -> np.ndarray:
+        # Motor Space
         clipped_torque = np.clip(torque_cmd, -self.hw_max_torque_per_joint, self.hw_max_torque_per_joint) # [4.5 and 2.5]
         clipped_torque = np.clip(clipped_torque, -self.sw_max_torque_per_joint, self.sw_max_torque_per_joint) # [Arbitrary]
         
@@ -227,17 +144,13 @@ class MotorManager:
         return filtered
 
     def torque_to_current(self, torque_cmd:np.ndarray) -> np.ndarray:
-        # Convert torque into current
+        # Convert torque into current (Joint -> Motor)
         torque_constant = np.asarray(self.motor_torque_constant_nm_per_amp, dtype=float)
         gear_ratio = np.asarray(self.motor_gear_ratio, dtype=float)
-        direction = np.asarray(self.motor_direction, dtype=float)
 
-        denominator = gear_ratio * torque_constant  # gear ratio
+        denominator = gear_ratio * torque_constant
         denominator = np.where(np.abs(denominator) < 1e-12, 1e-12, denominator)
-        current_command_amp = torque_cmd / denominator
-
-        zero_mask = np.abs(direction * gear_ratio * torque_constant) < 1e-12
-        current_command_amp = np.where(zero_mask, 0.0, current_command_amp)
+        current_command_amp = torque_cmd / denominator # Joint -> Motor
 
         return current_command_amp
 
@@ -340,102 +253,11 @@ class MotorManager:
         joint_torque_nm = motor_shaft_torque_nm
         return joint_torque_nm
 
-    # def decode_motor_encoder(self) -> MotorStatesData:
-    #     # for motor_index in range(self.motor_count):
-    #     # for motor_index in [0]:
-    #     #     self.poll_state2(motor_index)
-    #     #     self.poll_state1(motor_index)
-    #     #     self.poll_single_or_multi_turn(motor_index)
-
-    #     def fetch_motor_data(motor_index: int):
-    #         self.poll_state2(motor_index)
-    #         self.poll_state1(motor_index)
-    #         self.poll_single_or_multi_turn(motor_index)
-
-    #     with concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count) as executor:
-    #         executor.map(fetch_motor_data, range(self.motor_count))
-
-    #     motor_count = len(self.motor_temperature_c)
-    #     joint_count = len(self.joint_names)
-
-    #     # Index mapping validation
-    #     if self.motor_index_for_joint is not None:
-    #         if len(self.motor_index_for_joint) != joint_count:
-    #             raise ValueError(
-    #                 f"joint_indices+wheel_indices length({len(self.motor_index_for_joint)}) "
-    #                 f"must match joint_names length({joint_count})."
-    #             )
-    #     else:
-    #         if joint_count != motor_count:
-    #             raise ValueError(
-    #                 f"joint_names length({joint_count}) != motor_count({motor_count}). "
-    #                 "Provide joint_indices/wheel_indices in YAML."
-    #             )
-        
-    #     # Joint variables
-    #     joint_position_rad: List[float] = [0.0] * joint_count
-    #     joint_velocity_rad_per_sec: List[float] = [0.0] * joint_count
-    #     joint_effort_like: List[float] = [0.0] * joint_count  # current[A] or torque[Nm]
-        
-    #     # gear, direction index validation
-    #     if self.motor_gear_ratio is None or len(self.motor_gear_ratio) != motor_count:
-    #         raise ValueError("motor_gear_ratio must be a list with length == motor_count.")
-    #     if self.motor_direction is None or len(self.motor_direction) != motor_count:
-    #         raise ValueError("motor_direction must be a list with length == motor_count.")
-
-    #     if self.motor_torque_constant_nm_per_amp is None or len(self.motor_torque_constant_nm_per_amp) != motor_count:
-    #         raise ValueError("motor_torque_constant_nm_per_amp must be a list with length == motor_count.")
-
-    #     # Main state computation logic
-    #     for joint_i in range(joint_count):
-    #         motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
-
-    #         gear = float(self.motor_gear_ratio[motor_i])
-    #         direction = float(self.motor_direction[motor_i])
-
-    #         raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_i]
-    #         raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
-
-    #         # Encoder fail safe logic
-    #         if raw_multi != 0:
-    #             motor_angle_deg = raw_multi * self.angle_deg_per_lsb
-    #         elif raw_single != 0:
-    #             motor_angle_deg = raw_single * self.angle_deg_per_lsb
-    #         else:
-    #             motor_angle_deg = 0.0
-
-    #         # Convert motor position into joint position
-    #         joint_angle_deg = motor_angle_deg * gear * direction
-    #         joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0                 # degree to radian
-
-    #         # Convert motor velocity into joint velocity
-    #         motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
-    #         joint_speed_deg_s = motor_speed_deg_s * gear * direction
-    #         joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0       # degree to radian
-
-    #         # Effort-like
-    #         motor_current_amp = self.motor_phase_current_amp[motor_i]
-    #         joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
-
-    #     # Apply joint position offset
-    #     joint_position_rad = np.array(joint_position_rad) - np.asarray(self.joint_offsets, dtype=float)
-        
-    #     return MotorStatesData(
-    #         joint_names=self.joint_names,
-    #         joint_position_rad=list(joint_position_rad).copy(),
-    #         joint_velocity_rad_per_sec=list(joint_velocity_rad_per_sec).copy(),
-    #         joint_effort_like=list(joint_effort_like).copy(),
-    #         motor_temperature_c=self.motor_temperature_c.copy(),
-    #         motor_error_flags=self.motor_error_flags.copy(),
-    #         motor_operating_state=self.motor_operating_state.copy(),
-    #         timestamp_sec=time.time()
-    #     )
-
     # =========================================================================
     # [공통 수학 연산 로직] 원시 데이터(Raw data)를 MotorStatesData로 패키징
     # =========================================================================
     def _package_motor_states(self) -> MotorStatesData:
-        """내부 버퍼의 Raw 데이터를 이용해 물리량으로 변환하고 MotorStatesData를 생성합니다."""
+        """Raw Data -> MotorStatesData."""
         joint_count = len(self.joint_names)
         
         joint_position_rad: List[float] = [0.0] * joint_count
@@ -454,11 +276,11 @@ class MotorManager:
             elif raw_single != 0: motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else: motor_angle_deg = 0.0
 
-            joint_angle_deg = motor_angle_deg * gear * direction
+            joint_angle_deg = (motor_angle_deg * direction) / gear # Motor -> Joint
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
 
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
-            joint_speed_deg_s = motor_speed_deg_s * gear * direction
+            joint_speed_deg_s = (motor_speed_deg_s * direction) / gear # Motor -> Joint
             joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
 
             motor_current_amp = self.motor_phase_current_amp[motor_i]
@@ -478,7 +300,7 @@ class MotorManager:
         )
 
     # =========================================================================
-    # Encoder integration helpers (Option B)
+    # Encoder integration helpers
     # =========================================================================
     def _seed_position_anchor(self) -> None:
         """Capture absolute motor angle + matching encoder count as the
@@ -522,10 +344,7 @@ class MotorManager:
         self.motor_prev_encoder_count[motor_index] = current_count
 
         anchor_count = self.motor_anchor_encoder_count[motor_index]
-        total_count_delta = (
-            (current_count - anchor_count)
-            + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
-        )
+        total_count_delta = (current_count - anchor_count) + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
         motor_angle_deg = anchor_angle_deg + total_count_delta * (360.0 / counts_per_rev)
 
         # Write back in the same 0.001 deg/LSB units _package_motor_states reads.
@@ -534,15 +353,18 @@ class MotorManager:
         )
 
     # =========================================================================
-    # [Read Only] 기존과 동일한 읽기 함수 (이제 공통 로직을 재사용합니다)
+    # [Read]
     # =========================================================================
     def decode_motor_encoder(self, perform_slow_poll: bool = True) -> MotorStatesData:
-        """모터의 상태만 읽어옵니다. (주로 초기화나 대기 상태일 때 사용)"""
         def fetch_motor_data(motor_index: int):
-            self.poll_state2(motor_index)
+            # Order matters: 0x92 multi-turn (anchor_motor_angle_deg) and
+            # 0x9C state2 (anchor_encoder_count) must be adjacent in time
+            # so the anchor pair refers to nearly the same physical motor
+            # position. Slow-poll first, then multi-turn, then state2 last.
             if perform_slow_poll:
-                self.poll_state1(motor_index)
-                self.poll_single_or_multi_turn(motor_index)
+                self.poll_state1(motor_index)                # 0x9A error flags
+                self.poll_single_or_multi_turn(motor_index)  # 0x92 / 0x94
+            self.poll_state2(motor_index)                    # 0x9C — pairs with 0x92
 
         # Submit on the persistent pool and drain via f.result() so any
         # exceptions surface instead of being silently swallowed by a
@@ -557,46 +379,62 @@ class MotorManager:
         if perform_slow_poll:
             self._seed_position_anchor()
 
-        # 데이터를 읽어온 후 패키징하여 반환합니다.
         return self._package_motor_states()
 
     # =========================================================================
-    # [Write + Read] 토크 명령과 상태 읽기를 동시에 처리하는 함수
+    # [Write + Read]
     # =========================================================================
-    def write_torques_and_read_states(self, current_cmd_amp: Sequence[float], timeout: float = 0.05, perform_slow_poll: bool = False) -> MotorStatesData:
-        """Fire-and-forget torque sends + cached state reads (Step 3).
+    def write_torques_and_read_states(
+        self,
+        current_cmd_amp: Sequence[float],
+        timeout: float = 0.003,
+        perform_slow_poll: bool = False,
+    ) -> MotorStatesData:
+        """Synchronous fire-all-then-wait-all torque + state2 pass.
 
-        Hot path no longer blocks on per-motor CAN round-trips. The background
-        reader thread (started in CanInterface.start_reader_thread) drains
-        replies into a per-(arbitration_id, cmd_byte) cache. Here we:
-          Phase 1: send all 8 torque (0xA1) commands back-to-back (non-blocking).
-          Phase 2: read each motor's most recent cached 0xA1 reply and parse.
-        One-tick staleness: this tick reads the previous tick's reply. The
-        encoder-integration path already tolerates that (delta against
-        prev_encoder_count); the NaN kill-switch protects against a totally
-        silent motor.
+        Phase 1 — clear each motor's 0xA1 reply event, then send its torque
+                  command. TXs are non-blocking (kernel ring); both buses
+                  run in parallel by virtue of separate CanInterface
+                  instances.
+        Phase 2 — for each motor, wait on its arrival event until the shared
+                  deadline. On timeout, inject NaN so the kill switch fires
+                  instead of letting stale data drive the controller.
 
-        `perform_slow_poll` and `timeout` are kept for API compatibility but
-        ignored — state1 polling lives on a separate 1 Hz timer now.
+        Δt between successive ticks is now constant (the control timer
+        period), so the encoder wrap detector in
+        _update_motor_angle_from_encoder works as originally designed
+        without any speed-sign disambiguation.
+
+        `perform_slow_poll` is kept for API compatibility but ignored —
+        state1 polling lives on a separate 1 Hz timer.
         """
-        # Phase 1 — fire all torque sends. Sequential is fine: bus.send() is
-        # non-blocking (kernel TX queue) and avoiding the thread pool removes
-        # ~0.18 ms of submit overhead we measured in Step 1.
-        t_submit = time.perf_counter()                                           # [timing] start TX phase
+        # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
+        # kernel TX ring without blocking on the wire.
+        t_submit = time.perf_counter()                                           # [timing]
         for motor_index, amp in enumerate(current_cmd_amp):
-            self.motor_drivers[motor_index].send_torque_only(float(amp))
-        t_joined = time.perf_counter()                                           # [timing] TX done, start RX-cache phase
+            driver = self.motor_drivers[motor_index]
+            driver.clear_state2_event()
+            driver.send_torque_only(float(amp))
+        t_fired = time.perf_counter()                                            # [timing]
 
-        # Phase 2 — read latest cached 0xA1 reply per motor and parse it into
-        # the existing state buffers. If no reply yet (first tick, dropped
-        # frame), leave the buffer at its previous value.
+        # Phase 2 — bounded wait, one shared deadline so total RX time is
+        # bounded by `timeout` rather than 8 × per-motor timeout.
+        deadline_monotonic = time.monotonic() + float(timeout)
         for motor_index in range(self.motor_count):
-            response_message = self.motor_drivers[motor_index].latest_state2()
+            driver = self.motor_drivers[motor_index]
+            response_message = driver.await_state2(deadline_monotonic)
             if response_message is None:
+                # Motor silent this tick. Mark its slot NaN so
+                # controller_node._sensor_data_has_nan() trips the kill
+                # switch — far safer than re-using stale state for a
+                # balance loop.
+                self.motor_speed_deg_per_sec[motor_index] = float("nan")
+                self.motor_phase_current_amp[motor_index] = float("nan")
                 continue
+
             response_data = response_message.data
 
-            # 0xA1 reply format (matches the old in-place parser above).
+            # 0xA1 reply has the same byte layout as 0x9C state2.
             self.motor_temperature_c[motor_index] = float(struct.unpack("<b", response_data[1:2])[0])
 
             motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
@@ -607,12 +445,11 @@ class MotorManager:
 
             self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
 
-            # Update multi-turn motor angle from the encoder count just parsed.
             self._update_motor_angle_from_encoder(motor_index)
-        t_done = time.perf_counter()                                             # [timing] RX-cache phase done
+        t_done = time.perf_counter()                                             # [timing]
 
         # Surface timings (read by controller_node timing log).
-        self._last_tx_submit_ms = (t_joined - t_submit) * 1e3                    # send-only cost
-        self._last_tx_wait_ms = (t_done - t_joined) * 1e3                        # cache read+parse cost
+        self._last_tx_submit_ms = (t_fired - t_submit) * 1e3
+        self._last_tx_wait_ms = (t_done - t_fired) * 1e3
 
         return self._package_motor_states()
