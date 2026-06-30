@@ -102,7 +102,7 @@ nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
 policy_mode: fixed
-policy_checkpoint_path: src/goat_control/checkpoint/joint_track_hip.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/joint_track_hip_2.onnx
 policy_device: cpu
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
@@ -170,12 +170,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint:
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
 - 0.0
 - 0.0
 hw_max_torque_per_joint:
