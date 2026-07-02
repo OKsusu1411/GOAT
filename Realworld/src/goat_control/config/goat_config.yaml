@@ -69,12 +69,21 @@ motor_direction:
 natural_joint_position:
 - 0.0
 - 0.0
-- 0.738
-- -0.738
-- 1.462
-- -1.462
 - 0.0
 - 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+# natural_joint_position:
+# - 0.0
+# - 0.0
+# - 0.738
+# - -0.738
+# - 1.462
+# - -1.462
+# - 0.0
+# - 0.0
 wheel_radius: 0.07275
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
