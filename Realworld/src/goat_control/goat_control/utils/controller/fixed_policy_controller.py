@@ -48,6 +48,11 @@ class FixedBasePolicyController(PolicyController):
         self._joint_cmd_min = leg_limit[:, 0]
         self._joint_cmd_max = leg_limit[:, 1]
 
+        # NOTE: Hip joint is only rotated toward outside direction 
+        self._joint_cmd_max[0] = 0 # Left Hip 
+        self._joint_cmd_min[1] = 0 # Right Hip
+
+
     def _build_observation(self,
                            base_lin_vel: np.ndarray,
                            base_ang_vel: np.ndarray,
