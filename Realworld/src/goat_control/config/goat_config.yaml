@@ -108,7 +108,7 @@ policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.5
 policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
-policy_command_joint_step: 5.0
+policy_command_joint_step: 10.0
 policy_decimation: 2.0
 policy_fixed:
   observation_info:
@@ -170,12 +170,12 @@ torque_lpf_alpha_per_joint:
 - 0.0
 - 0.0
 sw_max_torque_per_joint:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
+- 1.5
 - 0.0
 - 0.0
 hw_max_torque_per_joint:
@@ -212,14 +212,14 @@ angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
 motor_encoder_counts_per_rev: 65536
 joint_offsets:
-- 0.0010297442586766556
-- 0.06707300315414208
-- 2.1367367900465775
-- -2.052611920100451
-- -0.3855694117043271
-- 1.4582662232725625
-- 2.4848252560643265
-- 3.763017133762374
+- 0.015533430342749533
+- 0.04017747938090946
+- 2.0701001192054345
+- -2.0273046459465336
+- -0.4922177556474409
+- 1.496890359619197
+- -0.7166321908688715
+- 2.691908571813455
 imu_offsets:
 - 1.0
 - 0.0
