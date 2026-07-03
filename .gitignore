@@ -57,9 +57,6 @@ _build
 /.pretrained_checkpoints/
 # **/checkpoint/*
 
-# Generated Assets
-**/usd/*
-
 # Ros2
 **/install/
 **/build/
