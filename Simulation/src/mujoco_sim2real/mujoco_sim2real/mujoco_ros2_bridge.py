@@ -51,6 +51,19 @@ class MujocoRos2Bridge(Node):
 
         self.viewer = mujoco.viewer.launch_passive(self.mujoco_model, self.mujoco_data)
 
+        # Camera: follow base_Link translation while leaving orientation/zoom user-controllable.
+        # Resolved by name so a rename in the XML fails loudly here instead of silently mis-tracking.
+        base_body_id = mujoco.mj_name2id(
+            self.mujoco_model, mujoco.mjtObj.mjOBJ_BODY, 'base_Link'
+        )
+        # mjCAMERA_TRACKING moves the camera focus with the body; the user still owns the orbit.
+        self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+        self.viewer.cam.trackbodyid = base_body_id
+        # Initial framing — chosen to keep the robot in shot at home pose; user can re-drag freely.
+        self.viewer.cam.distance = 2.0      # meters from tracked body
+        self.viewer.cam.elevation = -20.0   # degrees, negative = looking down
+        self.viewer.cam.azimuth = 135.0     # degrees around the body (yaw)
+
         # Simulation loop
         simulation_period_sec = 1.0 / max(self.simulation_rate_hz, 1.0)
         self.timer = self.create_timer(simulation_period_sec, self.simulation_step)

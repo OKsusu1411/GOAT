@@ -18,7 +18,7 @@ def generate_launch_description():
         [pkg_share, "urdf", "WF_GOAT.urdf"]
     )
     default_checkpoint_path = PathJoinSubstitution(
-        [pkg_share, "checkpoint", "agent_jit_56000.pt"]
+        [pkg_share, "checkpoint", "goat_jit_56000.pt"]
     )
 
     # Launch args — overridable from the CLI with `key:=value`.
