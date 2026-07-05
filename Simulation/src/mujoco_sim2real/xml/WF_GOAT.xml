@@ -21,7 +21,7 @@
 
     <default>
         <joint damping="0.0024" frictionloss="0.0645"/>
-        <geom contype="1" conaffinity="1" friction="0.65 0.1 0.1"/>
+        <geom contype="1" conaffinity="1" friction="0.6 0.1 0.1"/>
         <motor ctrllimited="true"/>
     </default>
 
