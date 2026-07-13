@@ -42,7 +42,7 @@ class MovableBasePolicyController(PolicyController):
         return np.hstack([base_ang_vel,
                           base_quat,
                           self._base_command,
-                          joint_pos[self._joint_indices],
+                          joint_pos[self._joint_indices] - self._natural_pos[self._joint_indices],
                           joint_vel,
                           self.previous_action]).reshape(1, -1).astype(np.float32)
 

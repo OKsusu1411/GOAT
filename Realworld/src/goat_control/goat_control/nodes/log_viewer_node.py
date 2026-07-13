@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
+import time
 import rclpy
 import yaml
 import csv
@@ -39,9 +40,9 @@ class LogViewerNode(Node):
         # Parameters
         self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
         self.declare_parameter("sample_count", 20)
-        self.declare_parameter("csv_path", "joint_pos_log.csv")
+        self.declare_parameter("csv_path", "experiment_logs.csv")
         self.declare_parameter("log_degrees", False)
-        self.declare_parameter("is_csv_logging", True)
+        self.declare_parameter("is_csv_logging", False)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -71,7 +72,7 @@ class LogViewerNode(Node):
         # CSV logging
         self.is_csv_logging = bool(self.get_parameter("is_csv_logging").value)
         self.csv_logging_interval_sec = 0.1
-        self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve())
+        self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve().with_name(f"{time.strftime('%Y%m%d_%H%M%S')}_experiment_logs.csv"))
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
 
         self.csv_file = None

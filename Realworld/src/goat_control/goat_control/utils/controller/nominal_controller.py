@@ -130,7 +130,7 @@ class NominalController(BaseController):
         self.wheel_inner_Kd = self.cfg.get("nsc_wheel_inner_derivative_gain")
         self.theta_cmd_limit = math.radians(self.cfg.get("nsc_theta_cmd_limit"))  
         self.num_traj_points = self.cfg.get("nsc_num_traj_points")
-        self.q_target = np.asarray(self.cfg.get("natural_joint_position"))[self.ros_to_pin_ids]  # Final target joint position
+        self.q_target = np.asarray([0.0, 0.0, 0.738, -0.738, 1.462, -1.462, 0.0, 0.0])[self.ros_to_pin_ids]  # Final target joint position
 
         # State variables
         self.S_leg = np.zeros((6, self.nv))

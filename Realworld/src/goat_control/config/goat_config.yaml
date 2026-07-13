@@ -66,24 +66,6 @@ motor_direction:
 - 1
 - 1
 - 1
-natural_joint_position:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-# natural_joint_position:
-# - 0.0
-# - 0.0
-# - 0.738
-# - -0.738
-# - 1.462
-# - -1.462
-# - 0.0
-# - 0.0
 wheel_radius: 0.07275
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
@@ -113,9 +95,9 @@ nsc_theta_cmd_limit: 5.0
 policy_mode: fixed
 policy_checkpoint_path: src/goat_control/checkpoint/joint_track_hip_2.onnx
 policy_device: cpu
-policy_command_vx_limit: 1.0
-policy_command_wz_limit: 0.5
-policy_command_vx_step: 0.1
+policy_command_vx_limit: 0.1
+policy_command_wz_limit: 0.1
+policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
 policy_command_joint_step: 10.0
 policy_decimation: 2.0
@@ -132,6 +114,15 @@ policy_fixed:
   - 0.5
   - 0.5
   - 0.5
+  natural_joint_position:
+  - 0.0
+  - 0.0
+  - 0.738
+  - -0.738
+  - 1.462
+  - -1.462
+  - 0.0
+  - 0.0
 policy_movable:
   observation_info:
     base_ang_vel: 3
@@ -149,6 +140,15 @@ policy_movable:
   - 0.5
   - 5.0
   - 5.0
+  natural_joint_position:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
 policy_leg_proportional_gain:
 - 3.0
 - 3.0

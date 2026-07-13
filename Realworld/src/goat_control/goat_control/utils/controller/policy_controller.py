@@ -53,7 +53,6 @@ class PolicyController(BaseController):
 
         # Natural info
         self.gear_ratio = np.asarray(cfg["motor_gear_ratio"], dtype=float).flatten()
-        self._natural_pos = np.asarray(cfg["natural_joint_position"], dtype=float).flatten()
 
         # --- PD gains (legs) ---
         self._kp = np.asarray(cfg["policy_leg_proportional_gain"], dtype=float).flatten() # [n_leg]
@@ -66,6 +65,7 @@ class PolicyController(BaseController):
         mode_cfg = dict(cfg[f"policy_{self.MODE}"])
         self.policy_observation_info = dict(mode_cfg["observation_info"])
         self.policy_action_scale_factor = np.asarray(mode_cfg["action_scale_factor"], dtype=float).flatten()
+        self._natural_pos = np.asarray(mode_cfg["natural_joint_position"], dtype=float).flatten()
 
         # --- Common policy-related information ---
         self.providers = self._resolve_providers(str(cfg["policy_device"]))
