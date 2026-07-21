@@ -6,7 +6,7 @@ from typing import Any
 
 from .base_controller import BaseController
 
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 from sensor_msgs.msg import JointState
 
 class NominalController(BaseController):

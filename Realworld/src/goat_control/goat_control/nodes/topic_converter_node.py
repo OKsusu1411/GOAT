@@ -4,7 +4,7 @@ import yaml
 from rclpy.node import Node
 from sensor_msgs.msg import JointState, Imu
 from nav_msgs.msg import Odometry
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 from message_filters import Subscriber, TimeSynchronizer
 
 

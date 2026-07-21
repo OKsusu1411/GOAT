@@ -161,7 +161,7 @@ This package is fully separated from the main control pipeline.
 
 ---
 
-## motor_interfaces
+## goat_api
 
 Custom ROS message definitions:
 

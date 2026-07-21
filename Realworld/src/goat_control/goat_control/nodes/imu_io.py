@@ -1,7 +1,7 @@
 # src/goat_control/goat_control/nodes/imu_io.py
 from __future__ import annotations
 
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 
 from goat_control.utils.imu.imu_manager import ImuSerialReader, ImuConfig
 
