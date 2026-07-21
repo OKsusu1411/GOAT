@@ -6,7 +6,7 @@ from typing import List, Any
 import os
 import numpy as np
 import onnxruntime as ort
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 from sensor_msgs.msg import JointState
 
 from .base_controller import BaseController

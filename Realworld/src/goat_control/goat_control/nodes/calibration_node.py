@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from goat_control.utils.imu.quaternion_utils import *
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 
 import yaml
 import os

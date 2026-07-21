@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import numpy as np
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 from sensor_msgs.msg import JointState
 
 

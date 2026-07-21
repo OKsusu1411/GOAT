@@ -15,7 +15,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController

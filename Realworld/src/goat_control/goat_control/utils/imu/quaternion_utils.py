@@ -1,6 +1,6 @@
 # goat_control/utils/imu/quaternion_utils.py
 from __future__ import annotations
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 
 import numpy as np
 

@@ -7,14 +7,14 @@ from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from motor_interfaces.msg import ImuState
+from goat_api.msg import ImuState
 
 
 class ImuTfPublisher(Node):
     """
     Transform custom imu msg type into Rviz imu msg type and publish.
 
-    Subscribe: /imu_data (motor_interfaces/msg/ImuState)
+    Subscribe: /imu_data (goat_api/msg/ImuState)
     Publish TF: odom -> base_link (rotation = imu quat)
     """
     def __init__(self):
