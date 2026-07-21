@@ -28,13 +28,13 @@ goat_api::msg::ImuState ImuIO::read_imu() {
   std::vector<double> data;
   bool have_data;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);   // Thread lock
     have_data = has_valid_packet_;
-    data = latest_raw_vector_;
+    data = latest_raw_vector_;                  // Raw data
   }
-  if (!have_data) return msg;     // Exception catch
+  if (!have_data) return msg;
 
-  // Apply IMU calibration
+  // Quaternion calibration
   const Eigen::Quaterniond quat_offset(cfg_.imu_offsets[0], cfg_.imu_offsets[1],
                                        cfg_.imu_offsets[2], cfg_.imu_offsets[3]);
   const Eigen::Quaterniond raw_quat(data[0], data[1], data[2], data[3]);
@@ -63,15 +63,19 @@ goat_api::msg::ImuState ImuIO::read_imu() {
   return msg;
 }
 
-// Open serial port + spawn reader thread. No-op if already open.
+// Open serial port
 void ImuIO::open() {
+  // Already opened
   if (serial_port_ && serial_port_->isOpen()) return;
 
+  // Serial connection
   serial_port_ = std::make_unique<serial::Serial>(
       cfg_.port,
       static_cast<uint32_t>(cfg_.baud_rate),
-      serial::Timeout::simpleTimeout(static_cast<uint32_t>(cfg_.timeout_ms)));
+      serial::Timeout::simpleTimeout(static_cast<uint32_t>(cfg_.timeout_ms))
+  );
 
+  // Read thread
   stop_flag_.store(false);
   reader_thread_ = std::thread(&ImuIO::read_loop, this);
 
@@ -79,27 +83,21 @@ void ImuIO::open() {
             << " @ " << cfg_.baud_rate << " bps" << std::endl;
 }
 
-// Signal stop, join reader, close port. Idempotent.
+// Close serial port
 void ImuIO::close(){
   stop_flag_.store(true);
 
   if (reader_thread_.joinable()) reader_thread_.join();
 
-  if (serial_port_) {
-    try {
-      if (serial_port_->isOpen()) serial_port_->close();
-    } catch (...) {
-      // Match Python's swallow-on-close semantics
-    }
+  if (serial_port_->isOpen()) {
+    serial_port_->close();
     serial_port_.reset();
   }
 
   std::cout << "[IMU] closed" << std::endl;
 }
 
-// Background reader. Line format from IMU firmware:
-//   *w,x,y,z,gx,gy,gz,vx,vy,vz,mx,my,mz,t_ms
-// Each valid line replaces latest_raw_vector_ under mutex_.
+// Read data on thread
 void ImuIO::read_loop(){
   while (!stop_flag_.load()) {
     try {
@@ -108,7 +106,7 @@ void ImuIO::read_loop(){
         continue;
       }
 
-      // readline blocks up to timeout_ms; strip whitespace/CR/LF
+      // Extract raw data
       std::string raw_line = serial_port_->readline(65536, "\n");
       const auto first = raw_line.find_first_not_of(" \t\r\n");
       if (first == std::string::npos) continue;
@@ -117,7 +115,7 @@ void ImuIO::read_loop(){
       
       if (raw_line.front() != cfg_.start_char) continue;
       
-      // Drop start char, split on ',', parse each field to double
+      // Split on ','
       const std::string payload = raw_line.substr(1);
       std::vector<double> float_values;
       float_values.reserve(cfg_.expected_length);
@@ -149,7 +147,7 @@ void ImuIO::read_loop(){
     }
   }
   
-// Dummy standalone test 
+// Standalone validation test  
 #ifdef IMU_IO_TEST_MAIN
 
 std::atomic<bool> g_shutdown{false};

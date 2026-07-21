@@ -43,12 +43,13 @@ class ImuIO{
 
  private:
   ImuConfig cfg_;
-  std::thread reader_thread_;
   std::unique_ptr<serial::Serial> serial_port_;
-  std::atomic<bool> stop_flag_{false};
-
-  std::mutex mutex_;
   std::vector<double> latest_raw_vector_;
+  
+  std::thread reader_thread_;                   // Thread 
+  std::mutex mutex_;                            // Thread lock
+  
+  std::atomic<bool> stop_flag_{false};
   bool has_valid_packet_ = false;
 
   void open();
