@@ -6,6 +6,9 @@
 #include <iostream>
 #include <sstream>
 #include <Eigen/Geometry>
+#include <csignal>
+
+// #define IMU_IO_TEST_MAIN
 
 // Constructor
 ImuIO::ImuIO(ImuConfig cfg):cfg_(std::move(cfg)){
@@ -94,39 +97,6 @@ void ImuIO::close(){
   std::cout << "[IMU] closed" << std::endl;
 }
 
-// Dummy standalone test entry. Compiled only when IMU_IO_TEST_MAIN is defined
-// (see CMakeLists.txt executable target `imu_io_test`). Opens the IMU on the
-// port passed as argv[1] (default /dev/ttyUSB0) and prints each decoded frame.
-#ifdef IMU_IO_TEST_MAIN
-int main(int argc, char** argv) {
-  ImuConfig cfg;
-  if (argc >= 2) cfg.port = argv[1];
-  cfg.imu_offsets = {1.0, 0.0, 0.0, 0.0};  // identity — no calibration applied
-
-  ImuIO imu(std::move(cfg));
-
-  // Give the reader a beat to pick up its first packet
-  std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-  while (true) {
-    const auto m = imu.read_imu();
-    std::cout << "quat=(" << m.quat.w << ", " << m.quat.x << ", "
-              << m.quat.y << ", " << m.quat.z << ")  "
-              << "gyro=(" << m.gyro.x << ", " << m.gyro.y << ", "
-              << m.gyro.z << ") rad/s  "
-              << "vel=(" << m.vel.x << ", " << m.vel.y << ", "
-              << m.vel.z << ") m/s  "
-              << "mag=(" << m.mag.x << ", " << m.mag.y << ", "
-              << m.mag.z << ")  "
-              << "t=" << m.time_ms << " ms"
-              << std::endl;
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  }
-  return 0;
-}
-#endif
-
 // Background reader. Line format from IMU firmware:
 //   *w,x,y,z,gx,gy,gz,vx,vy,vz,mx,my,mz,t_ms
 // Each valid line replaces latest_raw_vector_ under mutex_.
@@ -144,14 +114,14 @@ void ImuIO::read_loop(){
       if (first == std::string::npos) continue;
       const auto last = raw_line.find_last_not_of(" \t\r\n");
       raw_line = raw_line.substr(first, last - first + 1);
-
+      
       if (raw_line.front() != cfg_.start_char) continue;
-
+      
       // Drop start char, split on ',', parse each field to double
       const std::string payload = raw_line.substr(1);
       std::vector<double> float_values;
       float_values.reserve(cfg_.expected_length);
-
+      
       std::stringstream ss(payload);
       std::string field;
       bool parse_ok = true;
@@ -165,7 +135,7 @@ void ImuIO::read_loop(){
       }
       if (!parse_ok) continue;
       if (float_values.size() != cfg_.expected_length) continue;
-
+      
       {
         std::lock_guard<std::mutex> lock(mutex_);
         latest_raw_vector_ = std::move(float_values);
@@ -174,7 +144,67 @@ void ImuIO::read_loop(){
     } catch (const std::exception& e) {
       std::cerr << "[IMU] read error: " << e.what() << std::endl;
       std::this_thread::sleep_for(
-          std::chrono::duration<float>(cfg_.read_sleep_sec_on_error));
+        std::chrono::duration<float>(cfg_.read_sleep_sec_on_error));
+      }
     }
   }
+  
+// Dummy standalone test 
+#ifdef IMU_IO_TEST_MAIN
+
+std::atomic<bool> g_shutdown{false};
+void handle_sigint(int) { g_shutdown.store(true); }
+
+int main(int argc, char** argv) {
+  std::signal(SIGINT,  handle_sigint);
+  std::signal(SIGTERM, handle_sigint);
+
+  ImuConfig cfg;
+  if (argc >= 2) cfg.port = argv[1];
+  cfg.imu_offsets = {1.0, 0.0, 0.0, 0.0};  // identity — no calibration applied
+
+  ImuIO imu(std::move(cfg));
+
+  // Give the reader a beat to pick up its first packet
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+  double last_time_ms = -1.0;                        // sentinel: no packet seen yet
+  int new_packet_count = 0;                          // # of unique packets this window
+  auto window_start = std::chrono::steady_clock::now();
+
+  while (!g_shutdown.load()) {
+    const auto m = imu.read_imu();
+
+    // Count only NEW packets (time_ms changed since last poll)
+    if (m.time_ms != last_time_ms) {
+      last_time_ms = m.time_ms;
+      ++new_packet_count;
+    }
+
+    // Every 1 s: print latest sample + measured rate, then reset counter
+    const auto now = std::chrono::steady_clock::now();
+    const double elapsed = std::chrono::duration<double>(now - window_start).count();
+    if (elapsed >= 1.0) {
+      const double hz = new_packet_count / elapsed;
+      std::cout << "rate=" << hz << " Hz  "
+                << "quat=(" << m.quat.w << ", " << m.quat.x << ", "
+                << m.quat.y << ", " << m.quat.z << ")  "
+                << "gyro=(" << m.gyro.x << ", " << m.gyro.y << ", "
+                << m.gyro.z << ") rad/s  "
+                << "vel=(" << m.vel.x << ", " << m.vel.y << ", "
+                << m.vel.z << ") m/s  "
+                << "mag=(" << m.mag.x << ", " << m.mag.y << ", "
+                << m.mag.z << ")  "
+                << "t=" << m.time_ms << " ms"
+                << std::endl;
+      new_packet_count = 0;
+      window_start = now;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  // Falling off here → imu goes out of scope → ~ImuIO() → close() → log.
+  return 0;
 }
+#endif
