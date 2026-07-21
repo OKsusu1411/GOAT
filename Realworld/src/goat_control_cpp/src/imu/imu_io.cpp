@@ -7,7 +7,7 @@
 #include <sstream>
 #include <Eigen/Geometry>
 #include <csignal>
-
+// TODO: 200Hz 확인 필요
 // #define IMU_IO_TEST_MAIN
 
 // Constructor
