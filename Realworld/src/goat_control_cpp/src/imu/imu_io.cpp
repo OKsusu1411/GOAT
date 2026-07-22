@@ -8,6 +8,7 @@
 #include <Eigen/Geometry>
 #include <csignal>
 // TODO: 200Hz 확인 필요
+// TODO: cfg를 yaml 통째로 받아서 imu_io 내부에서 처리하기 (일관성을 위해서)
 // #define IMU_IO_TEST_MAIN
 
 // Constructor
@@ -135,9 +136,9 @@ void ImuIO::read_loop(){
       if (float_values.size() != cfg_.expected_length) continue;
       
       {
-        std::lock_guard<std::mutex> lock(mutex_);
-        latest_raw_vector_ = std::move(float_values);
+        std::lock_guard<std::mutex> lock(mutex_);         // Thread lock
         has_valid_packet_ = true;
+        latest_raw_vector_ = std::move(float_values);     // Raw data
       }
     } catch (const std::exception& e) {
       std::cerr << "[IMU] read error: " << e.what() << std::endl;
