@@ -60,7 +60,11 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-20E-03 0E-03 15.5E-03" rpy="0 0 0"/>
+            <!-- <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/> -->
+            <!-- <geometry>
+                <mesh filename="../meshes/base_Link.stl"/>
+            </geometry> -->
+            <origin xyz="-20E-03 0E-03 -15E-03" rpy="0 0 0"/>
             <geometry>
                 <box size="0.214 0.200 0.190"/>
             </geometry>
@@ -86,9 +90,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-43.5E-03 -42E-03 0" rpy="1.57 0 0"/>
+            <origin xyz="-53.5E-03 0 0" rpy="1.57 0 0"/>
             <geometry>
-                <cylinder length="48E-03" radius="43.5E-03"/>
+                <cylinder length="135E-03" radius="42E-03"/>
             </geometry>
         </collision>
     </link>
@@ -112,9 +116,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="-43.5E-03 42E-03 0" rpy="1.57 0 0"/>
+            <origin xyz="-53.5E-03 0 0" rpy="1.57 0 0"/>
             <geometry>
-                <cylinder length="48E-03" radius="43.5E-03"/>
+                <cylinder length="135E-03" radius="42E-03"/>
             </geometry>
         </collision>
     </link>
@@ -138,9 +142,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0 41E-03 -94E-03" rpy="0 0 0"/>
+            <origin xyz="-11E-03 16E-03 -116E-03" rpy="0 0 0"/>
             <geometry>
-                <cylinder length="266E-03" radius="41E-03"/>
+                <box size="0.09 0.05 0.145"/>
             </geometry>
         </collision>
     </link>
@@ -164,9 +168,9 @@
             </material>
         </visual>
         <collision>
-            <origin xyz="0 -41E-03 -94E-03" rpy="0 0 0"/>
+            <origin xyz="-11E-03 -16E-03 -116E-03" rpy="0 0 0"/>
             <geometry>
-                <cylinder length="266E-03" radius="41E-03"/>
+                <box size="0.09 0.05 0.145"/>
             </geometry>
         </collision>
     </link>
