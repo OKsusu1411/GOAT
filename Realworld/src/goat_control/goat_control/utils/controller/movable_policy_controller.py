@@ -61,7 +61,7 @@ class MovableBasePolicyController(PolicyController):
                                                   -self._vx_limit, self._vx_limit))
         elif key == "s":
             self._base_command[0] = float(np.clip(self._base_command[0] - self._vx_step,
-                                                  0.0, self._vx_limit))
+                                                  -self._vx_limit, self._vx_limit))
         elif key == "a":
             self._base_command[2] = float(np.clip(self._base_command[2] + self._wz_step,
                                                   -self._wz_limit, self._wz_limit))
