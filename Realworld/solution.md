@@ -1,355 +1,658 @@
-# solution.md — Restore synchronous 200 Hz joint observation
+# Step 1 — `can.py` + `protocol.py` → `motor/can.{h,cpp}`
 
 ## Conclusion
 
-The three symptoms (position ≠ 0° after calibration, huge CMD_POS / CMD_TAU,
-±1080° spikes at certain joint positions) all come from the same regression
-introduced by `5a6db0c freq amplify`: the control hot-path was switched from
-**synchronous TX/RX per tick** to **fire-and-forget TX + cached "latest
-frame" RX**.
+Merge `can.py` (transport, 318 LOC) and `protocol.py` (encoding, ~150 live LOC) into **one header + one source file** under the C++ package:
 
-A 200 Hz feedback controller with single-turn → multi-turn encoder
-integration depends on a **constant Δt between successive observations**.
-The cache violates that invariant — tick-to-tick staleness is variable —
-which means:
+- `src/goat_control_cpp/include/goat_control_cpp/motor/can.h` — replaces the empty stub.
+- `src/goat_control_cpp/src/motor/can.cpp` — new.
 
-- the wrap detector cannot tell "real wrap" from "stale cache catching up"
-  (root cause of the ±1080° spikes),
-- the very first hot-path tick differences a cached 0xA1 reply against an
-  init 0x9C count taken ~ms earlier on a different command (root cause of
-  "position ≠ 0° after calibration"),
-- a momentarily stalled reader thread leaves velocity and position frozen
-  for several ticks — unsafe for a balance controller.
+Everything lives in namespace `goat::motor`. No third-party CAN library — direct Linux SocketCAN (`<linux/can.h>` + POSIX socket) as agreed. Kernel-header includes stay in the `.cpp`; the header stays clean (`Frame` is a POCO wrapper so nothing above the transport layer needs to know about `struct can_frame`).
 
-The right fix is **not** the speed-aware wrap detector + 1 Hz re-anchor I
-previously proposed in `solution.md` — those were band-aids. The right fix
-is to put the hot path back on synchronous TX/RX (1 ms typical, 2 ms
-worst-case on 1 Mbps CAN), while keeping the parts of `freq amplify` that
-were actually right (move 0x9A error-flag poll off the hot path, reuse a
-persistent thread pool, keep both buses busy in parallel).
-
-We change one design choice: replace the "latest frame" cache with **per-key
-`threading.Event` dispatch**, so the hot path can fire all 8 0xA1 commands,
-then wait for *this tick's* 8 replies with a tight shared deadline. Each
-reply is consumed exactly once. Staleness is impossible by construction.
-
----
+Deprecated payload builders (0xA0/A2/A3/A4/A5/A6/A7/A8, etc.) are omitted.
 
 ## Logic
 
-### What `freq amplify` got right vs. what it broke
+Contract preserved 1:1 from Python — I explained this in the previous walkthrough, so just the delta:
 
-`5a6db0c` made three changes; the first two are correct and we keep them.
-
-| Change in `freq amplify`                              | Verdict       |
-|--------------------------------------------------------|---------------|
-| Move 0x9A (error-flag) poll off the hot path → 1 Hz timer | ✅ keep       |
-| Reuse persistent `_io_pool` instead of spawning threads/tick | ✅ keep       |
-| Replace blocking `txrx()` with `send_only()` + cached `latest_state2()` | ❌ revert     |
-
-The third change is the cause of all three reported symptoms. We undo only
-that one, and only on the hot path.
-
-### Bandwidth budget confirms sync is feasible
-
-On 1 Mbps CAN with standard 8-byte frames:
-
-- One frame on the wire = ~111 µs
-- TX(0xA1) + RX(reply) per motor = ~222 µs
-- 4 motors on one bus, serialized = ~0.9 ms
-- Two buses in parallel (separate SocketCAN sockets / kernel rings) = **~0.9 ms total per tick**
-
-A 200 Hz control tick has 5 ms of budget. CAN consumes <1 ms typical, <2 ms
-worst case (with one motor briefly silent). Margin is comfortable. The OLD
-code (pre-`freq amplify`) was already achieving this — its only real
-problem was the periodic 4-5 ms spike from running 0x9A every 10th tick,
-and that fix is independently preserved.
-
-### Why per-key `Event` dispatch beats "latest frame" cache
-
-The reader thread is already draining the bus into a dict
-(`latest_rx_frames_by_key`). The problem is not the reader thread — it's
-that the hot path *reads from* a "give me whatever you have right now"
-cache. We want "give me **this tick's** reply, or `None` after deadline."
-
-Add a parallel dict of `threading.Event` keyed the same way
-`((arb_id, cmd_byte))`. The reader thread, when it caches a frame, also
-**sets** the corresponding event. Hot-path callers **clear** the events
-they care about before sending the request, then **wait** on them.
-
-Properties this gives us, by construction:
-
-- Reply consumed exactly once: cleared → set → consumed → cleared next tick.
-- Tick-bounded latency: per-tick deadline of ~3 ms total RX wait, shared
-  across all 8 motors. Pipeline keeps both buses busy.
-- Failsafe on motor silence: deadline elapses → driver returns `None` →
-  we inject `NaN` into the joint state slot → existing
-  `controller_node._sensor_data_has_nan()` kill switch fires.
-- The reader thread keeps its role as the sole `bus.recv()` owner —
-  unchanged for the 1 Hz 0x9A slow-poll, which is already happy with the
-  cache (1-second staleness is fine for safety telemetry).
-
-### Why this kills all three symptoms
-
-| Symptom | How sync fixes it |
+| Python | C++ |
 |---|---|
-| **(3) ±1080° spikes** | Δt between successive observations is back to a constant 5 ms. Max realistic motor speed (≈10 rev/s) produces ≤820 counts/tick, well under the 8192 half-range threshold. The original wrap detector works as written; no speed-aware logic needed. |
-| **(1) Position ≠ 0° after calibration** | The init multi-turn anchor (0x92) and the first hot-path encoder count (0xA1) are now both fresh, deterministic reads on a stationary robot. With Change 4 below pairing 0x92 ↔ 0x9C tightly at init, the first tick produces `delta_count = 0` exactly and `motor_angle_deg == anchor_angle_deg` exactly. After rebuild + restart, the same anchor reproduces, so `joint_state.position == joint_offsets`, so published position = 0. |
-| **(2) Huge CMD_POS / CMD_TAU** | Was a downstream consequence of (3) and (1). With clean position, `NominalController` builds `q_ref_traj` from a clean start. |
+| `python-can` `Bus` | Raw SocketCAN socket, `int fd_` |
+| `bus.send(Message(id, data))` | `::write(fd_, &frame, sizeof(frame))` |
+| `bus.recv(timeout=...)` | `::poll(fd, timeout_ms)` + `::read(fd_, &frame, sizeof(frame))` |
+| `threading.Event` | `KeyEvent` = `{ mutex; condition_variable; bool set; }`, held by `std::shared_ptr` so aliasing is two map entries pointing at the same event |
+| `threading.Lock` | `std::mutex` |
+| `dict[(int,int), …]` | `std::unordered_map<uint32_t, …>` with key = `(arb_id << 8) \| cmd_byte` (11-bit id + 8-bit cmd fits comfortably) |
+| MGUnitScales singleton | Namespace-scope `static` inside `can.cpp`, `set_mg_unit_scales`/`get_mg_unit_scales` |
+| `int.to_bytes(..., "little")` | `htole16` / `htole32` from `<endian.h>` |
 
-### What we delete from the prior solution.md
+Two things worth calling out that aren't obvious from the Python:
 
-All three patches from the previous version become unnecessary and are
-removed: the speed-aware wrap detector, the 1 Hz 0x92 re-anchor, and the
-"skip first delta" hack. They were treating symptoms of the broken
-invariant; the invariant is now restored at the source.
-
-### One trade-off worth naming
-
-Sync means the slowest motor sets the tick deadline. If one motor is
-intermittently silent (cable, EMI, brownout), the tick blocks until its
-per-motor deadline elapses (~2 ms). At a 5 ms tick budget this is fine —
-and the OLD code already had this property. The cache approach traded
-correctness for jitter immunity to a single slow motor; for a balance
-controller that was the wrong trade.
-
----
+1. **Stale-frame drain in `blocking_txrx`** — we do it with a nonblocking `::recv(fd, MSG_DONTWAIT)` loop instead of a Python-`recv(timeout=0)` loop. Same effect.
+2. **Reader-thread poll cadence** — Python uses `bus.recv(timeout=0.05)` so `stop_event` is checked every 50 ms. C++ mirrors that with `::poll(..., 50)`.
 
 ## Code
 
-### Change 1 — Add per-key event dispatch to `CanInterface`
+### 1. `src/goat_control_cpp/include/goat_control_cpp/motor/can.h`
 
-**File:** `src/goat_control/goat_control/utils/motor/can.py`
+```cpp
+#ifndef CAN_H_
+#define CAN_H_
 
-**1a.** Add an events dict next to the existing frame cache (in `__init__`,
-right after `self._rx_first_keys_seen` declaration at can.py:58):
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
 
-```python
-# Per-key arrival events for synchronous hot-path dispatch. Hot-path
-# callers clear the event before sending a request, then wait on it for
-# THIS tick's reply. The reader thread sets the event when a frame for
-# that key is cached. Decouples the hot path from the slow-poll path
-# which still uses the cache directly.
-self.frame_events: dict[tuple[int, int], threading.Event] = {}
-self._events_lock = threading.Lock()
+namespace goat::motor {
+
+// ============================================================================
+// Section 1 — Protocol constants and encoders (was protocol.py)
+// ============================================================================
+
+// MG-series CAN IDs for one motor node.
+struct CanIds {
+  uint32_t tx_id;   // host → motor: 0x140 + node_id
+  uint32_t rx_id;   // motor → host: 0x180 + node_id
+};
+
+// Return CanIds for a given node id (1..8 in this project).
+CanIds mg_ids(int node_id);
+
+// Empty 7-byte payload (used by all "read" commands: 0x9A, 0x9C, 0x92, 0x94).
+inline constexpr std::array<uint8_t, 7> E7{};
+
+// Unit conversion scales between LSB (wire) and physical units.
+// Loaded once at startup from YAML via set_mg_unit_scales(); read via get.
+struct MGUnitScales {
+  double motor_current_amp_per_lsb;    // A / LSB
+  double angle_deg_per_lsb;            // deg / LSB
+  double speed_deg_per_sec_per_lsb;    // (deg/s) / LSB
+};
+
+void         set_mg_unit_scales(const MGUnitScales& scales);
+MGUnitScales get_mg_unit_scales();
+
+// Little-endian packers. Return fixed-size byte arrays (no allocation).
+// The uint variants saturate on overflow to mirror Python's clamp+pack.
+std::array<uint8_t, 2> pack_int16_le_signed (int32_t value);
+std::array<uint8_t, 2> pack_uint16_le       (int32_t value);
+std::array<uint8_t, 4> pack_int32_le_signed (int64_t value);
+std::array<uint8_t, 4> pack_uint32_le       (int64_t value);
+
+// Physical <-> LSB helpers (use current scales; call set_mg_unit_scales first).
+int32_t current_amp_to_lsb          (double current_amp);
+int32_t angle_deg_to_lsb            (double angle_deg);
+int32_t speed_deg_per_sec_to_lsb    (double speed_deg_per_sec);
+
+double  lsb_to_current_amp          (int32_t current_lsb);
+double  lsb_to_angle_deg            (int32_t angle_lsb);
+double  lsb_to_speed_deg_per_sec    (int32_t speed_lsb);
+
+// Torque-mode payload builder for command 0xA1.
+//   - Clamps to ±(4096 × amp_per_lsb) then to ±4096 LSB (double clamp).
+//   - Returns just the 2-byte iq field, LE, signed int16.
+std::array<uint8_t, 2> pack_iq_from_amp(double current_amp);
+
+// Build the full 7-byte payload for 0xA1 command:
+//   [00, 00, 00, iq_lo, iq_hi, 00, 00]
+// Prepend 0xA1 in front of this to form the 8-byte CAN data field.
+std::array<uint8_t, 7> payload_torque_mode_from_amp(double current_amp);
+
+// ============================================================================
+// Section 2 — Transport layer (was can.py)
+// ============================================================================
+
+// POCO CAN frame — decouples callers from <linux/can.h>.
+struct Frame {
+  uint32_t             arb_id{0};   // 11-bit standard id
+  uint8_t              dlc{0};      // 1..8
+  std::array<uint8_t, 8> data{};
+};
+
+// Arrival event for one reply key. mutex/cv guard `set`. Two map entries can
+// point at the same KeyEvent (via shared_ptr) — the alias trick that fixes
+// the "motor replies on tx_id" case.
+struct KeyEvent {
+  std::mutex              mutex;
+  std::condition_variable cv;
+  bool                    set{false};
+
+  void clear() {
+    std::lock_guard<std::mutex> lock(mutex);
+    set = false;
+  }
+  // Blocks until `set` becomes true or `deadline` elapses. Idempotent-safe.
+  bool wait_until(std::chrono::steady_clock::time_point deadline) {
+    std::unique_lock<std::mutex> lock(mutex);
+    return cv.wait_until(lock, deadline, [this]{ return set; });
+  }
+  void notify() {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      set = true;
+    }
+    cv.notify_all();
+  }
+};
+
+// One instance per physical CAN bus (can0, can1).
+// Lifecycle:
+//   open() → blocking_txrx() during init → start_reader_thread() → hot path
+//   uses send_only() + event_for_key()+get_latest_frame(). stop_reader_thread()
+//   + close() on shutdown.
+class CanInterface {
+ public:
+  explicit CanInterface(std::string channel);
+  ~CanInterface();
+
+  CanInterface(const CanInterface&)            = delete;
+  CanInterface& operator=(const CanInterface&) = delete;
+
+  // Open the raw CAN socket bound to `channel_`. Throws on failure.
+  void open();
+  // Stop reader (if running), close socket. Idempotent.
+  void close();
+
+  // Reader-thread mode toggle. Must run AFTER all init blocking_txrx() calls.
+  void start_reader_thread();
+  void stop_reader_thread();
+  bool is_reader_running() const;
+
+  // Hot-path fire-and-forget send. Logs on error, does not throw.
+  void send_only(uint32_t arb_id, const uint8_t* data, uint8_t dlc);
+
+  // Init-time synchronous request/response. Drains stale frames, sends,
+  // waits up to `timeout` for a matching frame. Returns std::nullopt on
+  // timeout. Must not be called while the reader thread is running.
+  std::optional<Frame> blocking_txrx(
+      uint32_t tx_id,
+      uint32_t rx_id,
+      uint8_t  cmd_byte,
+      const std::array<uint8_t, 7>& payload7,
+      std::chrono::milliseconds timeout,
+      bool accept_rx_id       = true,
+      bool accept_tx_echo_diff = true);
+
+  // Look up the last cached frame for (arb_id, cmd_byte). std::nullopt if
+  // nothing has arrived on that key yet.
+  std::optional<Frame> get_latest_frame(uint32_t arb_id, uint8_t cmd_byte);
+
+  // Lazily allocate + return the arrival event for one reply key.
+  std::shared_ptr<KeyEvent> event_for_key(uint32_t arb_id, uint8_t cmd_byte);
+
+  // Point two reply keys at ONE shared KeyEvent. Handles the "motor replies
+  // on tx_id instead of rx_id" case: reader sets whichever key arrives, waiter
+  // on either key wakes. Call at setup, before the hot path arms events.
+  std::shared_ptr<KeyEvent> alias_event_keys(
+      uint32_t arb_id_a, uint8_t cmd_a,
+      uint32_t arb_id_b, uint8_t cmd_b);
+
+ private:
+  // Packed (arb_id << 8) | cmd_byte — fits any 11-bit id + 8-bit cmd in 32 bits.
+  static uint32_t make_key(uint32_t arb_id, uint8_t cmd_byte) {
+    return (arb_id << 8) | cmd_byte;
+  }
+
+  // Reader thread body: poll → read → cache → notify event.
+  void read_loop();
+
+  // Drain any pending frames in the kernel RX queue (nonblocking). Used by
+  // blocking_txrx to purge the previous motor's stale reply before sending.
+  int drain_rx(int max_frames = 200);
+
+  // Diagnostic: log the first N unique (arb_id, cmd_byte) keys we see.
+  // Reveals whether motors reply on rx_id or tx_id on this hardware.
+  void maybe_log_first_key(uint32_t arb_id, uint8_t cmd_byte);
+
+  std::string channel_;
+  int         fd_{-1};
+
+  std::thread          reader_thread_;
+  std::atomic<bool>    stop_flag_{false};
+
+  std::mutex           cache_mutex_;
+  std::unordered_map<uint32_t, Frame> latest_frames_;
+  uint64_t             rx_frame_count_{0};
+  std::unordered_set<uint32_t> first_keys_seen_;
+
+  std::mutex           events_mutex_;
+  std::unordered_map<uint32_t, std::shared_ptr<KeyEvent>> events_;
+
+  // Serializes blocking_txrx() callers so A's response can't get consumed
+  // by B's recv() during the init phase.
+  std::mutex           txrx_mutex_;
+};
+
+}  // namespace goat::motor
+
+#endif  // CAN_H_
 ```
 
-**1b.** Add an `event_for_key` helper after `get_latest_frame`
-(can.py:150):
+### 2. `src/goat_control_cpp/src/motor/can.cpp`
 
-```python
-def event_for_key(self, arbitration_id: int, cmd_byte: int) -> threading.Event:
-    """Return (creating if needed) the arrival Event for one reply key.
-    Lazily allocated so we only carry events for keys the hot path uses."""
-    key = (arbitration_id, cmd_byte)
-    with self._events_lock:
-        ev = self.frame_events.get(key)
-        if ev is None:
-            ev = threading.Event()
-            self.frame_events[key] = ev
-        return ev
+```cpp
+#include "goat_control_cpp/motor/can.h"
+
+#include <endian.h>
+#include <errno.h>
+#include <linux/can.h>
+#include <linux/can/raw.h>
+#include <net/if.h>
+#include <poll.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
+
+namespace goat::motor {
+
+// ============================================================================
+// Section 1 — Protocol (was protocol.py)
+// ============================================================================
+
+namespace {
+
+// Live singleton. Defaults match protocol.py's _DEFAULT_MG_UNIT_SCALES.
+MGUnitScales g_scales{
+    .motor_current_amp_per_lsb = 66.0 / 4096.0,
+    .angle_deg_per_lsb         = 0.001,
+    .speed_deg_per_sec_per_lsb = 0.01,
+};
+
+std::mutex g_scales_mutex;
+
+}  // namespace
+
+CanIds mg_ids(int node_id) {
+  return CanIds{
+      .tx_id = static_cast<uint32_t>(0x140 + node_id),
+      .rx_id = static_cast<uint32_t>(0x180 + node_id),
+  };
+}
+
+void set_mg_unit_scales(const MGUnitScales& scales) {
+  std::lock_guard<std::mutex> lock(g_scales_mutex);
+  g_scales = scales;
+}
+
+MGUnitScales get_mg_unit_scales() {
+  std::lock_guard<std::mutex> lock(g_scales_mutex);
+  return g_scales;
+}
+
+std::array<uint8_t, 2> pack_int16_le_signed(int32_t value) {
+  const uint16_t u = static_cast<uint16_t>(static_cast<int16_t>(value));
+  const uint16_t le = htole16(u);
+  std::array<uint8_t, 2> out{};
+  std::memcpy(out.data(), &le, 2);
+  return out;
+}
+
+std::array<uint8_t, 2> pack_uint16_le(int32_t value) {
+  if (value < 0)          value = 0;
+  if (value > 0xFFFF)     value = 0xFFFF;
+  const uint16_t le = htole16(static_cast<uint16_t>(value));
+  std::array<uint8_t, 2> out{};
+  std::memcpy(out.data(), &le, 2);
+  return out;
+}
+
+std::array<uint8_t, 4> pack_int32_le_signed(int64_t value) {
+  const uint32_t u  = static_cast<uint32_t>(static_cast<int32_t>(value));
+  const uint32_t le = htole32(u);
+  std::array<uint8_t, 4> out{};
+  std::memcpy(out.data(), &le, 4);
+  return out;
+}
+
+std::array<uint8_t, 4> pack_uint32_le(int64_t value) {
+  if (value < 0)               value = 0;
+  if (value > 0xFFFFFFFFLL)    value = 0xFFFFFFFFLL;
+  const uint32_t le = htole32(static_cast<uint32_t>(value));
+  std::array<uint8_t, 4> out{};
+  std::memcpy(out.data(), &le, 4);
+  return out;
+}
+
+// Physical <-> LSB. `round` (not truncate) — matches Python's int(round(...)).
+int32_t current_amp_to_lsb(double current_amp) {
+  return static_cast<int32_t>(
+      std::llround(current_amp / get_mg_unit_scales().motor_current_amp_per_lsb));
+}
+int32_t angle_deg_to_lsb(double angle_deg) {
+  return static_cast<int32_t>(
+      std::llround(angle_deg / get_mg_unit_scales().angle_deg_per_lsb));
+}
+int32_t speed_deg_per_sec_to_lsb(double speed_deg_per_sec) {
+  return static_cast<int32_t>(
+      std::llround(speed_deg_per_sec / get_mg_unit_scales().speed_deg_per_sec_per_lsb));
+}
+
+double lsb_to_current_amp(int32_t current_lsb) {
+  return current_lsb * get_mg_unit_scales().motor_current_amp_per_lsb;
+}
+double lsb_to_angle_deg(int32_t angle_lsb) {
+  return angle_lsb * get_mg_unit_scales().angle_deg_per_lsb;
+}
+double lsb_to_speed_deg_per_sec(int32_t speed_lsb) {
+  return speed_lsb * get_mg_unit_scales().speed_deg_per_sec_per_lsb;
+}
+
+// Double clamp: (1) physical amp range, (2) LSB int16 range post-round.
+std::array<uint8_t, 2> pack_iq_from_amp(double current_amp) {
+  constexpr int32_t max_iq_lsb = 4096;
+  const double max_iq_amp = max_iq_lsb * get_mg_unit_scales().motor_current_amp_per_lsb;
+
+  double clamped_amp = std::max(std::min(current_amp, max_iq_amp), -max_iq_amp);
+  int32_t iq_lsb     = current_amp_to_lsb(clamped_amp);
+  iq_lsb = std::max(std::min(iq_lsb, max_iq_lsb), -max_iq_lsb);
+
+  return pack_int16_le_signed(iq_lsb);
+}
+
+std::array<uint8_t, 7> payload_torque_mode_from_amp(double current_amp) {
+  const auto iq_bytes = pack_iq_from_amp(current_amp);
+  return {0x00, 0x00, 0x00, iq_bytes[0], iq_bytes[1], 0x00, 0x00};
+}
+
+// ============================================================================
+// Section 2 — Transport (was can.py)
+// ============================================================================
+
+CanInterface::CanInterface(std::string channel)
+    : channel_(std::move(channel)) {}
+
+CanInterface::~CanInterface() { close(); }
+
+void CanInterface::open() {
+  if (fd_ >= 0) return;
+
+  fd_ = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
+  if (fd_ < 0) {
+    throw std::runtime_error(
+        "[CAN] socket() failed on " + channel_ + ": " + std::strerror(errno));
+  }
+
+  struct ifreq ifr{};
+  std::strncpy(ifr.ifr_name, channel_.c_str(), IFNAMSIZ - 1);
+  if (::ioctl(fd_, SIOCGIFINDEX, &ifr) < 0) {
+    const int err = errno;
+    ::close(fd_);
+    fd_ = -1;
+    throw std::runtime_error(
+        "[CAN] ioctl(SIOCGIFINDEX) failed on " + channel_ + ": " + std::strerror(err));
+  }
+
+  struct sockaddr_can addr{};
+  addr.can_family  = AF_CAN;
+  addr.can_ifindex = ifr.ifr_ifindex;
+  if (::bind(fd_, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
+    const int err = errno;
+    ::close(fd_);
+    fd_ = -1;
+    throw std::runtime_error(
+        "[CAN] bind() failed on " + channel_ + ": " + std::strerror(err));
+  }
+
+  std::cout << "[CAN] opened: socketcan:" << channel_ << std::endl;
+}
+
+void CanInterface::close() {
+  stop_reader_thread();
+
+  if (fd_ >= 0) {
+    ::close(fd_);
+    fd_ = -1;
+    std::cout << "[CAN] closed: " << channel_ << std::endl;
+  }
+}
+
+void CanInterface::start_reader_thread() {
+  if (reader_thread_.joinable()) return;
+  if (fd_ < 0) {
+    throw std::runtime_error("[CAN] start_reader_thread() before open() on " + channel_);
+  }
+  stop_flag_.store(false);
+  reader_thread_ = std::thread(&CanInterface::read_loop, this);
+  std::cout << "[CAN] reader thread started on " << channel_ << std::endl;
+}
+
+void CanInterface::stop_reader_thread() {
+  stop_flag_.store(true);
+  if (reader_thread_.joinable()) reader_thread_.join();
+}
+
+bool CanInterface::is_reader_running() const {
+  return reader_thread_.joinable() && !stop_flag_.load();
+}
+
+void CanInterface::send_only(uint32_t arb_id, const uint8_t* data, uint8_t dlc) {
+  if (fd_ < 0) {
+    std::cerr << "[CAN] send_only on closed bus " << channel_ << std::endl;
+    return;
+  }
+  struct can_frame f{};
+  f.can_id  = arb_id & CAN_SFF_MASK;   // 11-bit standard id
+  f.can_dlc = std::min<uint8_t>(dlc, 8);
+  std::memcpy(f.data, data, f.can_dlc);
+
+  const ssize_t n = ::write(fd_, &f, sizeof(f));
+  if (n != static_cast<ssize_t>(sizeof(f))) {
+    std::cerr << "[CAN] send_only failed on " << channel_
+              << " (id=0x" << std::hex << arb_id << std::dec
+              << "): " << std::strerror(errno) << std::endl;
+  }
+}
+
+std::optional<Frame> CanInterface::blocking_txrx(
+    uint32_t tx_id, uint32_t rx_id, uint8_t cmd_byte,
+    const std::array<uint8_t, 7>& payload7,
+    std::chrono::milliseconds timeout,
+    bool accept_rx_id, bool accept_tx_echo_diff) {
+
+  if (fd_ < 0) return std::nullopt;
+
+  std::lock_guard<std::mutex> lock(txrx_mutex_);
+
+  // (1) Purge stale RX frames left by the previous motor.
+  const int drained = drain_rx();
+  if (drained > 0) {
+    std::cout << "[CAN] " << channel_ << " drained " << drained
+              << " stale RX frames before blocking_txrx" << std::endl;
+  }
+
+  // (2) Compose + send.
+  struct can_frame tx_frame{};
+  tx_frame.can_id  = tx_id & CAN_SFF_MASK;
+  tx_frame.can_dlc = 8;
+  tx_frame.data[0] = cmd_byte;
+  std::memcpy(&tx_frame.data[1], payload7.data(), 7);
+  if (::write(fd_, &tx_frame, sizeof(tx_frame)) != static_cast<ssize_t>(sizeof(tx_frame))) {
+    std::cerr << "[CAN] blocking_txrx send failed on " << channel_ << ": "
+              << std::strerror(errno) << std::endl;
+    return std::nullopt;
+  }
+
+  // (3) Poll → read → filter, until deadline.
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (true) {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline) return std::nullopt;
+
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - now).count();
+    struct pollfd pfd{fd_, POLLIN, 0};
+    const int pr = ::poll(&pfd, 1, static_cast<int>(std::min<long>(remaining, 50)));
+    if (pr <= 0) continue;                     // timeout tick or interrupted
+    if (!(pfd.revents & POLLIN)) continue;
+
+    struct can_frame rx{};
+    const ssize_t n = ::read(fd_, &rx, sizeof(rx));
+    if (n != static_cast<ssize_t>(sizeof(rx))) continue;
+    if (rx.can_dlc != 8) continue;
+    if (rx.data[0] != cmd_byte) continue;
+
+    const uint32_t rid = rx.can_id & CAN_SFF_MASK;
+    const bool is_rx_id = (rid == (rx_id & CAN_SFF_MASK));
+    const bool is_tx_id = (rid == (tx_id & CAN_SFF_MASK));
+
+    // Pure loopback echo (same tx_id + identical data) is always rejected.
+    const bool is_pure_echo =
+        is_tx_id && (std::memcmp(rx.data, tx_frame.data, 8) == 0);
+    if (is_pure_echo) continue;
+
+    if (accept_rx_id && is_rx_id) {
+      Frame out{rid, rx.can_dlc, {}};
+      std::memcpy(out.data.data(), rx.data, 8);
+      return out;
+    }
+    if (accept_tx_echo_diff && is_tx_id) {
+      Frame out{rid, rx.can_dlc, {}};
+      std::memcpy(out.data.data(), rx.data, 8);
+      return out;
+    }
+    // Frame from unrelated key — drop, keep waiting.
+  }
+}
+
+int CanInterface::drain_rx(int max_frames) {
+  int drained = 0;
+  struct can_frame f{};
+  while (drained < max_frames) {
+    const ssize_t n = ::recv(fd_, &f, sizeof(f), MSG_DONTWAIT);
+    if (n <= 0) break;
+    ++drained;
+  }
+  return drained;
+}
+
+std::optional<Frame> CanInterface::get_latest_frame(uint32_t arb_id, uint8_t cmd_byte) {
+  const uint32_t key = make_key(arb_id, cmd_byte);
+  std::lock_guard<std::mutex> lock(cache_mutex_);
+  auto it = latest_frames_.find(key);
+  if (it == latest_frames_.end()) return std::nullopt;
+  return it->second;
+}
+
+std::shared_ptr<KeyEvent> CanInterface::event_for_key(uint32_t arb_id, uint8_t cmd_byte) {
+  const uint32_t key = make_key(arb_id, cmd_byte);
+  std::lock_guard<std::mutex> lock(events_mutex_);
+  auto it = events_.find(key);
+  if (it != events_.end()) return it->second;
+  auto ev = std::make_shared<KeyEvent>();
+  events_.emplace(key, ev);
+  return ev;
+}
+
+std::shared_ptr<KeyEvent> CanInterface::alias_event_keys(
+    uint32_t arb_id_a, uint8_t cmd_a,
+    uint32_t arb_id_b, uint8_t cmd_b) {
+  const uint32_t ka = make_key(arb_id_a, cmd_a);
+  const uint32_t kb = make_key(arb_id_b, cmd_b);
+  std::lock_guard<std::mutex> lock(events_mutex_);
+
+  auto find_existing = [&](uint32_t k) -> std::shared_ptr<KeyEvent> {
+    auto it = events_.find(k);
+    return it == events_.end() ? nullptr : it->second;
+  };
+  auto ev = find_existing(ka);
+  if (!ev) ev = find_existing(kb);
+  if (!ev) ev = std::make_shared<KeyEvent>();
+
+  events_[ka] = ev;
+  events_[kb] = ev;
+  return ev;
+}
+
+void CanInterface::read_loop() {
+  while (!stop_flag_.load()) {
+    struct pollfd pfd{fd_, POLLIN, 0};
+    const int pr = ::poll(&pfd, 1, 50);       // 50 ms — matches Python cadence
+    if (pr <= 0) continue;
+    if (!(pfd.revents & POLLIN)) continue;
+
+    struct can_frame rx{};
+    const ssize_t n = ::read(fd_, &rx, sizeof(rx));
+    if (n != static_cast<ssize_t>(sizeof(rx))) continue;
+    if (rx.can_dlc == 0) continue;
+
+    const uint32_t arb = rx.can_id & CAN_SFF_MASK;
+    const uint8_t  cmd = rx.data[0];
+    const uint32_t key = make_key(arb, cmd);
+
+    Frame frame{arb, rx.can_dlc, {}};
+    std::memcpy(frame.data.data(), rx.data, 8);
+
+    {
+      std::lock_guard<std::mutex> lock(cache_mutex_);
+      latest_frames_[key] = frame;
+      ++rx_frame_count_;
+    }
+
+    // Wake anyone waiting on this exact key.
+    std::shared_ptr<KeyEvent> ev;
+    {
+      std::lock_guard<std::mutex> lock(events_mutex_);
+      auto it = events_.find(key);
+      if (it != events_.end()) ev = it->second;
+    }
+    if (ev) ev->notify();
+
+    maybe_log_first_key(arb, cmd);
+  }
+}
+
+void CanInterface::maybe_log_first_key(uint32_t arb_id, uint8_t cmd_byte) {
+  std::lock_guard<std::mutex> lock(cache_mutex_);   // reuses cache_mutex_ for the set
+  if (first_keys_seen_.size() >= 16) return;
+  const uint32_t key = make_key(arb_id, cmd_byte);
+  if (!first_keys_seen_.insert(key).second) return;
+
+  char buf[128];
+  std::snprintf(buf, sizeof(buf),
+                "[CAN] %s first frame for arb_id=0x%03X cmd=0x%02X (total=%llu)",
+                channel_.c_str(), arb_id, cmd_byte,
+                static_cast<unsigned long long>(rx_frame_count_));
+  std::cout << buf << std::endl;
+}
+
+}  // namespace goat::motor
 ```
 
-**1c.** Make the reader thread set the event whenever it caches a frame.
-**Modify** the body of `_rx_loop` (can.py:119-145), replacing the cache
-write section:
+### 3. `CMakeLists.txt` addition (append inside the existing `imu_io` library target — do NOT touch anything else)
 
-```python
-key = (msg.arbitration_id, msg.data[0])
-with self._rx_lock:
-    self.latest_rx_frames_by_key[key] = msg
-    self.rx_frame_count += 1
-# Wake any hot-path waiter on this exact key. Cheap no-op if no waiter
-# was ever registered for this key.
-ev = self.frame_events.get(key)
-if ev is not None:
-    ev.set()
+```cmake
+# Add the motor source to the same library (single-lib decision, per the plan).
+target_sources(imu_io PRIVATE src/motor/can.cpp)
 ```
 
-### Change 2 — Add a synchronous `await_state2` to `MotorDriver`
+*(Note: this reuses the existing `imu_io` library target. Once Step 5 lands we'll rename the target to `goat_control_cpp` to match its actual scope. For now this keeps CMake surgical — one `target_sources` line, no renames, no new targets.)*
 
-**File:** `src/goat_control/goat_control/utils/motor/motor_driver.py`
-**Insert after motor_driver.py:112** (alongside the existing
-`latest_state2`). Keep `send_torque_only` and `latest_state2` — the
-manager will compose them into a single sync call.
+## Notes on things I intentionally did NOT do
 
-```python
-def clear_state2_event(self) -> None:
-    """Arm this motor for a fresh 0xA1 reply.
+- **`MotorParams`, `MotorDriver`** — those are Step 2/3 (motor_driver.py port). Not in this file.
+- **Deprecated payload builders** — 0xA0 / A2 / A3 / A4 / A5 / A6 / A7 / A8 skipped, as agreed.
+- **Bitrate configuration** — the Python `bitrate=` arg to `can.Bus` is a no-op on Linux SocketCAN (the interface is brought up externally via `setup_can_test.sh` with `ip link set canX up type can bitrate 1000000`). C++ inherits the same assumption; nothing to configure at runtime.
+- **CAN-FD** — not needed. Sticking with `can_frame` (16 bytes) and 11-bit standard IDs.
+- **Logger injection** — using `std::cout`/`std::cerr` for now to match `imu_io.cpp` style. Swap for `rclcpp::Logger` when we wire this to a real ROS node.
+- **No unit tests** — Step 2 will introduce a small `can_loopback_test` executable against `vcan0` as a smoke check.
 
-    Must be called BEFORE send_torque_only() each tick so the subsequent
-    wait blocks until THIS tick's reply lands (not the previous one's)."""
-    self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1).clear()
-    self.can_interface.event_for_key(self.can_ids.tx_id, 0xA1).clear()
-
-def await_state2(self, deadline_monotonic: float):
-    """Block until a fresh 0xA1 reply arrives for this motor, or the
-    shared deadline elapses. Returns the can.Message or None on timeout.
-
-    `deadline_monotonic` is an absolute time.monotonic() value shared by
-    all 8 motors this tick — keeps total RX wait bounded regardless of
-    motor count."""
-    import time
-    rx_ev = self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1)
-    remaining = max(0.0, deadline_monotonic - time.monotonic())
-    if rx_ev.wait(remaining):
-        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
-        if msg is not None:
-            return msg
-    # rx_id timed out — try tx_id fallback (mirrors txrx's accept_tx_echo_diff).
-    return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1)
-```
-
-### Change 3 — Rewrite `write_torques_and_read_states` as sync pipeline
-
-**File:** `src/goat_control/goat_control/utils/motor/motor_manager.py`
-**Lines:** 566-618 (replace the entire method body)
-
-```python
-def write_torques_and_read_states(
-    self,
-    current_cmd_amp: Sequence[float],
-    timeout: float = 0.003,         # total RX deadline shared across all 8 motors
-    perform_slow_poll: bool = False,  # kept for API compatibility; ignored
-) -> MotorStatesData:
-    """Synchronous fire-all-then-wait-all torque + state2 pass.
-
-    Phase 1 — clear each motor's 0xA1 reply event, then send its torque
-              command. TXs are non-blocking (kernel ring); both buses run
-              in parallel by virtue of separate CanInterface instances.
-    Phase 2 — for each motor, wait on its arrival event until the shared
-              deadline. On timeout, inject NaN so the kill switch fires
-              instead of letting stale data drive the controller.
-
-    Δt between successive ticks is now constant (the control timer period),
-    so the encoder wrap detector in _update_motor_angle_from_encoder works
-    as originally designed without any speed-sign disambiguation.
-    """
-    # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
-    # kernel TX ring without blocking on the wire.
-    t_submit = time.perf_counter()                                       # [timing]
-    for motor_index, amp in enumerate(current_cmd_amp):
-        driver = self.motor_drivers[motor_index]
-        driver.clear_state2_event()
-        driver.send_torque_only(float(amp))
-    t_fired = time.perf_counter()                                        # [timing]
-
-    # Phase 2 — bounded wait, one shared deadline so total RX time is
-    # bounded by `timeout` rather than 8 × per-motor timeout.
-    deadline_monotonic = time.monotonic() + float(timeout)
-    for motor_index in range(self.motor_count):
-        driver = self.motor_drivers[motor_index]
-        response_message = driver.await_state2(deadline_monotonic)
-        if response_message is None:
-            # Motor silent this tick. Mark its slot NaN so
-            # controller_node._sensor_data_has_nan() trips the kill switch
-            # — far safer than re-using stale state for a balance loop.
-            self.motor_speed_deg_per_sec[motor_index] = float("nan")
-            self.motor_phase_current_amp[motor_index] = float("nan")
-            continue
-
-        response_data = response_message.data
-
-        # 0xA1 reply has the same byte layout as 0x9C state2.
-        self.motor_temperature_c[motor_index] = float(struct.unpack("<b", response_data[1:2])[0])
-
-        motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
-        self.motor_phase_current_amp[motor_index] = float(motor_current_raw_lsb) * self.motor_current_amp_per_lsb
-
-        speed_raw_lsb = struct.unpack("<h", response_data[4:6])[0]
-        self.motor_speed_deg_per_sec[motor_index] = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
-
-        self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
-
-        self._update_motor_angle_from_encoder(motor_index)
-    t_done = time.perf_counter()                                         # [timing]
-
-    # Surface timings (read by controller_node timing log).
-    self._last_tx_submit_ms = (t_fired - t_submit) * 1e3
-    self._last_tx_wait_ms = (t_done - t_fired) * 1e3
-
-    return self._package_motor_states()
-```
-
-### Change 4 — Tighten anchor pairing at init
-
-**File:** `src/goat_control/goat_control/utils/motor/motor_manager.py`
-
-The init `fetch_motor_data` currently reads in order: state2 → state1 →
-multi-turn. The anchor then pairs encoder_count (from state2, oldest) with
-motor_angle_deg (from multi-turn, newest), with ~ms between them. Reverse
-the order so multi-turn and state2 are adjacent.
-
-**Replace motor_manager.py:541-545** (`fetch_motor_data` body in
-`decode_motor_encoder`):
-
-```python
-def fetch_motor_data(motor_index: int):
-    if perform_slow_poll:
-        self.poll_state1(motor_index)                # 0x9A (oldest, doesn't feed anchor)
-        self.poll_single_or_multi_turn(motor_index)  # 0x92 (feeds anchor_motor_angle_deg)
-    self.poll_state2(motor_index)                    # 0x9C (feeds anchor_encoder_count) — last so it pairs tightly with 0x92
-```
-
-Now `anchor_motor_angle_deg` and `anchor_encoder_count` are captured ~200 µs
-apart on the same bus, instead of ~1-3 ms. On a held-still robot the
-remaining mismatch is sub-count; the very first hot-path tick produces
-`delta_count = 0` exactly, and the published joint position is `−joint_offset`
-exactly, which (after calibration writes that same value as the offset) is
-zero.
-
-### Change 5 — Revert the band-aids from the previous solution.md
-
-If any of Changes 1/2/3 from the prior version of this file were already
-applied, undo them now — they are no longer needed and add cost without
-benefit once the sync invariant is restored.
-
-Specifically remove, from
-`src/goat_control/goat_control/utils/motor/motor_manager.py`:
-
-- the speed-sign branches inside `_update_motor_angle_from_encoder` (return
-  to the original `|delta_count| > half_range` form),
-- `reanchor_from_multi_turn()`,
-- `motor_first_encoder_update_skipped` and the "skip first delta" block.
-
-And from `src/goat_control/goat_control/utils/motor/motor_driver.py`:
-
-- `send_multi_turn_request()` and `latest_multi_turn()` (no caller).
-
-And in `src/goat_control/goat_control/nodes/motor_io.py`,
-`poll_error_flags_once()` returns to its pre-band-aid body:
-
-```python
-def poll_error_flags_once(self) -> None:
-    """Read 0x9A error flags on every motor — call from a ~1 Hz timer.
-    After Step 3 poll_state1 is fire-and-forget; no need for the thread
-    pool. Sequential send_only is essentially free (<1 ms total)."""
-    mm = self.motor_manager
-    for motor_index in range(mm.motor_count):
-        mm.poll_state1(motor_index)
-```
-
-(The 1 Hz `error_flag_timer` in `controller_node.py:174` stays as-is.)
-
----
-
-## Verification
-
-1. `colcon build` and `ros2 launch goat_control goat_control_system.launch.py`.
-2. Watch the existing `[timing]` line. Expect `can:` to read **~1.0-1.5 ms**
-   (tx ~0.2 / rx ~0.8-1.3) at 200 Hz. If it goes >3 ms consistently, one
-   bus is dropping replies — investigate motor health, not the code.
-3. Hold the robot in the calibration pose. `ros2 topic echo /joint_states`:
-   every `position` value should print within ±0.01 rad of 0 immediately.
-4. Power-cycle the robot, repeat step 3 without re-calibrating. Position
-   should still be near 0 (proves the anchor reproduces deterministically).
-5. Rotate one leg joint by hand through ≥360° motor at a normal pace.
-   Position should track smoothly. No ±360° / ±1080° steps anywhere on
-   the trajectory.
-6. Spin a wheel by hand for ≥5 s — position should accumulate monotonically.
-7. Pull a CAN cable on one motor mid-run. Expect: within ~2-3 ms,
-   `_sensor_data_has_nan()` trips the kill switch, controller goes to
-   zero torque, log prints "NaN detected in joint/IMU state". Reconnect,
-   press `r` for manual reset, control resumes cleanly.
-
-Tell me when you've reviewed this and I'll apply Changes 1–5 in order.
+## Ready to apply
+Say go and I'll apply the header, the .cpp, and the one-line CMake addition. Nothing else touched.
