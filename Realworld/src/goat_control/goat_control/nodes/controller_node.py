@@ -386,13 +386,21 @@ class ControllerNode(Node):
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                               imu_msg,
                                                                               dt_sec)
-            v_ref[-2:] = wheel_v_ref # Only for wheel
+            # Only write into wheel slots that actually exist in this config.
+            # 8-motor: wheel_indices=[6,7] → same as v_ref[-2:] = wheel_v_ref.
+            # 6-motor: wheel_indices=[] → no-op (avoids shape-mismatch crash).
+            wheel_indices = self.cfg["wheel_indices"]
+            if len(wheel_indices) > 0:
+                v_ref[wheel_indices] = wheel_v_ref
 
         elif self.publish_mode == 'nominal':
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
                                                                      imu_msg,
                                                                      dt_sec)
-            v_ref[-2:] = 0 # Only for wheel
+            # Same wheel-slot guard as the policy branch.
+            wheel_indices = self.cfg["wheel_indices"]
+            if len(wheel_indices) > 0:
+                v_ref[wheel_indices] = 0.0
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
@@ -461,10 +469,9 @@ class ControllerNode(Node):
         # Update joint command message
         msg_command = JointState()
         msg_command.header.stamp = self.now_stamp
-        msg_command.name = [
-            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
-            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
-        ]
+        # Use configured joint names so /commands stays consistent with the
+        # actual num_joints (8 in normal setup, 6 in wheel-less bring-up).
+        msg_command.name = list(self.cfg["joint_names"])
         msg_command.position = position.tolist()
         msg_command.velocity = velocity.tolist()
         msg_command.effort = effort.tolist()
