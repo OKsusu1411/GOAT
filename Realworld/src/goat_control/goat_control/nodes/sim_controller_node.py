@@ -270,6 +270,7 @@ class SimControllerNode(Node):
         # Proactive condition check
         # --------------------------------------------------------------
         if self.publish_mode is None:
+            q_ref[:] = [0.0, 0.0, 1.09, -1.09, 1.89, -1.89, 0.0, 0.0]
             self._publish_joint_command(q_ref, v_ref, tau)
             return
         
@@ -303,14 +304,14 @@ class SimControllerNode(Node):
         # # --------------------------------------------------------------
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
-        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
+        # safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
-        if is_blocked:
-            q_ref = np.zeros(self.num_joints, dtype=np.float32)
-            v_ref = np.zeros(self.num_joints, dtype=np.float32)
-            safe_torque = np.zeros(self.num_joints, dtype=np.float32)
+        # if is_blocked:
+        #     q_ref = np.zeros(self.num_joints, dtype=np.float32)
+        #     v_ref = np.zeros(self.num_joints, dtype=np.float32)
+        #     safe_torque = np.zeros(self.num_joints, dtype=np.float32)
 
-        tau[:] = safe_torque
+        tau[:] = joint_torque
 
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
