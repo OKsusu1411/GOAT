@@ -304,21 +304,21 @@ class SimControllerNode(Node):
         # # --------------------------------------------------------------
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
-        # safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
+        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
-        # if is_blocked:
-        #     q_ref = np.zeros(self.num_joints, dtype=np.float32)
-        #     v_ref = np.zeros(self.num_joints, dtype=np.float32)
-        #     safe_torque = np.zeros(self.num_joints, dtype=np.float32)
+        if is_blocked:
+            q_ref = np.zeros(self.num_joints, dtype=np.float32)
+            v_ref = np.zeros(self.num_joints, dtype=np.float32)
+            safe_torque = np.zeros(self.num_joints, dtype=np.float32)
 
-        tau[:] = joint_torque
+        tau[:] = safe_torque
 
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
         self._publish_joint_command(q_ref, v_ref, tau)
 
-        # self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
+        self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
 
     def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish command to /joint_command.

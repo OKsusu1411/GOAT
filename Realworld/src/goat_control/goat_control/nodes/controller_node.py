@@ -168,6 +168,7 @@ class ControllerNode(Node):
         self.logger.info("[Keydown Menu]")
         self.logger.info("'p': Policy Control Mode")
         self.logger.info("'n': Nominal Control Mode")
+        self.logger.info("'s': Start the control loop (torque publishing)")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")

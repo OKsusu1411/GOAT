@@ -14,9 +14,7 @@ class FixedBasePolicyController(PolicyController):
                   joint_command(legs)].
     Action     : leg-only action, scaled per leg joint.
 
-    Tracking mode: Joint Position. The 6-dim ``_joint_command`` (leg joint
-    targets) is the tracking command and is updated from the keyboard via
-    :meth:`handle_key` (two-stage: select joint class, then +/- with arrows).
+    Tracking mode: Joint Position. The 6-dim ``_joint_command`` (leg joint targets) 
     """
 
     MODE = "fixed"

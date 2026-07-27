@@ -46,7 +46,7 @@
     <link name="base_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="-9.521E-03 0.016E-03 -72.346E-03"/>
-            <mass value="2.818"/>
+            <mass value="3.119"/>
             <inertia ixx="20284.45E-06" ixy="-5.647E-06" ixz="6404.633E-06"
                     iyy="23476.973E-06" iyz="0.541E-06" izz="21206.204E-06"/>
         </inertial>
@@ -60,10 +60,6 @@
             </material>
         </visual>
         <collision>
-            <!-- <origin xyz="-123.5E-03 0E-03 15.5E-03" rpy="0 0 0"/> -->
-            <!-- <geometry>
-                <mesh filename="../meshes/base_Link.stl"/>
-            </geometry> -->
             <origin xyz="-20E-03 0E-03 -15E-03" rpy="0 0 0"/>
             <geometry>
                 <box size="0.214 0.200 0.190"/>
@@ -75,7 +71,7 @@
         <inertial>
             <!-- C_rel_mirror = [-48.092, -38.296, -0.162] mm -->
             <origin rpy="0 0 0" xyz="-48.092E-03 -38.296E-03 -0.162E-03"/>
-            <mass value="0.32"/>
+            <mass value="0.316"/>
             <!-- I_C_new_mirror -->
             <inertia ixx="143.701E-06" ixy="-12.808E-06" ixz="-1.53E-06"
                     iyy="215.732E-06" iyz="-0.447E-06" izz="197.705E-06"/>
@@ -101,7 +97,7 @@
         <inertial>
             <!-- C_rel = [-48.092, 38.296, -0.162] mm -->
             <origin rpy="0 0 0" xyz="-48.092E-03 38.296E-03 -0.162E-03"/>
-            <mass value="0.32"/>
+            <mass value="0.322"/>
             <!-- I_C_new -->
             <inertia ixx="143.701E-06" ixy="12.808E-06" ixz="-1.53E-06"
                     iyy="215.732E-06" iyz="0.447E-06" izz="197.705E-06"/>
@@ -125,10 +121,12 @@
 
     <link name="thigh_L_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="-1.99E-03 42.368E-03 -35.253E-03"/>
-            <mass value="0.483"/>
-            <inertia ixx="2424.0E-06" ixy="-20.504E-06" ixz="-75.431E-06"
-                    iyy="2341.0E-06" iyz="-378.1E-06" izz="384.3E-06"/>
+            <!-- C_rel = [-2.015, 42.352, -35.272] mm -->
+            <origin rpy="0 0 0" xyz="-2.015E-03 42.352E-03 -35.272E-03"/>
+            <mass value="0.496"/>
+            <!-- I_C_new -->
+            <inertia ixx="3893E-06" ixy="20.446085E-06" ixz="-110.1E-06"
+                    iyy="2945E-06" iyz="343.5E-06" izz="1254E-06"/>
         </inertial>
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -149,10 +147,13 @@
 
     <link name="thigh_R_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="-1.99E-03 -42.368E-03 -35.253E-03"/>
-            <mass value="0.483"/>
-            <inertia ixx="2424.0E-06" ixy="20.504E-06" ixz="-75.431E-06"
-                    iyy="2341.0E-06" iyz="378.1E-06" izz="384.3E-06"/>
+            <!-- C_rel = [-2.015, -42.352, -35.272] mm -->
+            <origin rpy="0 0 0" xyz="-2.015E-03 -42.352E-03 -35.272E-03"/>
+            <mass value="0.495"/>
+            <!-- I_C_new -->
+            <inertia ixx="3893E-06" ixy="-20.446085E-06" ixz="-110.1E-06"
+                    iyy="2945E-06" iyz="-343.5E-06" izz="1254E-06"/>
+                    
         </inertial>
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -173,10 +174,12 @@
         
     <link name="calf_L_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="2.023E-03 0.639E-03 -162.465E-03"/>
-            <mass value="0.299"/>
-            <inertia ixx="1486.0E-06" ixy="0.666E-06" ixz="-33.542E-06"
-                    iyy="1526.0E-06" iyz="9.955E-06" izz="95.179E-06"/>
+            <!-- C_rel_mirror = [1.969, 0.712, -160.161] mm -->
+            <origin rpy="0 0 0" xyz="1.969E-03 0.712E-03 -160.161E-03"/>
+            <mass value="0.326"/>
+            <!-- I_C_new_mirror -->
+            <inertia ixx="9381E-06" ixy="0.28042E-06" ixz="64.503362E-06"
+                    iyy="9422E-06" iyz="41.025966E-06" izz="96.695739E-06"/>
         </inertial>
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -197,10 +200,12 @@
 
     <link name="calf_R_Link">
         <inertial>
-            <origin rpy="0 0 0" xyz="2.023E-03 -0.639E-03 -162.465E-03"/>
-            <mass value="0.299"/>
-            <inertia ixx="1486.0E-06" ixy="-0.666E-06" ixz="-33.542E-06"
-                    iyy="1526.0E-06" iyz="-9.955E-06" izz="95.179E-06"/>
+            <!-- C_rel_mirror = [1.969, -0.712, -160.161] mm -->
+            <origin rpy="0 0 0" xyz="1.969E-03 -0.712E-03 -160.161E-03"/>
+            <mass value="0.327"/>
+            <!-- I_C_new_mirror -->
+            <inertia ixx="9381E-06" ixy="-0.28042E-06" ixz="64.503362E-06"
+                    iyy="9422E-06" iyz="-41.025966E-06" izz="96.695739E-06"/>
         </inertial>
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -237,7 +242,7 @@
         <inertial>
             <!-- C_rel_mirror = [0, 7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 7.264E-03 -0.002E-03" />
-            <mass value="0.212" />
+            <mass value="0.239" />
             <!-- I_C_new_mirror -->
             <inertia ixx="338.788E-06" ixy="-0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="0.001E-06" izz="338.791E-06" />
@@ -262,7 +267,7 @@
         <inertial>
             <!-- C_rel = [0, -7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 -7.264E-03 -0.002E-03" />
-            <mass value="0.212" />
+            <mass value="0.217" />
             <!-- I_C_new -->
             <inertia ixx="338.788E-06" ixy="0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="-0.001E-06" izz="338.791E-06" />
@@ -286,7 +291,7 @@
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-2.05949" upper="1.09956" velocity="33.5"/>
+        <limit effort="4.5" lower="-1.7453" upper="1.0123" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -296,7 +301,7 @@
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>
         <axis xyz="-1 0 0"/>
-        <limit effort="4.5" lower="-1.09956" upper="2.05949" velocity="33.5"/>
+        <limit effort="4.5" lower="-1.0123" upper="1.7453" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -306,7 +311,7 @@
         <parent link="hip_L_Link"/>
         <child link="thigh_L_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-0.593412" upper="1.88496" velocity="33.5"/>
+        <limit effort="4.5" lower="-0.3840" upper="2.0071" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -316,7 +321,7 @@
         <parent link="hip_R_Link"/>
         <child link="thigh_R_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-1.88496" upper="0.593412" velocity="33.5"/>
+        <limit effort="4.5" lower="-2.0071" upper="0.3840" velocity="33.5"/>
         <dynamics damping="2.401586E-03" stiffness ="0.0"/>
         <dynamics friction="6.453013E-02" />
     </joint>
@@ -326,7 +331,7 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-        <limit effort="4.5" lower="-0.523599" upper="1.75192" velocity="33.5"/>
+        <limit effort="4.5" lower="-0.523599" upper="2.3387" velocity="33.5"/>
         <dynamics damping="2.993308e-01" stiffness ="0.0"/>
         <dynamics friction="4.432008e-01" />
     </joint>
@@ -336,7 +341,7 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="4.5" lower="-1.75192" upper="0.523599" velocity="33.5"/>
+        <limit effort="4.5" lower="-2.3387" upper="0.523599" velocity="33.5"/>
         <dynamics damping="2.993308e-01" stiffness ="0.0"/>
         <dynamics friction="4.432008e-01" />
     </joint>

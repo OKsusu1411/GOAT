@@ -15,8 +15,6 @@ class MovableBasePolicyController(PolicyController):
     Action     : full joint action (legs + wheels), scaled per joint.
 
     Tracking mode: Base Velocity. The 3-dim ``_base_command`` [v_x, v_y, w_z]
-    is the tracking command and is updated from the keyboard via
-    :meth:`handle_key` (w/s for v_x, a/d for w_z).
     """
 
     MODE = "movable"
