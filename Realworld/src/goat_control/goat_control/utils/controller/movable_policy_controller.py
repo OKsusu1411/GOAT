@@ -56,16 +56,16 @@ class MovableBasePolicyController(PolicyController):
     # Keyboard command interface (Base Velocity Tracking)
     # ------------------------------------------------------------------
     def handle_key(self, key: str) -> str | None:
-        if key == "w":
+        if key == "UP":
             self._base_command[0] = float(np.clip(self._base_command[0] + self._vx_step,
                                                   -self._vx_limit, self._vx_limit))
-        elif key == "s":
+        elif key == "DOWN":
             self._base_command[0] = float(np.clip(self._base_command[0] - self._vx_step,
                                                   -self._vx_limit, self._vx_limit))
-        elif key == "a":
+        elif key == "RIGHT":
             self._base_command[2] = float(np.clip(self._base_command[2] + self._wz_step,
                                                   -self._wz_limit, self._wz_limit))
-        elif key == "d":
+        elif key == "LEFT":
             self._base_command[2] = float(np.clip(self._base_command[2] - self._wz_step,
                                                   -self._wz_limit, self._wz_limit))
         elif key == " ":
@@ -80,6 +80,6 @@ class MovableBasePolicyController(PolicyController):
     def command_help(self) -> list[str]:
         return [
             "--- Base Velocity Command ---",
-            "'w'/'s': v_x +/-  |  'a'/'d': w_z +/-",
+            "'UP'/'DOWN': v_x +/-  |  'RIGHT'/'LEFT': w_z +/-",
             "'space': reset base command\r",
         ]
