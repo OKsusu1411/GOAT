@@ -211,7 +211,8 @@ class PolicyController(BaseController):
                     base_ang_vel: np.ndarray,
                     base_quat: np.ndarray,
                     joint_pos: np.ndarray,
-                    joint_vel: np.ndarray) -> None:
+                    joint_vel: np.ndarray, 
+                    start: bool) -> None:
         """Run policy inference and update action targets before compute().
 
         Args:
@@ -224,6 +225,8 @@ class PolicyController(BaseController):
         observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
         raw_action = self.agent.run([self._output_name], {self._input_name: observation})[0].reshape(-1)
         self._decode_action(raw_action)
+        if start:
+            self.previous_action = raw_action 
 
         # if self.decimation_count == 0:
         #     self.logger.info(f"[{self.decimation_count}] observation : {observation}\r")
@@ -232,7 +235,8 @@ class PolicyController(BaseController):
     def compute(self,
                 joint_state: JointState,
                 base_state: ImuState,
-                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                dt_sec: float,
+                start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute raw torque: PD on legs + P on wheels (wheels only if HAS_WHEELS)."""
         # Data processing
         base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
@@ -255,7 +259,7 @@ class PolicyController(BaseController):
 
         # --- Reference Generation (decimation) ---
         if self.decimation_count % self.decimation == 0:
-            self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
+            self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel, start)
 
         # --- Error Calculation (Joint Space) ---
         target_leg_pos = default_leg_pos + self._delta_pos

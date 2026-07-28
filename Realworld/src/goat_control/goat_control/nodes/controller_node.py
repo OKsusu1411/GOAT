@@ -382,7 +382,8 @@ class ControllerNode(Node):
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                               imu_msg,
-                                                                              dt_sec)
+                                                                              dt_sec,
+                                                                              self._start)
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:
@@ -391,7 +392,8 @@ class ControllerNode(Node):
         elif self.publish_mode == 'nominal':
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
                                                                      imu_msg,
-                                                                     dt_sec)
+                                                                     dt_sec,
+                                                                     self._start)
             # Same wheel-slot guard as the policy branch.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:

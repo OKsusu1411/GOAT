@@ -183,7 +183,8 @@ class NominalController(BaseController):
     def compute(self, 
                 joint_state: JointState, 
                 imu_state: ImuState, 
-                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+                dt_sec: float,
+                start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         # Data processing
         self.joint_q_curr = np.asarray(joint_state.position)[self.ros_to_pin_ids]
         self.joint_v_curr = np.asarray(joint_state.velocity)[self.ros_to_pin_ids]

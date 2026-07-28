@@ -48,7 +48,6 @@ class MovableBasePolicyController(PolicyController):
         policy_action = raw_action * self.policy_action_scale_factor
         self._delta_pos = policy_action[self._joint_indices]
         self._wheel_speed_ref = policy_action[self._wheel_indices]
-        self.previous_action = raw_action
 
     # ------------------------------------------------------------------
     # Keyboard command interface (Base Velocity Tracking)

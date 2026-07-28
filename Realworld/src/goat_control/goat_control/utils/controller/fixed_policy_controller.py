@@ -68,7 +68,6 @@ class FixedBasePolicyController(PolicyController):
         policy_action = raw_action * self.policy_action_scale_factor
         self._delta_pos = policy_action
         self._wheel_speed_ref[:] = 0.0
-        self.previous_action = raw_action
 
     # ------------------------------------------------------------------
     # Keyboard command interface (Joint Position Tracking)
