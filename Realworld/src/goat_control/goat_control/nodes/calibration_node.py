@@ -52,15 +52,15 @@ class CalibrationNode(Node):
         self.input_thread.start()
 
         # Print UI
-        self.get_logger().info("Calibration Node Started.")
-        self.get_logger().info(f"Target YAML: {self.yaml_path}")
-        print("=============================================")
-        print("[CONTROLS]")
-        print("'j': All Joint Position Calibration")
-        print("'w': Wheel Position Calibration")
-        print("'i': IMU Calibration")
-        print("'q': Quit")
-        print("=============================================\r")
+        self.get_logger().info("Calibration Node Started.\r")
+        self.get_logger().info(f"Target YAML: {self.yaml_path}\r")
+        self.get_logger().info("=============================================")
+        self.get_logger().info("[CONTROLS]")
+        self.get_logger().info("'j': All Joint Position Calibration")
+        self.get_logger().info("'w': Wheel Position Calibration")
+        self.get_logger().info("'i': IMU Calibration")
+        self.get_logger().info("'q': Quit")
+        self.get_logger().info("=============================================\r")
 
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
