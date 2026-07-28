@@ -318,7 +318,7 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         self._publish_joint_command(q_ref, v_ref, tau)
 
-        self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
+        # self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
 
     def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish command to /joint_command.

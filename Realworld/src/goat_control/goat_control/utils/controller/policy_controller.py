@@ -225,9 +225,9 @@ class PolicyController(BaseController):
         raw_action = self.agent.run([self._output_name], {self._input_name: observation})[0].reshape(-1)
         self._decode_action(raw_action)
 
-        if self.decimation_count == 0:
-            self.logger.info(f"[{self.decimation_count}] observation : {observation}\r")
-            self.logger.info(f"[{self.decimation_count}] action : {raw_action}\r")
+        # if self.decimation_count == 0:
+        #     self.logger.info(f"[{self.decimation_count}] observation : {observation}\r")
+        #     self.logger.info(f"[{self.decimation_count}] action : {raw_action}\r")
 
     def compute(self,
                 joint_state: JointState,
