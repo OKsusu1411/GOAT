@@ -42,7 +42,7 @@ class LogViewerNode(Node):
         self.declare_parameter("sample_count", 20)
         self.declare_parameter("csv_path", "experiment_logs.csv")
         self.declare_parameter("log_degrees", False)
-        self.declare_parameter("is_csv_logging", False)
+        self.declare_parameter("is_csv_logging", True)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -110,7 +110,7 @@ class LogViewerNode(Node):
         # CSV logging start when control input is valid
         if not self.log_start:
             if any(abs(np.array(msg.effort)) > 1e-3):
-                self.get_logger().info("Csv logging starts.")
+                self.get_logger().info("csv logging starts.")
                 self.log_start = True
 
     def _on_joint_state(self, msg: JointState) -> None:
