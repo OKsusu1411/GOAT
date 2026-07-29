@@ -52,8 +52,7 @@ class CalibrationNode(Node):
         self.input_thread.start()
 
         # Print UI
-        self.get_logger().info("Calibration Node Started.\r")
-        self.get_logger().info(f"Target YAML: {self.yaml_path}\r")
+        self.get_logger().info("Calibration Node Started.")
         self.get_logger().info("=============================================")
         self.get_logger().info("[CONTROLS]")
         self.get_logger().info("'j': All Joint Position Calibration")
@@ -107,13 +106,13 @@ class CalibrationNode(Node):
             # Execption
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
-                print("=============================================")
-                print("[CONTROLS]")
-                print("'j': All Joint Position Calibration")
-                print("'w': Wheel Position Calibration")
-                print("'i': IMU Calibration")
-                print("'q': Quit")
-                print("=============================================\r")
+                self.get_logger().info("=============================================")
+                self.get_logger().info("[CONTROLS]")
+                self.get_logger().info("'j': All Joint Position Calibration")
+                self.get_logger().info("'w': Wheel Position Calibration")
+                self.get_logger().info("'i': IMU Calibration")
+                self.get_logger().info("'q': Quit")
+                self.get_logger().info("=============================================\r")
                 continue
 
     def _joint_calibration(self, is_wheel_mode:bool = False):
@@ -245,7 +244,7 @@ class CalibrationNode(Node):
             with open(self.yaml_path, 'w') as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             
-            print(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n")
+            self.get_logger().info(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n")
             
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
@@ -275,7 +274,7 @@ class CalibrationNode(Node):
             with open(self.yaml_path, 'w') as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             
-            print(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
+            self.get_logger().info(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
             
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")

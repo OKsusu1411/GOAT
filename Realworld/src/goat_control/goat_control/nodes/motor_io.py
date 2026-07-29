@@ -19,7 +19,10 @@ class MotorIO:
     direct function call, eliminating the cross-process DDS latency.
     """
 
-    def __init__(self, cfg: dict, logger, can_interface: str = "socketcan",
+    def __init__(self, 
+                 cfg: dict, 
+                 logger, 
+                 can_interface: str = "socketcan", 
                  can_tx_timeout_sec: float = 0.05):
         # Config + logger are owned by ControllerNode and passed in.
         self.cfg = cfg
@@ -108,22 +111,14 @@ class MotorIO:
         ~1 Hz ROS timer via `poll_error_flags_once()` instead. Removing it
         kills the periodic 4-5 ms spike that previously hit every 10th tick.
         """
-        torque_cmd_nm = np.asarray(torque_cmd_nm, dtype=float).flatten()
-
-        # Torque clip -> LPF -> current conversion (was motor_io_node._tick).
-        clipped_torque_cmd = self.motor_manager.torque_clipping(torque_cmd_nm)
-        lpf_torque_cmd = self.motor_manager.torque_lpf(clipped_torque_cmd)
-        current_cmd_amp = self.motor_manager.torque_to_current(lpf_torque_cmd)
-
-        motor_states_data = self.motor_manager.write_torques_and_read_states(
-            current_cmd_amp,
-            timeout=self.can_tx_timeout_sec,
-            perform_slow_poll=False,
-        )
-
+        # Torque clip -> current conversion
+        clipped_torque_cmd = self.motor_manager.torque_clipping(torque_cmd_nm.flatten()) # Joint space torque
+        current_cmd_amp = self.motor_manager.torque_to_current(clipped_torque_cmd) # Joint torque -> Motor torque -> Motor current
+        motor_states_data = self.motor_manager.write_torques_and_read_states(current_cmd_amp, 
+                                                                             timeout=self.can_tx_timeout_sec, 
+                                                                             perform_slow_poll=False)
         # Cache for next tick + return to caller.
         self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
-        return self.latest_joint_state
 
     def poll_error_flags_once(self) -> None:
         """Read 0x9A error flags on every motor — call from a ~1 Hz timer.
