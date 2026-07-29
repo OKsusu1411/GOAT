@@ -282,4 +282,7 @@ class PolicyController(BaseController):
         # Update decimation step
         self.decimation_count += 1
 
+        # values = ", ".join(f"{value:.3f}" for value in joint_cmd.flatten())
+        # self.logger.info(f"[{values}]\r")
+
         return joint_cmd, target_pos, self._wheel_speed_ref.copy()
