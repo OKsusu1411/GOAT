@@ -17,7 +17,7 @@ def generate_launch_description():
     ])
 
     default_urdf_path = PathJoinSubstitution([
-        FindPackageShare("goat_control"),
+        FindPackageShare("goat_description"),
         "urdf",
         "WF_GOAT.urdf",
     ])

@@ -33,7 +33,7 @@ class ControllerNode(Node):
       1) Receive JointState + ImuState via time-synced subscribers
       2) Keyboard selects active controller (policy / nominal)
       3) Active controller computes raw torque
-      4) SafetyLimiter applies LPF + clipping + kill switch
+      4) SafetyLimiter applies clipping + kill switch
       5) Publish safe torque command
     """
     def __init__(self):
@@ -136,6 +136,7 @@ class ControllerNode(Node):
         # Mode switch (None = idle, no torque until keyboard selects a mode)
         self.publish_mode = None
         self._prev_mode = None
+        self._start = False
 
         # HIL safety latch
         self.kill_switch_on = False
@@ -167,6 +168,7 @@ class ControllerNode(Node):
         self.logger.info("[Keydown Menu]")
         self.logger.info("'p': Policy Control Mode")
         self.logger.info("'n': Nominal Control Mode")
+        self.logger.info("'s': Start the control loop (torque publishing)")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")
@@ -223,8 +225,15 @@ class ControllerNode(Node):
                 rclpy.shutdown()
                 break
 
+            elif key == "s":
+                if self._start:
+                    self.logger.info("Already started. \r")
+                    continue
+                self._start = True
+                self.logger.info("Start the control loop. \r")
+
             elif key == 'r':
-                self._manual_reset()
+                self.reset()
 
             elif key == '\x03': # Ctrl+C
                 rclpy.shutdown()
@@ -241,14 +250,7 @@ class ControllerNode(Node):
                 continue
 
     def _sensor_data_has_nan(self, joint_state_msg, imu_msg) -> bool:
-        """Return True if any element of the joint or IMU state is NaN.
-
-        A motor that does not answer the state read leaves NaN in joint
-        velocity/effort; a bad IMU frame leaves NaN in the IMU fields. Either
-        would propagate into the torque command and crash the CAN current
-        conversion, so the caller treats True as a kill condition. Does not
-        modify the data — detection only.
-        """
+        """Return True if any element of the joint or IMU state is NaN."""
         # Joint state: position / velocity / effort arrays.
         js = joint_state_msg
         if js is not None:
@@ -272,6 +274,12 @@ class ControllerNode(Node):
 
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
+        if self.kill_switch_on:
+            self.logger.info(f"KILL SWITCH RESET: previous reason = {self.kill_reason}\r")
+
+        self.kill_switch_on = False
+        self.kill_reason = ""
+
         # Prevent automatic controller re-entry.
         self.publish_mode = None
         self._prev_mode = None
@@ -294,17 +302,6 @@ class ControllerNode(Node):
         self.kill_reason = reason
         self.reset()
 
-    def _manual_reset(self) -> None:
-        """Clear kill latch and return controller to idle."""
-        if self.kill_switch_on:
-            self.logger.info(f"KILL SWITCH RESET: previous reason = {self.kill_reason}\r")
-
-        self.kill_switch_on = False
-        self.kill_reason = ""
-        self.reset()
-
-        self.logger.info("Controller is idle. Press 'p' or 'n' to re-enter control mode.\r")
-
     def _switch_mode(self, new_mode: str) -> None:
         """Handle mode transition: reset previous controller + safety limiter"""
         if new_mode == self._prev_mode:
@@ -316,7 +313,7 @@ class ControllerNode(Node):
         elif self._prev_mode == 'nominal':
             self.nominal_controller.reset()
 
-        # Reset LPF to prevent torque jump on mode switch
+        # Reset Limiter
         self.safety_limiter.reset()
 
         # Reset command to zero on policy entry for safety
@@ -385,19 +382,27 @@ class ControllerNode(Node):
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                               imu_msg,
-                                                                              dt_sec)
-            v_ref[-2:] = wheel_v_ref # Only for wheel
+                                                                              dt_sec,
+                                                                              self._start)
+            # Only write into wheel slots that actually exist in this config.
+            wheel_indices = self.cfg["wheel_indices"]
+            if len(wheel_indices) > 0:
+                v_ref[wheel_indices] = wheel_v_ref
 
         elif self.publish_mode == 'nominal':
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
                                                                      imu_msg,
-                                                                     dt_sec)
-            v_ref[-2:] = 0 # Only for wheel
+                                                                     dt_sec,
+                                                                     self._start)
+            # Same wheel-slot guard as the policy branch.
+            wheel_indices = self.cfg["wheel_indices"]
+            if len(wheel_indices) > 0:
+                v_ref[wheel_indices] = 0.0
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
             self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
-            self.motor_io.read_write_motor(tau * 0.0)
+            self.motor_io.read_write_motor(tau)
             return
 
         # Safety Limiter
@@ -410,25 +415,25 @@ class ControllerNode(Node):
             self._trigger_kill_switch("SafetyLimiter blocked command")
             self.motor_io.read_write_motor(tau)
             return
-
-        # Publish torque command
-        tau[:] = safe_torque
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
-        # Apply action
+        # Publish torque command (only start mode)
+        if self._start:
+            tau[:] = safe_torque
+
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
         self.motor_io.read_write_motor(tau)                                     
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
-        self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
         tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
         tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
 
-        # # Time logging
+        # Time logging
         self.logger.info(
             f"[timing] total: {total_ms:6.2f} ms | {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
             f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
@@ -461,10 +466,9 @@ class ControllerNode(Node):
         # Update joint command message
         msg_command = JointState()
         msg_command.header.stamp = self.now_stamp
-        msg_command.name = [
-            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint', 
-            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
-        ]
+        # Use configured joint names so /commands stays consistent with the
+        # actual num_joints (8 in normal setup, 6 in wheel-less bring-up).
+        msg_command.name = list(self.cfg["joint_names"])
         msg_command.position = position.tolist()
         msg_command.velocity = velocity.tolist()
         msg_command.effort = effort.tolist()

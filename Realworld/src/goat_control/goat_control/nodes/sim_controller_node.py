@@ -270,6 +270,7 @@ class SimControllerNode(Node):
         # Proactive condition check
         # --------------------------------------------------------------
         if self.publish_mode is None:
+            q_ref[:] = [0.0, 0.0, 0.9943, -0.9943, 1.884, -1.884, 0.0, 0.0]
             self._publish_joint_command(q_ref, v_ref, tau)
             return
         
@@ -285,14 +286,14 @@ class SimControllerNode(Node):
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
                                                                             imu_msg,
-                                                                            dt_sec)
+                                                                            dt_sec, True)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
                                                                    imu_msg, 
-                                                                   dt_sec)
+                                                                   dt_sec, True)
             v_ref[-2:] = 0.0
 
         else:
@@ -316,8 +317,6 @@ class SimControllerNode(Node):
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
         self._publish_joint_command(q_ref, v_ref, tau)
-
-        # self.logger.info(f"Publish Torque : {safe_torque.tolist()}\r", throttle_duration_sec=1.0)
 
     def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
         """Publish command to /joint_command.

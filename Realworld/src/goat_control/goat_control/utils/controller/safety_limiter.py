@@ -46,7 +46,6 @@ class SafetyLimiter:
         limits = np.asarray(cfg["joint_pos_limit"], dtype=float).flatten()
         if limits.size != self.num_joints * 2:
             raise ValueError("joint_pos_limit length must equal num_joints * 2.")
-        margin = float(cfg.get("joint_pos_limit_margin", 0.0))
         margin_coeff = float(cfg.get("joint_pos_limit_margin_coeff", 1.0))
 
         # Coefficient-based margin processing

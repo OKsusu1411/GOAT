@@ -41,7 +41,8 @@ docker/.container.cfg
 **/.neptune/*
 docker/artifacts/
 *.tmp
-# *.csv
+# # *.csv
+# **/*.csv
 
 # Doc Outputs
 **/docs/_build/*
@@ -56,9 +57,6 @@ _build
 # Pre-Trained Checkpoints
 /.pretrained_checkpoints/
 # **/checkpoint/*
-
-# Generated Assets
-**/usd/*
 
 # Ros2
 **/install/
@@ -75,9 +73,9 @@ _build
 **/Realworld/test_log/
 
 # CLAUDE
-CLAUDE.md
-research.md
-plan.md
+**/*.md
+!README.md
+!sim2real_manual.md
 
 # VS Code
 .vscode/

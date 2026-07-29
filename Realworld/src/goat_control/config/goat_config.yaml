@@ -66,24 +66,6 @@ motor_direction:
 - 1
 - 1
 - 1
-natural_joint_position:
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-- 0.0
-# natural_joint_position:
-# - 0.0
-# - 0.0
-# - 0.738
-# - -0.738
-# - 1.462
-# - -1.462
-# - 0.0
-# - 0.0
 wheel_radius: 0.07275
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
@@ -110,12 +92,12 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_mode: fixed
-policy_checkpoint_path: src/goat_control/checkpoint/joint_track_hip_2.onnx
+policy_mode: movable
+policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
-policy_command_vx_limit: 1.0
-policy_command_wz_limit: 0.5
-policy_command_vx_step: 0.1
+policy_command_vx_limit: 0.1
+policy_command_wz_limit: 0.1
+policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
 policy_command_joint_step: 10.0
 policy_decimation: 2.0
@@ -132,6 +114,15 @@ policy_fixed:
   - 0.5
   - 0.5
   - 0.5
+  natural_joint_position:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
 policy_movable:
   observation_info:
     base_ang_vel: 3
@@ -149,6 +140,15 @@ policy_movable:
   - 0.5
   - 5.0
   - 5.0
+  natural_joint_position:
+  - 0.0
+  - 0.0
+  - 0.738
+  - -0.738
+  - 1.462
+  - -1.462
+  - 0.0
+  - 0.0
 policy_leg_proportional_gain:
 - 3.0
 - 3.0
@@ -164,36 +164,15 @@ policy_leg_derivative_gain:
 - 0.5
 - 0.5
 policy_wheel_proportional_gain:
-- 0.02
-- 0.02
-policy_wheel_integral_gain:
-- 0.0
-- 0.0
-torque_lpf_alpha_per_joint:
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 0.0
-- 0.0
-sw_max_torque_per_joint:
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 1.5
-- 0.0
-- 0.0
-hw_max_torque_per_joint:
+- 0.05
+- 0.05
+max_torque_per_joint:
 - 4.5
 - 4.5
 - 4.5
 - 4.5
-- 4.5
-- 4.5
+- 9.0
+- 9.0
 - 2.5
 - 2.5
 joint_pos_limit:
@@ -213,7 +192,6 @@ joint_pos_limit:
 - .inf
 - -.inf
 - .inf
-joint_pos_limit_margin: 0.087267
 joint_pos_soft_limit_coeff: 0.95
 joint_vel_estop_threshold: 4.0
 motor_current_amp_per_lsb: 0.01611328125
@@ -221,14 +199,14 @@ angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.01
 motor_encoder_counts_per_rev: 65536
 joint_offsets:
-- 0.015533430342749533
-- 0.04017747938090946
-- 2.0701001192054345
-- -2.0273046459465336
-- -0.4922177556474409
-- 1.496890359619197
-- -0.7166321908688715
-- 2.691908571813455
+- 0.05318018230826723
+- 0.021956241990088665
+- -4.131630671783578
+- 4.224796347255035
+- -2.0444874124324177
+- 1.6523206561555521
+- 1.116050790187774
+- 1.83418396421336
 imu_offsets:
 - 1.0
 - 0.0
