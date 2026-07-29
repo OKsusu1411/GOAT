@@ -270,7 +270,7 @@ class SimControllerNode(Node):
         # Proactive condition check
         # --------------------------------------------------------------
         if self.publish_mode is None:
-            q_ref[:] = [0.0, 0.0, 1.09, -1.09, 1.89, -1.89, 0.0, 0.0]
+            q_ref[:] = [0.0, 0.0, 0.9943, -0.9943, 1.884, -1.884, 0.0, 0.0]
             self._publish_joint_command(q_ref, v_ref, tau)
             return
         

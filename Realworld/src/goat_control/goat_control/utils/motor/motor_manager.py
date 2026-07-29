@@ -122,6 +122,34 @@ class MotorManager:
         self.motor_prev_encoder_count:     List[Optional[int]]   = [None] * self.motor_count
         self.motor_encoder_wrap_count:     List[int]             = [0]    * self.motor_count
 
+        # ------------------------------------------------------------------
+        # Boot anchor fold window (per motor, motor degrees)
+        # ------------------------------------------------------------------
+        # The one-shot absolute-angle read taken at boot can come back a full
+        # motor turn off. Every leg joint's mechanical travel is narrower than
+        # one motor turn, so the ambiguity is resolvable: fold the boot anchor
+        # into the 360 deg window centred on that joint's reachable raw range.
+        # `None` disables folding (wheels — continuous rotation, no window).
+        self.motor_fold_center_deg: List[Optional[float]] = [None] * self.motor_count
+
+        joint_pos_limit = self.cfg["joint_pos_limit"]
+        for joint_i in range(self.num_joints):
+            motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
+
+            limit_lo_rad = float(joint_pos_limit[2 * joint_i])
+            limit_hi_rad = float(joint_pos_limit[2 * joint_i + 1])
+            if not (math.isfinite(limit_lo_rad) and math.isfinite(limit_hi_rad)):
+                continue  # wheel — nothing to fold into
+
+            gear = float(self.motor_gear_ratio[motor_i])
+            direction = float(self.motor_direction[motor_i])
+            offset_rad = float(self.joint_offsets[joint_i])
+
+            # Inverse of _package_motor_states: calibrated joint rad -> raw motor deg.
+            raw_lo_deg = math.degrees(limit_lo_rad + offset_rad) * gear / direction
+            raw_hi_deg = math.degrees(limit_hi_rad + offset_rad) * gear / direction
+            self.motor_fold_center_deg[motor_i] = 0.5 * (raw_lo_deg + raw_hi_deg)
+
         # Persistent thread pool reused across every tick. Recreating an
         # 8-thread pool at 200 Hz was costing ~800 thread spawns/sec for no
         # parallelism benefit (per-bus txrx_lock already serializes the bus).
@@ -314,6 +342,15 @@ class MotorManager:
                 anchor_motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else:
                 anchor_motor_angle_deg = 0.0
+
+            fold_center_deg = self.motor_fold_center_deg[motor_index]
+            if fold_center_deg is not None:
+                # Pull the boot reading into (center-180, center+180] so a
+                # full-turn discrepancy in the absolute-angle read cannot
+                # survive into the session's position baseline.
+                anchor_motor_angle_deg = fold_center_deg + (
+                    (anchor_motor_angle_deg - fold_center_deg + 180.0) % 360.0 - 180.0
+                )
 
             self.motor_anchor_motor_angle_deg[motor_index] = anchor_motor_angle_deg
             self.motor_anchor_encoder_count[motor_index]   = int(self.motor_encoder_count[motor_index])
