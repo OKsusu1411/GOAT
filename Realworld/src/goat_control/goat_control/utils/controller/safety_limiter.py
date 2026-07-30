@@ -35,13 +35,6 @@ class SafetyLimiter:
 
         self.logger = logger
 
-        # --- LPF alpha ---
-        alpha_raw = np.asarray(cfg["torque_lpf_alpha_per_joint"], dtype=float).flatten()
-        if alpha_raw.size != self.num_joints:
-            raise ValueError("torque_lpf_alpha_per_joint length must equal num_joints.")
-        self._lpf_alpha = alpha_raw
-        self.logger.info(f"LPF : {self._lpf_alpha}")
-
         # --- Joint position limits ---
         limits = np.asarray(cfg["joint_pos_limit"], dtype=float).flatten()
         if limits.size != self.num_joints * 2:
