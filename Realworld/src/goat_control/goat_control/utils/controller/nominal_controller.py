@@ -172,7 +172,7 @@ class NominalController(BaseController):
         self.count_tick = 0
 
         # Wheel torque limit for leg joint control
-        self.wheel_tau_limit = self.cfg.get("hw_max_torque_per_joint")[-1]
+        self.wheel_tau_limit = self.cfg.get("max_torque_per_joint")[-1]
 
     def reset(self):
         """Reset only count tick for trajectory tracking control.
