@@ -350,6 +350,8 @@ class ControllerNode(Node):
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
+        tau[6] = 0.1
+        tau[7] = -0.1
 
         #r =================== Proactive Condition Check ====================
         # Kill latch: do not auto-recover.
