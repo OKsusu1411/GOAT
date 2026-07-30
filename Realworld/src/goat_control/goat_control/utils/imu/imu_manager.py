@@ -131,6 +131,7 @@ class ImuSerialReader:
     def get_latest_packet(self) -> ImuPacket | None:
         """Return the latest decoded packet. Returns None if vector is invalid."""
         raw_vector = self.get_latest_raw_vector()
+        self.logger.info(f"{raw_vector[0:4]}\r")
         return self.decode_vector(raw_vector)
 
     # --------------------------
