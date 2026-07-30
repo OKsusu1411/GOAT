@@ -166,34 +166,13 @@ policy_leg_derivative_gain:
 policy_wheel_proportional_gain:
 - 0.05
 - 0.05
-policy_wheel_integral_gain:
-- 0.0
-- 0.0
-torque_lpf_alpha_per_joint:
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 1.0
-- 0.0
-- 0.0
-sw_max_torque_per_joint:
+max_torque_per_joint:
 - 4.5
 - 4.5
 - 4.5
 - 4.5
-- 4.5
-- 4.5
-- 2.5
-- 2.5
-hw_max_torque_per_joint:
-- 4.5
-- 4.5
-- 4.5
-- 4.5
-- 4.5
-- 4.5
+- 9.0
+- 9.0
 - 2.5
 - 2.5
 joint_pos_limit:
