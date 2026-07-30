@@ -266,6 +266,9 @@ class SimControllerNode(Node):
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau = np.zeros(self.num_joints, dtype=np.float32)
 
+        # tau[6] = 0.1
+        # tau[7] = 0.1
+
         # --------------------------------------------------------------
         # Proactive condition check
         # --------------------------------------------------------------
