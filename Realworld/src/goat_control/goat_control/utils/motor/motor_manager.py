@@ -79,8 +79,8 @@ class MotorManager:
         self.motor_direction = np.asarray(self.cfg["motor_direction"], dtype=np.float64).flatten()
         self.joint_offsets = np.asarray(self.cfg["joint_offsets"], dtype=np.float64).flatten()
         self.torque_to_current_denominator = self.motor_gear_ratio * self.motor_torque_constant_nm_per_amp
-        if np.any(np.abs(self._torque_to_current_denominator) < 1e-12):
-            raise ValueError("gear ratio × torque constant must not be zero.")
+        if np.any(np.abs(self.torque_to_current_denominator) < 1e-12):
+            raise ValueError("gear ratio x torque constant must not be zero.")
 
         # ------------------------------------------------------------------
         # Motor states via CAN
