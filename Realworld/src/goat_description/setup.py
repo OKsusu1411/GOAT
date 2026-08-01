@@ -30,7 +30,6 @@ setup(
     entry_points={
         'console_scripts': [
             'imu_tf_publisher = goat_description.nodes.imu_tf_publisher:main',
-            'log_joint_csv = goat_description.nodes.log_joint_csv:main',
         ],
     },
 )
