@@ -36,10 +36,9 @@ setup(
         'console_scripts': [
             'sim_controller_node = deploy_isaacsim.nodes.sim_controller_node:main',
             'topic_converter_node = deploy_isaacsim.nodes.topic_converter_node:main',
-            # Sim-only CSV loggers: they subscribe to /sim_joint_states and
-            # /sim_pose, which only the Isaac Sim ActionGraph publishes.
             'log_joint_csv = deploy_isaacsim.nodes.log_joint_csv:main',
             'log_state_csv = deploy_isaacsim.nodes.log_state_csv:main',
+            'sim_actuator_target_test = deploy_isaacsim.nodes.sim_actuator_target_test:main',
         ],
     },
 )

@@ -54,8 +54,8 @@ def generate_launch_description():
 
     controller_node = Node(
         package="deploy_isaacsim",
-        executable="sim_controller_node",
-        name="sim_controller_node",
+        executable="sim_actuator_target_test",
+        name="sim_actuator_target_test",
         output="screen",
         parameters=[{
             "yaml_path": LaunchConfiguration("yaml_path"),
