@@ -62,7 +62,7 @@ def generate_launch_description():
     # Nodes
     controller_node = Node(
         package="goat_sysid",
-        executable="actuator_target_test_node",
+        executable="actuator_target_test",
         name="actuator_target_test_node",
         output="screen",
         parameters=[{
