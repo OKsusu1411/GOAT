@@ -14,6 +14,7 @@
 
   <!-- Used by python nodes (logging / least squares) -->
   <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>goat_control</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

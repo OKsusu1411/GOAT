@@ -59,7 +59,6 @@ class ControllerNode(Node):
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        self.action_timeout_sec = float(self.get_parameter("action_timeout_sec").value)
         imu_port = str(self.get_parameter("imu_port").value)
         imu_baudrate = int(self.get_parameter("imu_baudrate").value)
         imu_timeout = float(self.get_parameter("imu_timeout").value)

@@ -52,7 +52,7 @@ class CalibrationNode(Node):
         self.input_thread.start()
 
         # Print UI
-        self.get_logger().info("Calibration Node Started.")
+        self.get_logger().info("Calibration Node Started.\r")
         self.get_logger().info("=============================================")
         self.get_logger().info("[CONTROLS]")
         self.get_logger().info("'j': All Joint Position Calibration")

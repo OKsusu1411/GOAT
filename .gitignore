@@ -85,3 +85,10 @@ _build
 *.vc.db
 *.vc.db-shm
 *.vc.db-wal
+
+.claude/settings.local.json
+
+# PC specific bash
+build.sh
+goat_shell.bash
+setup.bash
