@@ -161,7 +161,7 @@ class ActuatorTargetTestNode(Node):
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
         self.logger.info("'l': Leg position tracking test")
-        self.logger.info("'w': Wheel position tracking test")
+        self.logger.info("'w': Wheel velocity tracking test")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")

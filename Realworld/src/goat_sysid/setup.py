@@ -19,7 +19,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='heachanlee',
+    maintainer='HongryeolYoon',
     maintainer_email='eojin333c@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
