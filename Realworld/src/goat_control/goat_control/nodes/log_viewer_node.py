@@ -115,10 +115,6 @@ class LogViewerNode(Node):
     def _on_joint_state(self, msg: JointState) -> None:
         self.joint_current = msg
 
-    def _sync_callback(self, msg_ref, msg_current):
-        self._on_joint_ref(msg_ref)
-        self._on_joint_state(msg_current)
-
     def _tick(self) -> None:
         # No subscription
         if self.joint_current is None:
@@ -127,8 +123,10 @@ class LogViewerNode(Node):
         if self.joint_ref is None:
             self.joint_ref = self.joint_current
 
-        # Decode JointState msg
+        # Decode torque msg
         joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
+        joint_effort_real = np.array(self.joint_current.effort, dtype=float)
+
         if self.print_degrees:
             joint_pos_current = np.rad2deg(self.joint_current.position)
             joint_vel_current = np.rad2deg(self.joint_current.velocity)
@@ -145,7 +143,7 @@ class LogViewerNode(Node):
             velocity_unit = "rad/s"
 
         # Print rows (batch: all joints in ONE log block)
-        header_str = (f"{'ID':>3}  {'NAME':<12}  "f"{'POS':>15}  {'VEL':>12}  {'CMD_TAU':>12}  {'CMD_POS':>12}  {'CMD_VEL':>12}")
+        header_str = (f"{'ID':>3}  {'NAME':<12}  "f"{'POS':>15}  {'VEL':>12}  {'CMD_TAU':>12} {'REAL_TAU':>11}  {'CMD_POS':>12}  {'CMD_VEL':>12}")
         div_str = "-" * len(header_str)
         lines = [header_str, div_str]
 
@@ -159,6 +157,7 @@ class LogViewerNode(Node):
                 f"{float(joint_pos_current[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
                 f"{float(joint_vel_current[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
                 f"{float(joint_effort_ref[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
+                f"{float(joint_effort_real[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
                 f"{float(joint_pos_ref[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
                 f"{float(joint_vel_ref[joint_index]):>9.{self.precision}f} {velocity_unit:<5}"
             )
