@@ -21,7 +21,7 @@ from goat_control.nodes.imu_io import ImuIO
 
 class ActuatorTargetTestNode(Node):
     def __init__(self):
-        super().__init__("actuator_torque_test_node")
+        super().__init__("actuator_target_test_node")
 
 
         # Parameters by Launch File
