@@ -157,12 +157,12 @@ policy_leg_proportional_gain:
 - 3.0
 - 3.0
 policy_leg_derivative_gain:
-- 0.05
-- 0.05
-- 0.05
-- 0.05
-- 0.05
-- 0.05
+- 0.1
+- 0.1
+- 0.1
+- 0.1
+- 0.1
+- 0.1
 policy_wheel_proportional_gain:
 - 0.05
 - 0.05

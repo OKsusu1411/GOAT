@@ -210,6 +210,7 @@ class ActuatorTargetTestNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
+                self._publish_joint_command(np.zeros(self.num_joints), np.zeros(self.num_joints), np.zeros(self.num_joints))
                 rclpy.shutdown()
                 break
             else:
