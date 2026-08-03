@@ -24,7 +24,9 @@ What this node canNOT verify:
 from __future__ import annotations
 
 import csv
+import signal
 import struct
+import sys
 import threading
 import time
 from datetime import datetime
@@ -136,14 +138,15 @@ class MotorIdNode(Node):
         )
 
         # -----------------------------------------------------------------
-        # Terminal I/O — prompts go to /dev/tty so `ros2 launch` (which does
-        # not forward stdin to the node) can still drive the interaction.
+        # Terminal I/O
+        #
+        # `ros2 launch` spawns the node with stdin=PIPE and nothing ever
+        # writes to that pipe (osrf_pycommon async_execute_process_asyncio),
+        # so a plain input() there blocks forever AND its newline-less prompt
+        # never leaves the stdout buffer — the node just looks frozen.
+        # Under `ros2 run` stdin IS the terminal, which is the sane path.
         # -----------------------------------------------------------------
-        try:
-            self.tty = open("/dev/tty", "r+")
-        except OSError:
-            self.tty = None
-            self.log.warn("/dev/tty unavailable — falling back to stdin for prompts.")
+        self._open_operator_terminal()
 
         # -----------------------------------------------------------------
         # Streaming state
@@ -187,21 +190,74 @@ class MotorIdNode(Node):
     # =====================================================================
     # Terminal I/O
     # =====================================================================
+    def _open_operator_terminal(self) -> None:
+        """Pick the streams the operator can actually read and type on.
+
+        Order matters: a real stdin (i.e. `ros2 run` from a shell) is the most
+        reliable, and only when stdin is not a terminal do we reach for
+        /dev/tty — the `ros2 launch` case, where stdin is a dead pipe.
+        `self.tty_in` stays None when neither works; _prompt() then fails
+        loudly instead of hanging.
+        """
+        self.tty_owned = False  # True only when we opened /dev/tty ourselves
+
+        if sys.stdin.isatty():
+            self.tty_in = sys.stdin
+            self.tty_out = sys.stdout
+            self.log.info("[terminal] 입력 경로: stdin (tty)")
+            return
+
+        try:
+            terminal = open("/dev/tty", "r+")
+        except OSError as exc:
+            self.tty_in = None
+            self.tty_out = sys.stdout
+            self.log.warn(
+                f"[terminal] stdin이 tty가 아니고 /dev/tty도 열 수 없습니다 ({exc}). "
+                "대화형 프롬프트를 진행할 수 없습니다 — "
+                "`ros2 run goat_sysid motor_id --ros-args -p ...` 로 실행하세요."
+            )
+            return
+
+        self.tty_in = terminal
+        self.tty_out = terminal
+        self.tty_owned = True
+        self.log.info("[terminal] 입력 경로: /dev/tty (stdin이 tty가 아님)")
+
     def _prompt(self, message: str) -> str:
-        """Blocking prompt on the controlling terminal."""
-        if self.tty is None:
-            return input(message)
-        self.tty.write(message)
-        self.tty.flush()
-        return (self.tty.readline() or "").strip()
+        """Blocking prompt on the operator's terminal."""
+        if self.tty_in is None:
+            raise RuntimeError(
+                "대화형 입력 경로가 없습니다. `ros2 launch` 대신 "
+                "`ros2 run goat_sysid motor_id --ros-args -p ...` 로 실행하세요."
+            )
+
+        # Always flush: the prompt has no trailing newline, so a buffered
+        # stream would swallow it and leave the operator staring at nothing.
+        self.tty_out.write(message)
+        self.tty_out.flush()
+
+        try:
+            line = self.tty_in.readline()
+        except OSError as exc:
+            # EIO here means the read was refused because this process is not
+            # in the terminal's foreground group (see the SIGTTIN guard).
+            raise RuntimeError(
+                f"터미널 읽기 실패({exc}). 이 노드는 포그라운드 터미널에서 실행해야 합니다: "
+                "`ros2 run goat_sysid motor_id --ros-args -p ...`"
+            ) from exc
+
+        if line == "":  # EOF — input closed or redirected from /dev/null
+            raise RuntimeError(
+                "입력이 EOF로 닫혔습니다. `ros2 run goat_sysid motor_id --ros-args -p ...` "
+                "로 터미널에서 직접 실행하세요."
+            )
+        return line.strip()
 
     def _say(self, message: str = "") -> None:
         """Procedural text for the operator (not mirrored into rosout)."""
-        if self.tty is None:
-            print(message)
-            return
-        self.tty.write(message + "\n")
-        self.tty.flush()
+        self.tty_out.write(message + "\n")
+        self.tty_out.flush()
 
     # =====================================================================
     # Real-time streaming
@@ -344,6 +400,13 @@ class MotorIdNode(Node):
             )
 
         magnitude_ratio = abs(ratio)
+        if magnitude_ratio < 1e-6:
+            self.log.error(
+                "[실패] 위치가 전혀 변하지 않았습니다. 축을 실제로 돌렸는지, "
+                "그리고 이 관절이 맞는지 (joint_index/joint_name) 확인하세요."
+            )
+            return
+
         if abs(magnitude_ratio - 1.0) < 0.02:
             self.log.info(f"[통과] angle_deg_per_lsb = {self.angle_deg_per_lsb} 는 정확합니다.")
         else:
@@ -538,15 +601,26 @@ class MotorIdNode(Node):
             self.can.close()
         except Exception as exc:
             self.log.warn(f"CAN close 실패: {exc}")
-        if self.tty is not None:
+        # Only close /dev/tty if we opened it — never close sys.stdin.
+        if getattr(self, "tty_owned", False) and self.tty_in is not None:
             try:
-                self.tty.close()
+                self.tty_in.close()
             except Exception:
                 pass
-            self.tty = None
+            self.tty_in = None
+            self.tty_out = sys.stdout
+            self.tty_owned = False
 
 
 def main(args=None) -> None:
+    # If this process ends up in a background process group, a terminal read
+    # would raise SIGTTIN and stop the whole node — indistinguishable from a
+    # hang. Ignoring it turns that into an EIO the prompt can report.
+    try:
+        signal.signal(signal.SIGTTIN, signal.SIG_IGN)
+    except (AttributeError, ValueError, OSError):
+        pass
+
     rclpy.init(args=args)
     node = MotorIdNode()
     try:

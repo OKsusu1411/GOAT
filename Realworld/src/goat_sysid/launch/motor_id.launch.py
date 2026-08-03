@@ -1,4 +1,18 @@
 # motor_id.launch.py
+#
+# WARNING: motor_id_node is interactive (it prompts the operator to rotate the
+# shaft by hand). `ros2 launch` spawns nodes with stdin=PIPE and never writes
+# to it, so the node can only reach the operator through /dev/tty — and if
+# /dev/tty is unavailable (systemd unit, no controlling terminal) the node
+# aborts with an explanatory error instead of prompting.
+#
+# Prefer running it directly from a shell:
+#   ros2 run goat_sysid motor_id --ros-args \
+#     -p yaml_path:=src/goat_sysid/config/config.yaml \
+#     -p joint_index:=0 -p test:=position
+#
+# This launch file is kept for parameter documentation and for setups where
+# /dev/tty is available.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
