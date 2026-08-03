@@ -16,6 +16,9 @@ setup(
         (os.path.join('share', package_name, 'launch'),
          glob(os.path.join('launch', '*.launch.py'))),
 
+        (os.path.join('share', package_name, 'config'),
+         glob(os.path.join('config', '*.yaml'))),
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -32,6 +35,7 @@ setup(
         'console_scripts': [
             'actuator_torque_test = goat_sysid.actuator_torque_test:main',
             'actuator_target_test = goat_sysid.actuator_target_test:main',
+            'motor_id = goat_sysid.motor_id:main',
             'breakaway_torque_tester = goat_sysid.breakaway_torque_tester:main',
             'dynamic_friction_sysid = goat_sysid.dynamic_friction_sysid:main',
             'friction_id_node = goat_sysid.dynamic_friction_id_node:main',
