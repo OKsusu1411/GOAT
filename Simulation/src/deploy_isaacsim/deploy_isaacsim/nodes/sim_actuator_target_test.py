@@ -18,19 +18,15 @@ from sensor_msgs.msg import JointState
 from motor_interfaces.msg import ImuState
 from message_filters import Subscriber, TimeSynchronizer
 
-class ActuatorTargetTestNode(Node):
+class SimActuatorTargetTestNode(Node):
     def __init__(self):
-        super().__init__("actuator_torque_test_node")
+        super().__init__("sim_actuator_target_test_node")
 
 
         # Parameters by Launch File
         self.declare_parameter("control_rate_hz", 200.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
-        self.declare_parameter("action_timeout_sec", 0.05)
-        self.declare_parameter("imu_port", "/dev/ttyUSB0")
-        self.declare_parameter("imu_baudrate", 115200)
-        self.declare_parameter("imu_timeout", 1.0)
 
         self.set_parameters([
             rclpy.parameter.Parameter(
@@ -83,7 +79,7 @@ class ActuatorTargetTestNode(Node):
         # Manual command
         self.joint_ids = self.cfg["joint_indices"]
         self.wheel_ids = self.cfg["wheel_indices"]
-        self.max_torque_per_joint = 3.0
+        self.max_torque_per_joint = 2.0
         self.max_torque_per_wheel = 1.0
         self.velocity_increment = 0.1
         self.current_wheel_index = 6
@@ -213,6 +209,10 @@ class ActuatorTargetTestNode(Node):
                 self._publish_joint_command(np.zeros(self.num_joints), np.zeros(self.num_joints), np.zeros(self.num_joints))
                 rclpy.shutdown()
                 break
+
+            elif key == "\x03":  # Ctrl+C
+                rclpy.shutdown()
+                break
             else:
                 self.logger.info("Wrong key! Please enter the right key")
                 self._print_menu()
@@ -230,7 +230,7 @@ class ActuatorTargetTestNode(Node):
           effort:   torque
         """
         msg = JointState()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = self.now_stamp
 
         msg.name = [
             "hip_L_Joint",
@@ -255,7 +255,7 @@ class ActuatorTargetTestNode(Node):
     # ---------------------------------------------------------------------    
     def _tick(self, joint_state_msg: JointState, imu_msg: ImuState):
         """Main control loop called by create_timer at control_rate_hz."""
-        self.now_stamp = self.get_clock().now().to_msg()
+        self.now_stamp = joint_state_msg.header.stamp
         now_time = time.perf_counter()
 
         # Time - Time → Duration; convert to seconds via nanoseconds.
@@ -287,7 +287,7 @@ class ActuatorTargetTestNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = ActuatorTargetTestNode()
+    node = SimActuatorTargetTestNode()
 
     try:
         rclpy.spin(node)

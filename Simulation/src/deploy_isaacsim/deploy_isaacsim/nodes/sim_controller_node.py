@@ -273,9 +273,6 @@ class SimControllerNode(Node):
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau = np.zeros(self.num_joints, dtype=np.float32)
 
-        # tau[6] = 0.1
-        # tau[7] = 0.1
-
         # --------------------------------------------------------------
         # Proactive condition check
         # --------------------------------------------------------------
@@ -294,15 +291,15 @@ class SimControllerNode(Node):
         if self.publish_mode == "policy":
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
-                                                                            imu_msg,
-                                                                            dt_sec, True)
+                                                                              imu_msg,
+                                                                              dt_sec, True)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
-                                                                   imu_msg, 
-                                                                   dt_sec, True)
+                                                                     imu_msg, 
+                                                                     dt_sec, True)
             v_ref[-2:] = 0.0
 
         else:

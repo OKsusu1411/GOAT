@@ -23,7 +23,6 @@ What this node canNOT verify:
 
 from __future__ import annotations
 
-import csv
 import signal
 import struct
 import sys
@@ -41,8 +40,6 @@ from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
 
 # The 0x9C/0xA1 speed field is int16. Once it pins at the limit the reported
 # value stops tracking the real speed, so those samples must leave the fit.
-# At the default 0.01 deg/s per LSB that ceiling is only ~327.7 deg/s, which a
-# hand-spun output shaft can reach.
 SPEED_RAW_SATURATION = 32767
 
 
@@ -83,7 +80,6 @@ class MotorIdNode(Node):
         self.declare_parameter("velocity_duration_sec", 30.0)
         self.declare_parameter("sample_rate_hz", 200.0)
         self.declare_parameter("stream_rate_hz", 10.0)
-        self.declare_parameter("csv_dir", "")
 
         self.yaml_path = str(self.get_parameter("yaml_path").value)
         self.test_name = str(self.get_parameter("test").value).strip().lower()
@@ -91,7 +87,6 @@ class MotorIdNode(Node):
         self.velocity_duration_sec = float(self.get_parameter("velocity_duration_sec").value)
         self.sample_rate_hz = float(self.get_parameter("sample_rate_hz").value)
         self.stream_rate_hz = float(self.get_parameter("stream_rate_hz").value)
-        self.csv_dir = str(self.get_parameter("csv_dir").value)
 
         self.log = self.get_logger()
 
@@ -128,10 +123,6 @@ class MotorIdNode(Node):
 
         self.can = CanInterface(channel=self.can_channel, interface="socketcan")
         self.can.open()
-        # NOTE: the background reader thread is deliberately NOT started. Both
-        # tests use blocking txrx() (read_state2 / read_multi_turn); if the
-        # reader were running it would consume every reply frame first and
-        # txrx() would time out on every call.
         self.driver = MotorDriver(
             self.can,
             MotorParams(
@@ -140,17 +131,6 @@ class MotorIdNode(Node):
                 gear_ratio=self.gear_ratio,
             ),
         )
-
-        # -----------------------------------------------------------------
-        # Terminal I/O
-        #
-        # `ros2 launch` spawns the node with stdin=PIPE and never writes to
-        # that pipe (osrf_pycommon async_execute_process_asyncio), so input()
-        # would block forever there — and its newline-less prompt would sit in
-        # the stdout buffer, making the node look frozen with nothing on
-        # screen. The node is still in the terminal's foreground process
-        # group though, so /dev/tty is the working path under launch.
-        # -----------------------------------------------------------------
         self._open_operator_terminal()
 
         # -----------------------------------------------------------------
@@ -211,12 +191,6 @@ class MotorIdNode(Node):
             self.tty_out = sys.stdout
             self.log.info("[terminal] 입력 경로: stdin (tty)")
             return
-
-        # `ros2 launch` case. The node still sits in the terminal's foreground
-        # process group, so /dev/tty reads and writes work fine — but it must
-        # be opened with SEPARATE read and write handles. A single "r+" handle
-        # raises "File or stream is not seekable", because that mode builds a
-        # BufferedRandom and a tty cannot seek.
         try:
             terminal_in = open("/dev/tty", "r")
             terminal_out = open("/dev/tty", "w")
@@ -430,14 +404,6 @@ class MotorIdNode(Node):
         self._say(" 아래에 누적 회전수가 실시간으로 표시됩니다.")
         self._say()
 
-        # The worker blocks on input() during the rotation, so a collector
-        # thread samples CAN here. It accumulates the two signals that the
-        # 0x92-based numbers CANNOT check on their own:
-        #   - the encoder count field, which is what the live controller
-        #     actually integrates into position
-        #   - the time-integral of the reported speed field
-        # Both get anchored to the same physical rotation the operator does,
-        # so this one turn calibrates all three signals against each other.
         accumulator = self._start_position_collector(start_snapshot)
         self._prompt(" 다 돌렸으면 Enter... ")
         self._stop_stream()
@@ -708,9 +674,6 @@ class MotorIdNode(Node):
             self.log.warn(" [경고] 적분 방식 교차검증 불가 (보고 속도가 거의 0)")
         self.log.info("-" * 66)
 
-        csv_path = self._write_velocity_csv(pairs)
-        self.log.info(f"원본 데이터: {csv_path}")
-
         if r_squared < 0.95:
             self.log.warn("[주의] 적합도가 낮습니다. 결론을 내리지 마세요.")
             self.log.warn("       원인: 샘플 부족, 시간 측정 문제, 또는 드라이버 내부 속도 필터")
@@ -738,17 +701,6 @@ class MotorIdNode(Node):
             self.log.warn(f"   - 정책 관측(joint_vel) : 학습 시 단위와 일치하는지 확인 후 무부하 상태에서 먼저 시험")
 
         self._report_unverifiable()
-
-    def _write_velocity_csv(self, pairs: list[tuple[float, float]]) -> Path:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        directory = Path(self.csv_dir) if self.csv_dir else Path.cwd()
-        directory.mkdir(parents=True, exist_ok=True)
-        csv_path = directory / f"{timestamp}_velocity_test_{self.joint_name}.csv"
-        with open(csv_path, "w", newline="", encoding="utf-8") as file_handle:
-            writer = csv.writer(file_handle)
-            writer.writerow(["v_reported_dps", "v_from_position_dps"])
-            writer.writerows(pairs)
-        return csv_path
 
     # =====================================================================
     # Reporting / teardown
