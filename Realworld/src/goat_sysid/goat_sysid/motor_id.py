@@ -140,11 +140,12 @@ class MotorIdNode(Node):
         # -----------------------------------------------------------------
         # Terminal I/O
         #
-        # `ros2 launch` spawns the node with stdin=PIPE and nothing ever
-        # writes to that pipe (osrf_pycommon async_execute_process_asyncio),
-        # so a plain input() there blocks forever AND its newline-less prompt
-        # never leaves the stdout buffer — the node just looks frozen.
-        # Under `ros2 run` stdin IS the terminal, which is the sane path.
+        # `ros2 launch` spawns the node with stdin=PIPE and never writes to
+        # that pipe (osrf_pycommon async_execute_process_asyncio), so input()
+        # would block forever there — and its newline-less prompt would sit in
+        # the stdout buffer, making the node look frozen with nothing on
+        # screen. The node is still in the terminal's foreground process
+        # group though, so /dev/tty is the working path under launch.
         # -----------------------------------------------------------------
         self._open_operator_terminal()
 
@@ -207,29 +208,35 @@ class MotorIdNode(Node):
             self.log.info("[terminal] 입력 경로: stdin (tty)")
             return
 
+        # `ros2 launch` case. The node still sits in the terminal's foreground
+        # process group, so /dev/tty reads and writes work fine — but it must
+        # be opened with SEPARATE read and write handles. A single "r+" handle
+        # raises "File or stream is not seekable", because that mode builds a
+        # BufferedRandom and a tty cannot seek.
         try:
-            terminal = open("/dev/tty", "r+")
+            terminal_in = open("/dev/tty", "r")
+            terminal_out = open("/dev/tty", "w")
         except OSError as exc:
             self.tty_in = None
             self.tty_out = sys.stdout
             self.log.warn(
                 f"[terminal] stdin이 tty가 아니고 /dev/tty도 열 수 없습니다 ({exc}). "
-                "대화형 프롬프트를 진행할 수 없습니다 — "
-                "`ros2 run goat_sysid motor_id --ros-args -p ...` 로 실행하세요."
+                "제어 터미널이 없는 환경(systemd 서비스 등)으로 보입니다. "
+                "터미널에서 직접 실행하세요."
             )
             return
 
-        self.tty_in = terminal
-        self.tty_out = terminal
+        self.tty_in = terminal_in
+        self.tty_out = terminal_out
         self.tty_owned = True
-        self.log.info("[terminal] 입력 경로: /dev/tty (stdin이 tty가 아님)")
+        self.log.info("[terminal] 입력 경로: /dev/tty (stdin이 tty가 아님 — ros2 launch)")
 
     def _prompt(self, message: str) -> str:
         """Blocking prompt on the operator's terminal."""
         if self.tty_in is None:
             raise RuntimeError(
-                "대화형 입력 경로가 없습니다. `ros2 launch` 대신 "
-                "`ros2 run goat_sysid motor_id --ros-args -p ...` 로 실행하세요."
+                "대화형 입력 경로가 없습니다 (stdin이 tty가 아니고 /dev/tty도 없음). "
+                "제어 터미널이 있는 셸에서 실행하세요."
             )
 
         # Always flush: the prompt has no trailing newline, so a buffered
@@ -243,15 +250,11 @@ class MotorIdNode(Node):
             # EIO here means the read was refused because this process is not
             # in the terminal's foreground group (see the SIGTTIN guard).
             raise RuntimeError(
-                f"터미널 읽기 실패({exc}). 이 노드는 포그라운드 터미널에서 실행해야 합니다: "
-                "`ros2 run goat_sysid motor_id --ros-args -p ...`"
+                f"터미널 읽기 실패({exc}). 이 노드는 포그라운드 터미널에서 실행해야 합니다."
             ) from exc
 
         if line == "":  # EOF — input closed or redirected from /dev/null
-            raise RuntimeError(
-                "입력이 EOF로 닫혔습니다. `ros2 run goat_sysid motor_id --ros-args -p ...` "
-                "로 터미널에서 직접 실행하세요."
-            )
+            raise RuntimeError("입력이 EOF로 닫혔습니다. 터미널에서 직접 실행하세요.")
         return line.strip()
 
     def _say(self, message: str = "") -> None:
@@ -601,12 +604,13 @@ class MotorIdNode(Node):
             self.can.close()
         except Exception as exc:
             self.log.warn(f"CAN close 실패: {exc}")
-        # Only close /dev/tty if we opened it — never close sys.stdin.
-        if getattr(self, "tty_owned", False) and self.tty_in is not None:
-            try:
-                self.tty_in.close()
-            except Exception:
-                pass
+        # Only close /dev/tty if we opened it — never close sys.stdin/stdout.
+        if getattr(self, "tty_owned", False):
+            for handle in (self.tty_in, self.tty_out):
+                try:
+                    handle.close()
+                except Exception:
+                    pass
             self.tty_in = None
             self.tty_out = sys.stdout
             self.tty_owned = False
