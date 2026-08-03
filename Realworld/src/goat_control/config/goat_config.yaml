@@ -157,15 +157,15 @@ policy_leg_proportional_gain:
 - 3.0
 - 3.0
 policy_leg_derivative_gain:
-- 0.5
-- 0.5
-- 0.5
-- 0.5
-- 0.5
-- 0.5
+- 0.05
+- 0.05
+- 0.05
+- 0.05
+- 0.05
+- 0.05
 policy_wheel_proportional_gain:
-- 0.005
-- 0.005
+- 0.05
+- 0.05
 max_torque_per_joint:
 - 4.5
 - 4.5
