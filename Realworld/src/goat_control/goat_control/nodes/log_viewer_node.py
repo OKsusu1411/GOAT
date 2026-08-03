@@ -39,7 +39,6 @@ class LogViewerNode(Node):
 
         # Parameters
         self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
-        self.declare_parameter("sample_count", 20)
         self.declare_parameter("csv_path", "experiment_logs.csv")
         self.declare_parameter("log_degrees", False)
         self.declare_parameter("is_csv_logging", True)
@@ -50,7 +49,7 @@ class LogViewerNode(Node):
         with open(yaml_path, "r", encoding="utf-8") as file_handle:
             self.cfg = yaml.safe_load(file_handle)
 
-        self.declare_parameter("print_rate_hz", 10.0)
+        self.declare_parameter("print_rate_hz", 50.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("precision", 3)
 
@@ -73,12 +72,23 @@ class LogViewerNode(Node):
         self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve().with_name(f"{time.strftime('%Y%m%d_%H%M%S')}_experiment_logs.csv"))
         self.is_csv_logging = bool(self.get_parameter("is_csv_logging").value)
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
-        self.csv_logging_interval_sec = 0.1
+        self.csv_logging_interval_sec = 0.01
 
-        self.csv_file = None
-        self.csv_writer = None
-        self.log_start = False
+        if self.is_csv_logging:
+            self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
+            self.csv_writer = csv.writer(self.csv_file)
 
+            header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
+            header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
+            header += [f"{name}_torque" for name in self.joint_names]
+
+            self.csv_writer.writerow(header)
+            self.csv_file.flush()
+
+            self.get_logger().info(f"CSV logging enabled: {self.csv_path}")
+        else:
+            self.get_logger().info("CSV logging disabled.")
+            
         # Subscribers
         self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
         self.create_subscription(JointState, "/joint_states", self._on_joint_state, 10)
@@ -94,23 +104,6 @@ class LogViewerNode(Node):
 
     def _on_joint_ref(self, msg: JointState) -> None:
         self.joint_ref = msg
-        # CSV logging start when control input is valid
-        if not self.log_start:
-            if any(abs(np.array(msg.effort)) > 1e-3):
-                if self.is_csv_logging:
-                    self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
-                    self.csv_writer = csv.writer(self.csv_file)
-
-                    header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
-                    header += [f"{name}_torque" for name in self.joint_names]
-                    self.csv_writer.writerow(header)
-                    self.csv_file.flush()
-
-                    self.get_logger().info(f"CSV logging enabled: {self.csv_path}")
-                else:
-                    self.get_logger().info("CSV logging disabled.")
-
-                self.log_start = True
 
     def _on_joint_state(self, msg: JointState) -> None:
         self.joint_current = msg
@@ -166,13 +159,16 @@ class LogViewerNode(Node):
         self.get_logger().info("\n" + "\n".join(lines))
 
         # Save joint position only to CSV
-        if (self.is_csv_logging and self.log_start) and (self._print_count % self.csv_logging_interval == 0):
+        if self.is_csv_logging and (self._print_count % self.csv_logging_interval == 0):
             if self.log_degrees:
                 joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
+                joint_vel_log = np.rad2deg(np.array(self.joint_current.velocity, dtype=float))
             else:
                 joint_pos_log = np.array(self.joint_current.position, dtype=float)
+                joint_vel_log = np.array(self.joint_current.velocity, dtype=float)
             now_sec = self.get_clock().now().nanoseconds * 1e-9
-            row = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
+            row  = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
+            row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
             row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
 
             self.csv_writer.writerow(row)

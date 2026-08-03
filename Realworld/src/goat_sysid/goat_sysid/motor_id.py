@@ -108,6 +108,10 @@ class MotorIdNode(Node):
 
         self.angle_deg_per_lsb = float(self.cfg["angle_deg_per_lsb"])
         self.speed_deg_per_sec_per_lsb = float(self.cfg["speed_deg_per_sec_per_lsb"])
+        # The live controller derives position from this encoder field, NOT
+        # from 0x92 (motor_manager._update_motor_angle_from_encoder), so it
+        # needs its own ground-truth check.
+        self.encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 65536))
 
         self.joint_index = self._resolve_joint_index()
         self.joint_name = str(self.cfg["joint_names"][self.joint_index])
@@ -283,6 +287,80 @@ class MotorIdNode(Node):
         self._stream_thread = threading.Thread(target=stream_loop, daemon=True, name="motor_id_stream")
         self._stream_thread.start()
 
+    def _start_position_collector(self, start_snapshot: dict) -> dict:
+        """Sample during the hand rotation, accumulating the encoder count and
+        the speed integral alongside the 0x92 angle. Returns the accumulator
+        dict, filled in by the thread until _stop_stream()."""
+        accumulator = {
+            "encoder_counts": 0,   # unwrapped, signed
+            "speed_path_deg": 0.0,  # integral of |reported speed|
+            "samples": 0,
+            "misses": 0,
+        }
+        self._stream_stop.clear()
+
+        def collector_loop() -> None:
+            counts_per_rev = self.encoder_counts_per_rev
+            half_range = counts_per_rev // 2
+            previous_encoder = start_snapshot["enc_raw"]
+            previous_time = start_snapshot["t"]
+            t0 = time.perf_counter()
+
+            sample_period_sec = 1.0 / max(self.sample_rate_hz, 1.0)
+            print_period_sec = 1.0 / max(self.stream_rate_hz, 0.1)
+            next_print_time = t0
+
+            while not self._stream_stop.is_set():
+                snapshot = self._read_snapshot(timeout=0.02)
+                if snapshot is None:
+                    accumulator["misses"] += 1
+                else:
+                    # Same wrap rule the live controller uses.
+                    delta_counts = snapshot["enc_raw"] - previous_encoder
+                    if delta_counts > half_range:
+                        delta_counts -= counts_per_rev
+                    elif delta_counts < -half_range:
+                        delta_counts += counts_per_rev
+                    accumulator["encoder_counts"] += delta_counts
+                    previous_encoder = snapshot["enc_raw"]
+
+                    dt = snapshot["t"] - previous_time
+                    previous_time = snapshot["t"]
+                    if 0.0 < dt < 1.0:
+                        accumulator["speed_path_deg"] += (
+                            abs(snapshot["speed_raw"] * self.speed_deg_per_sec_per_lsb) * dt
+                        )
+
+                    accumulator["samples"] += 1
+                    accumulator["last"] = snapshot
+
+                now = time.perf_counter()
+                if now >= next_print_time:
+                    next_print_time = now + print_period_sec
+                    last = accumulator.get("last")
+                    if last is None:
+                        self.log.info("[pos] 응답 없음 — CAN 확인")
+                    else:
+                        raw_delta = last["multi_raw"] - start_snapshot["multi_raw"]
+                        output_deg = self._output_deg_from_raw(raw_delta)
+                        self.log.info(
+                            f"[pos] t={now - t0:5.1f}s | "
+                            f"raw={last['multi_raw']:>10,} | "
+                            f"motor={raw_delta * self.angle_deg_per_lsb:9.3f} deg | "
+                            f"누적={output_deg / 360.0:+.3f} turn | 목표 {self.expected_turns:.3f} turn | "
+                            f"enc={accumulator['encoder_counts']:+,} | "
+                            f"∫v={accumulator['speed_path_deg']:8.1f} deg"
+                        )
+
+                sleep_sec = sample_period_sec - (time.perf_counter() - now)
+                if sleep_sec > 0.0:
+                    self._stream_stop.wait(sleep_sec)
+
+        self._stream_thread = threading.Thread(
+            target=collector_loop, daemon=True, name="motor_id_stream")
+        self._stream_thread.start()
+        return accumulator
+
     def _stop_stream(self) -> None:
         self._stream_stop.set()
         if self._stream_thread is not None:
@@ -352,25 +430,15 @@ class MotorIdNode(Node):
         self._say(" 아래에 누적 회전수가 실시간으로 표시됩니다.")
         self._say()
 
-        # Worker is about to block on input(), so the stream thread polls CAN
-        # itself here (the only place it does).
-        stream_t0 = time.perf_counter()
-
-        def position_line() -> str | None:
-            snapshot = self._read_snapshot(timeout=0.05)
-            if snapshot is None:
-                return "[pos] 응답 없음 — CAN 확인"
-            raw_delta = snapshot["multi_raw"] - start_snapshot["multi_raw"]
-            output_deg = self._output_deg_from_raw(raw_delta)
-            return (
-                f"[pos] t={time.perf_counter() - stream_t0:5.1f}s | "
-                f"raw={snapshot['multi_raw']:>10,} | "
-                f"motor={raw_delta * self.angle_deg_per_lsb:9.3f} deg | "
-                f"joint={output_deg:9.3f} deg | "
-                f"누적={output_deg / 360.0:+.3f} turn | 목표 {self.expected_turns:.3f} turn"
-            )
-
-        self._start_stream(position_line)
+        # The worker blocks on input() during the rotation, so a collector
+        # thread samples CAN here. It accumulates the two signals that the
+        # 0x92-based numbers CANNOT check on their own:
+        #   - the encoder count field, which is what the live controller
+        #     actually integrates into position
+        #   - the time-integral of the reported speed field
+        # Both get anchored to the same physical rotation the operator does,
+        # so this one turn calibrates all three signals against each other.
+        accumulator = self._start_position_collector(start_snapshot)
         self._prompt(" 다 돌렸으면 Enter... ")
         self._stop_stream()
 
@@ -428,8 +496,69 @@ class MotorIdNode(Node):
                     )
                     break
 
-        self.log.info(f"(참고) 엔코더 원시값: 시작 {start_snapshot['enc_raw']}, 끝 {end_snapshot['enc_raw']}")
+        self._report_position_cross_checks(accumulator)
         self._report_unverifiable()
+
+    def _report_position_cross_checks(self, accumulator: dict) -> None:
+        """Check the encoder path and the speed field against the SAME physical
+        rotation, so neither depends on 0x92 being right."""
+        self.log.info("")
+        self.log.info("=" * 66)
+        self.log.info(" 교차검증 — 실제 회전 1건에 세 신호를 대조")
+        self.log.info("=" * 66)
+        self.log.info(f" 샘플 {accumulator['samples']} (miss={accumulator['misses']})")
+
+        turns = abs(self.expected_turns)
+        if accumulator["samples"] < 20 or turns < 1e-9:
+            self.log.warn(" [건너뜀] 샘플이 부족합니다.")
+            return
+
+        # ---- 1) Encoder path — this is what the live controller integrates.
+        measured_counts_per_output_turn = abs(accumulator["encoder_counts"]) / turns
+        expected_counts_per_output_turn = self.encoder_counts_per_rev * self.gear_ratio
+        self.log.info("")
+        self.log.info(" [1] 엔코더 경로 (실제 컨트롤러가 위치 적분에 쓰는 신호)")
+        self.log.info(f"     출력축 1바퀴당 측정 카운트 : {measured_counts_per_output_turn:,.0f}")
+        self.log.info(f"     config 기준 기대 카운트    : {expected_counts_per_output_turn:,.0f} "
+                      f"(= {self.encoder_counts_per_rev:,} x gear {self.gear_ratio:g})")
+        if expected_counts_per_output_turn > 0:
+            encoder_ratio = measured_counts_per_output_turn / expected_counts_per_output_turn
+            self.log.info(f"     >>> 배수 : {encoder_ratio:.4f}")
+            if abs(encoder_ratio - 1.0) < 0.05:
+                self.log.info("     [통과] 엔코더는 출력축 기준입니다.")
+            else:
+                self.log.warn(f"     [불일치] 엔코더가 출력축 1바퀴에 기대값의 {encoder_ratio:.2f}배를 셉니다.")
+                if abs(encoder_ratio - round(encoder_ratio)) < 0.05 and round(encoder_ratio) >= 2:
+                    self.log.warn(f"     → 모터 내부 감속비 1:{round(encoder_ratio)} 가 있고 엔코더는 "
+                                  "로터(감속 전) 기준이라는 뜻입니다.")
+                    self.log.warn("       이 경우 speed 필드도 로터 기준일 가능성이 높습니다.")
+
+        # ---- 2) Speed field vs the physical turn (independent of 0x92).
+        # Motor-side degrees implied by the rotation the operator performed.
+        expected_motor_deg = turns * 360.0 * self.gear_ratio
+        self.log.info("")
+        self.log.info(" [2] 속도 필드 vs 실제 회전 (0x92를 거치지 않는 독립 검증)")
+        self.log.info(f"     속도 적분값        : {accumulator['speed_path_deg']:.1f} deg (현재 설정 기준)")
+        self.log.info(f"     실제 회전량        : {expected_motor_deg:.1f} deg (모터축 환산)")
+        if accumulator["speed_path_deg"] > 1e-6:
+            speed_ratio = expected_motor_deg / accumulator["speed_path_deg"]
+            corrected = self.speed_deg_per_sec_per_lsb * speed_ratio
+            self.log.info(f"     >>> 배수 : {speed_ratio:.4f}")
+            if abs(speed_ratio - 1.0) < 0.05:
+                self.log.info(f"     [통과] speed_deg_per_sec_per_lsb = "
+                              f"{self.speed_deg_per_sec_per_lsb} 가 실제 회전과 일치합니다.")
+            else:
+                self.log.warn(f"     [불일치] speed_deg_per_sec_per_lsb: "
+                              f"{self.speed_deg_per_sec_per_lsb} -> {corrected:.6f}")
+                self.log.warn("     이 값은 velocity 테스트(0x92 기준)와 반드시 일치해야 합니다. "
+                              "두 값이 다르면 어느 쪽도 신뢰하지 마세요.")
+        else:
+            self.log.warn("     [경고] 속도 적분이 0입니다. 손으로 돌리는 동안 속도 필드가 "
+                          "갱신되지 않았다는 뜻이므로 velocity 테스트 결과도 의심하세요.")
+
+        self.log.info("")
+        self.log.info(" 주의: 천천히 한 방향으로만 돌렸을 때만 [2]가 유효합니다 "
+                      "(왕복하면 적분 경로가 실제 회전량보다 커집니다).")
 
     # =====================================================================
     # Velocity test — verifies speed_deg_per_sec_per_lsb
@@ -446,13 +575,14 @@ class MotorIdNode(Node):
         self._say()
         self._prompt(" 준비되면 Enter... ")
 
-        # Pairs are built inside the sampling loop rather than post-processed,
-        # so the live "유효샘플" counter and the final fit use exactly the same
-        # filter — two copies of the filter drift apart and mislead the operator.
         pairs: list[tuple[float, float]] = []
         sample_count = 0
         miss_count = 0
         saturated_count = 0
+        position_path_deg = 0.0
+        reported_path_deg = 0.0
+        reported_dps_min = 0.0
+        reported_dps_max = 0.0
         self._velocity_status = {"reported_dps": 0.0, "derived_dps": 0.0}
 
         def velocity_line() -> str | None:
@@ -495,6 +625,13 @@ class MotorIdNode(Node):
                         speed_reported_dps = snapshot["speed_raw"] * self.speed_deg_per_sec_per_lsb
                         self._velocity_status["derived_dps"] = speed_from_position_dps
                         self._velocity_status["reported_dps"] = speed_reported_dps
+
+                        # Path lengths — sign-independent, so back-and-forth
+                        # hand motion accumulates instead of cancelling.
+                        position_path_deg += abs(raw_delta) * self.angle_deg_per_lsb
+                        reported_path_deg += abs(speed_reported_dps) * dt
+                        reported_dps_min = min(reported_dps_min, speed_reported_dps)
+                        reported_dps_max = max(reported_dps_max, speed_reported_dps)
                         if abs(snapshot["speed_raw"]) >= SPEED_RAW_SATURATION:
                             # int16 speed field pinned at its limit — the
                             # reported value is no longer the real speed, so it
@@ -551,7 +688,24 @@ class MotorIdNode(Node):
                 "붙어 피팅에서 제외했습니다. 더 천천히 돌리세요."
             )
         self.log.info(f" 직선 적합도(R2) : {r_squared:.4f}")
-        self.log.info(f" >>> 오차 배수 : {slope:.4f}")
+        self.log.info(f" 측정 속도 구간  : {reported_dps_min:+.1f} ~ {reported_dps_max:+.1f} dps (모터축, 현재 설정 기준)")
+        self.log.info(f" >>> 오차 배수 (기울기 방식) : {slope:.4f}")
+
+        # Cross-check with the integral estimator. Two independent estimates
+        # agreeing is what makes the number safe to put into the config.
+        if reported_path_deg > 1e-6:
+            slope_path = position_path_deg / reported_path_deg
+            self.log.info(f" >>> 오차 배수 (적분 방식) : {slope_path:.4f}")
+            disagreement = abs(slope_path - slope) / max(abs(slope), 1e-9)
+            if disagreement > 0.10:
+                self.log.warn(
+                    f" [경고] 두 추정치가 {disagreement * 100:.1f}% 어긋납니다. "
+                    "드라이버 내부 속도 필터/지연 또는 샘플링 문제가 의심되므로 "
+                    "이 값을 config에 반영하지 마세요."
+                )
+        else:
+            slope_path = float("nan")
+            self.log.warn(" [경고] 적분 방식 교차검증 불가 (보고 속도가 거의 0)")
         self.log.info("-" * 66)
 
         csv_path = self._write_velocity_csv(pairs)
@@ -573,7 +727,15 @@ class MotorIdNode(Node):
                 f"         speed_deg_per_sec_per_lsb: {self.speed_deg_per_sec_per_lsb} -> "
                 f"{corrected:.6f} 로 바꾸면 맞습니다."
             )
-            self.log.warn("         이 경우 PD 제어의 D항이 그만큼 약하게 작동해왔습니다.")
+            self.log.warn("")
+            self.log.warn(f" [!!! 중요 !!!] 이 값만 바꾸면 로봇이 발산할 수 있습니다.")
+            self.log.warn(f"   측정 속도가 {slope:.2f}배로 커지므로, 이 값을 소비하는 쪽도 함께 조정해야")
+            self.log.warn(f"   기존과 동일한 폐루프 거동이 유지됩니다:")
+            self.log.warn(f"   - nsc_leg_derivative_gain / policy_leg_derivative_gain / "
+                          f"nsc_wheel_*_derivative_gain : {1.0 / slope:.4f} 배로 조정 "
+                          f"(그대로 두면 D항 토크가 {slope:.2f}배가 됨)")
+            self.log.warn(f"   - joint_vel_estop_threshold : 지금까지 실제 임계치는 설정값의 {slope:.2f}배였음")
+            self.log.warn(f"   - 정책 관측(joint_vel) : 학습 시 단위와 일치하는지 확인 후 무부하 상태에서 먼저 시험")
 
         self._report_unverifiable()
 
