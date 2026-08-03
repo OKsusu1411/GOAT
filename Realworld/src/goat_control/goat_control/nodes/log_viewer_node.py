@@ -49,7 +49,7 @@ class LogViewerNode(Node):
         with open(yaml_path, "r", encoding="utf-8") as file_handle:
             self.cfg = yaml.safe_load(file_handle)
 
-        self.declare_parameter("print_rate_hz", 50.0)
+        self.declare_parameter("print_rate_hz", 200.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("precision", 3)
 
@@ -72,7 +72,7 @@ class LogViewerNode(Node):
         self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve().with_name(f"{time.strftime('%Y%m%d_%H%M%S')}_experiment_logs.csv"))
         self.is_csv_logging = bool(self.get_parameter("is_csv_logging").value)
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
-        self.csv_logging_interval_sec = 0.01
+        self.csv_logging_interval_sec = 0.005
 
         if self.is_csv_logging:
             self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
