@@ -55,45 +55,29 @@ class MotorIO:
             seen_bus_node_pairs.add(pair_key)
 
         # Open both CAN buses.
-        self.cans: list[CanInterface] = [
-            CanInterface(channel=ch, interface=can_interface) for ch in can_channels
-        ]
+        self.cans: list[CanInterface] = [CanInterface(channel=ch, interface=can_interface) for ch in can_channels]
         for c in self.cans:
             c.open()
 
         # One driver per joint, bound to its bus.
-        self.motor_drivers: list[MotorDriver] = [
-            MotorDriver(self.cans[int(bus_i)], MotorParams(node_id=int(nid)))
-            for nid, bus_i in zip(motor_node_ids, motor_bus_idx)
-        ]
+        self.motor_drivers: list[MotorDriver] = [MotorDriver(self.cans[int(bus_i)], MotorParams(node_id=int(nid))) for nid, bus_i in zip(motor_node_ids, motor_bus_idx)]
 
         # Debug: print the joint -> (bus, id) mapping once.
-        mapping_str = ", ".join(
-            f"{name}=can{b}#id{nid}"
-            for name, b, nid in zip(self.joint_names, motor_bus_idx, motor_node_ids)
-        )
+        mapping_str = ", ".join(f"{name}=can{b}#id{nid}" for name, b, nid in zip(self.joint_names, motor_bus_idx, motor_node_ids))
         self.logger.info(f"[MotorIO] motor bus map: {mapping_str}")
 
         # Shared CAN scan / torque conversion helper.
         self.motor_manager = MotorManager(motor_drivers=self.motor_drivers, cfg=cfg)
 
         # Initial blocking read so the controller has valid state on tick 0.
-        # MUST run before the reader threads start — uses txrx() which would
-        # otherwise lose responses to the background reader.
-        self.latest_joint_state: JointState = self._read_initial_state()
+        states = self.motor_manager.read_initial_motor_state()
+        self.latest_joint_state: JointState = self._to_joint_state_msg(states)
 
-        # Switch every bus into background-reader mode. From here on
-        # the hot path uses send_only() + get_latest_frame() — no more
-        # per-motor recv() blocking the control loop.
-        for can_interface in self.cans:
-            can_interface.start_reader_thread()
+        # Switch every bus into background-reader mode.
+        for can in self.cans:
+            can.start_reader_thread()
 
         self.logger.info("[MotorIO] initialized — owns both CAN buses (in-process).")
-
-    def _read_initial_state(self) -> JointState:
-        """One full blocking read before the control loop starts."""
-        states = self.motor_manager.decode_motor_encoder(perform_slow_poll=True)
-        return self._to_joint_state_msg(states)
 
     def _to_joint_state_msg(self, states) -> JointState:
         """Pack MotorStatesData into a JointState container (no ROS node needed)."""
@@ -115,18 +99,9 @@ class MotorIO:
         clipped_torque_cmd = self.motor_manager.torque_clipping(torque_cmd_nm.flatten()) # Joint space torque
         current_cmd_amp = self.motor_manager.torque_to_current(clipped_torque_cmd) # Joint torque -> Motor torque -> Motor current
         motor_states_data = self.motor_manager.write_torques_and_read_states(current_cmd_amp, 
-                                                                             timeout=self.can_tx_timeout_sec, 
-                                                                             perform_slow_poll=False)
+                                                                             timeout=self.can_tx_timeout_sec)
         # Cache for next tick + return to caller.
         self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
-
-    def poll_error_flags_once(self) -> None:
-        """Read 0x9A error flags on every motor — call from a ~1 Hz timer.
-        After Step 3 poll_state1 is fire-and-forget; no need for the thread
-        pool. Sequential send_only is essentially free (<1 ms total)."""
-        mm = self.motor_manager
-        for motor_index in range(mm.motor_count):
-            mm.poll_state1(motor_index)
 
     def close(self) -> None:
         """Close both CAN buses on shutdown (stops reader threads first)."""

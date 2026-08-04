@@ -147,13 +147,13 @@ def format_telemetry(tel: MotorTelemetry) -> str:
         sc_s = "----" if scaled is None else f"{scaled:>12.4f}"
         return f"  {label:<18s} raw={raw_s}  ->{sc_s} {unit}"
  
-    out = [f"id{tel.node_id}  replied={','.join(tel.replied)}"]
+    out = [f"id{tel.node_id}"]
     out.append(line("iq", tel.iq_raw, tel.iq_amp, "A"))
     out.append(line("speed", tel.speed_raw, tel.speed_dps, "dps"))
     out.append(line("multi_turn", tel.multi_turn_raw, tel.multi_turn_deg, "deg"))
     out.append(line("single_turn", tel.single_turn_raw, tel.single_turn_deg, "deg"))
-    # out.append(line("bus_voltage", tel.bus_voltage_raw, tel.bus_voltage_v, "V"))
     out.append(line("bus_current", tel.bus_current_raw, tel.bus_current_a, "A"))
+    # out.append(line("bus_voltage", tel.bus_voltage_raw, tel.bus_voltage_v, "V"))
     out.append(f"  {'encoder':<18s} pos={tel.encoder} ")
     return "\n".join(out)
 

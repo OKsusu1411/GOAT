@@ -12,10 +12,6 @@ from . import protocol
 class MotorParams:
     """Static configuration for a single motor."""
     node_id: int
-    direction: int = 1  # +1 or -1
-    gear_ratio: float = 1.0
-    torque_constant_nm_per_a: float = 0.0  # Identified experimentally
-    torque_limit_nm: float | None = None
 
 
 class MotorDriver:
@@ -32,27 +28,25 @@ class MotorDriver:
         self.motor_params = motor_params
         self.can_ids = protocol.mg_ids(self.motor_params.node_id)
 
-        # 0xA1 (torque) reply may land on rx_id OR tx_id depending on the motor
-        # setup. Alias both keys to one arrival Event so await_state2() wakes on
-        # whichever arrives. Must run before the hot path arms/awaits events.
-        self.can_interface.alias_event_keys(
-            (self.can_ids.rx_id, 0xA1),
-            (self.can_ids.tx_id, 0xA1),
-        )
+        # 0xA1 (torque) reply may land on rx_id OR tx_id depending on the motor setup.
+        self.can_interface.alias_event_keys((self.can_ids.rx_id, 0xA1), (self.can_ids.tx_id, 0xA1))
 
+    # ======================
+    # CAN send and wait
+    # ======================
     def _txrx(self, command_byte: int, payload7: bytes = protocol.E7, timeout: float = 0.05):
         """Low-level helper: send a command and wait for a response."""
-        return self.can_interface.txrx(
-            tx_id=self.can_ids.tx_id,
-            rx_id=self.can_ids.rx_id,
-            cmd_byte=command_byte,
-            payload7=payload7,
-            timeout=timeout,
-            accept_rx_id=True,
-            accept_tx_echo_diff=True,
-        )
+        return self.can_interface.txrx(tx_id=self.can_ids.tx_id,
+                                       rx_id=self.can_ids.rx_id,
+                                       cmd_byte=command_byte,
+                                       payload7=payload7,
+                                       timeout=timeout,
+                                       accept_rx_id=True,
+                                       accept_tx_echo_diff=True)
 
-    # ---- Command wrappers (extend as needed)
+    # ======================
+    # Manager helpers [READ]
+    # ======================
     def read_state1(self, timeout: float = 0.05):
         """Read state1 (voltage, current, position) error flags."""
         return self._txrx(0x9A, protocol.E7, timeout)
@@ -65,33 +59,24 @@ class MotorDriver:
         return self._txrx(0x9C, protocol.E7, timeout)
 
     def read_multi_turn(self, timeout: float = 0.05):
-        '''Read multi-turn angle (int64, 0.001°/LSB, degree per second : 0.01/LSB).'''
+        '''Read multi-turn angle'''
         return self._txrx(0x92, protocol.E7, timeout)
 
     def read_single_turn(self, timeout: float = 0.05):
-        '''Read single-turn angle (uint32, position : 0.001°/LSB, degree per second : 0.01/LSB).'''
+        '''Read single-turn angle'''
         return self._txrx(0x94, protocol.E7, timeout)
 
-    # ------------------------
-    # Fire-and-forget API (Step 3 — TX/RX decouple)
-    # Use these on the control hot path. Responses are consumed by the
-    # CanInterface background reader thread and pulled from its cache via
-    # latest_state2() / latest_state1().
-    # ------------------------
+    # =======================
+    # Manager helpers [WRITE]
+    # =======================
     def send_torque_only(self, amps: float) -> None:
         """Send 0xA1 torque command; response will be cached by reader thread."""
         torque_payload = protocol.payload_torque_mode_from_amp(amps)
-        self.can_interface.send_only(
-            self.can_ids.tx_id,
-            bytes([0xA1]) + torque_payload,
-        )
+        self.can_interface.send_only(self.can_ids.tx_id, bytes([0xA1]) + torque_payload)
 
     def send_state1_request(self) -> None:
         """Send 0x9A state1 (error flags) request; reply cached by reader thread."""
-        self.can_interface.send_only(
-            self.can_ids.tx_id,
-            bytes([0x9A]) + protocol.E7,
-        )
+        self.can_interface.send_only(self.can_ids.tx_id, bytes([0x9A]) + protocol.E7)
 
     def latest_state2(self):
         """Return the most recent cached 0xA1 reply for this motor (or None).
@@ -115,12 +100,6 @@ class MotorDriver:
             return msg
         return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0x9A)
 
-    # ------------------------
-    # Synchronous hot-path API (sync 200 Hz pipeline)
-    # Use clear_state2_event() before send_torque_only(), then await_state2()
-    # to block on THIS tick's reply. Returns the can.Message or None on
-    # timeout. Restores the constant-Δt invariant the integrator needs.
-    # ------------------------
     def clear_state2_event(self) -> None:
         """Arm this motor for a fresh 0xA1 reply.
 
@@ -131,16 +110,14 @@ class MotorDriver:
 
     def await_state2(self, deadline_monotonic: float):
         """Block until a fresh 0xA1 reply arrives for this motor, or the
-        shared deadline elapses. Returns the can.Message or None on timeout.
-
-        `deadline_monotonic` is an absolute time.monotonic() value shared by
-        all 8 motors this tick — keeps total RX wait bounded regardless of
-        motor count."""
+        shared deadline elapses. Returns the can.Message or None on timeout."""
         # rx_id and tx_id 0xA1 events are aliased to one shared Event (see
         # __init__), so this wakes whether the motor answers on rx_id or tx_id.
         ev = self.can_interface.event_for_key(self.can_ids.rx_id, 0xA1)
         remaining = max(0.0, deadline_monotonic - time.monotonic())
-        ev.wait(remaining)  # woken on arrival, or fell through on timeout
+        arrive = ev.wait(remaining)  # woken on arrival, or fell through on timeout
+        if not arrive:
+            return None # Timeout Signal
         # Prefer rx_id frame; fall back to tx_id (this hardware replies on tx_id).
         return (self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
                 or self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1))

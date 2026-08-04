@@ -43,8 +43,6 @@ class MotorManager:
 
     def __init__(self,
                  motor_drivers: Sequence[MotorDriver],
-                 single_turn_motor_indices: Optional[Sequence[int]] = None,
-                 multi_turn_motor_indices: Optional[Sequence[int]] = None,
                  cfg:dict = None):
         self.cfg = cfg
         self.motor_drivers = list(motor_drivers)
@@ -85,32 +83,25 @@ class MotorManager:
         # ------------------------------------------------------------------
         # Motor states via CAN
         # ------------------------------------------------------------------
-        self.single_turn_motor_indices = set(single_turn_motor_indices or [])
-        self.multi_turn_motor_indices = set(multi_turn_motor_indices or [])
 
         self.motor_temperature_c: List[float] = [float("nan")] * self.motor_count
         self.motor_phase_current_amp: List[float] = [float("nan")] * self.motor_count
         self.motor_speed_deg_per_sec: List[float] = [float("nan")] * self.motor_count
         self.motor_encoder_count: List[int] = [0] * self.motor_count
 
-        self.motor_single_turn_angle_raw_0p001deg: List[int] = [0] * self.motor_count
-        self.motor_multi_turn_angle_raw_0p001deg: List[int] = [0] * self.motor_count
+        self.motor_single_turn_angle_raw_0p001deg: List[Optional[int]] = [None] * self.motor_count
+        self.motor_multi_turn_angle_raw_0p001deg: List[Optional[int]] = [None] * self.motor_count
 
         self.motor_error_flags: List[int] = [0] * self.motor_count
         self.motor_operating_state: List[int] = [0] * self.motor_count
 
-        # Per-motor anchor state. `None` until _seed_position_anchor() runs.
-        self.motor_anchor_motor_angle_deg: List[Optional[float]] = [None] * self.motor_count
+        # Per-motor anchor state. `None` until _set_position_anchor() runs.
+        self.motor_anchor_angle_deg:       List[Optional[float]] = [None] * self.motor_count
         self.motor_anchor_encoder_count:   List[Optional[int]]   = [None] * self.motor_count
         self.motor_prev_encoder_count:     List[Optional[int]]   = [None] * self.motor_count
         self.motor_encoder_wrap_count:     List[int]             = [0]    * self.motor_count
 
         # Boot anchor fold window (per motor, motor degrees)
-        # The one-shot absolute-angle read taken at boot can come back a full
-        # motor turn off. Every leg joint's mechanical travel is narrower than
-        # one motor turn, so the ambiguity is resolvable: fold the boot anchor
-        # into the 360 deg window centred on that joint's reachable raw range.
-        # `None` disables folding (wheels — continuous rotation, no window).
         self.motor_fold_center_deg: List[Optional[float]] = [None] * self.motor_count
 
         joint_pos_limit = self.cfg["joint_pos_limit"]
@@ -131,11 +122,70 @@ class MotorManager:
             raw_hi_deg = math.degrees(limit_hi_rad + offset_rad) * gear / direction
             self.motor_fold_center_deg[motor_i] = 0.5 * (raw_lo_deg + raw_hi_deg)
 
-        # Persistent thread pool reused across every tick. Recreating an
-        # 8-thread pool at 200 Hz was costing ~800 thread spawns/sec for no
-        # parallelism benefit (per-bus txrx_lock already serializes the bus).
+        # Persistent thread pool reused across every tick. 
         self._io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.motor_count, thread_name_prefix="motor_io")
 
+
+    # =========================================================================
+    # Initialization
+    # =========================================================================
+    def _set_position_anchor(self) -> None:
+        """Capture absolute motor angle + matching encoder count as the
+        per-motor anchor. Called once after the init multi-turn poll."""
+        for motor_index in range(self.motor_count):
+            raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_index]
+            raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_index]
+            if raw_multi is not None:
+                anchor_motor_angle_deg = raw_multi * self.angle_deg_per_lsb
+            elif raw_single is not None:
+                anchor_motor_angle_deg = raw_single * self.angle_deg_per_lsb
+            else:
+                raise RuntimeError(f"Motor {motor_index}: no absolute-angle response during initialization.")
+
+            fold_center_deg = self.motor_fold_center_deg[motor_index]
+            if fold_center_deg is not None:
+                # Pull the boot reading into (center-180, center+180]
+                anchor_motor_angle_deg = fold_center_deg + ((anchor_motor_angle_deg - fold_center_deg + 180.0) % 360.0 - 180.0)
+
+            self.motor_anchor_angle_deg[motor_index]       = anchor_motor_angle_deg
+            self.motor_anchor_encoder_count[motor_index]   = self.motor_encoder_count[motor_index]
+            self.motor_prev_encoder_count[motor_index]     = self.motor_encoder_count[motor_index]
+            self.motor_encoder_wrap_count[motor_index]     = 0
+
+    def read_initial_motor_state(self) -> MotorStatesData:
+        def fetch_motor_data(motor_index: int) -> tuple[int, bool]:
+            # Order matters: 0x92 multi-turn (anchor_motor_angle_deg) and
+            # 0x9C state2 (anchor_encoder_count) must be adjacent in time
+            # so the anchor pair refers to nearly the same physical motor
+            # position.
+            is_valid_flag   = self.poll_state1(motor_index)                # 0x9A error flags
+            is_valid_angle  = self.poll_single_and_multi_turn(motor_index)  # 0x92 / 0x94
+            is_valid_state2 = self.poll_state2(motor_index)                # 0x9C — pairs with 0x92
+
+            return motor_index, (is_valid_flag & is_valid_angle & is_valid_state2)
+
+        # Submit on the persistent pool and drain via f.result().
+        futures = [self._io_pool.submit(fetch_motor_data, i) for i in range(self.motor_count)]
+        results = [future.result() for future in futures]
+        failed = [motor_index for motor_index, valid in results if not valid]
+
+        # Check Initializing
+        if failed:
+            raise RuntimeError(f"Initial motor-state read failed: motors={failed}")
+
+        # Seed (or re-seed) the encoder anchor exactly when we have a fresh multi-turn read available. 
+        self._set_position_anchor()
+
+        # Update folded multi-turn angle
+        for motor_index in range(self.motor_count):
+            self._update_motor_angle_from_encoder(motor_index)
+
+        return self._package_motor_states()
+
+
+    # ==================================
+    # Motor control input 
+    # ==================================
     def torque_clipping(self, torque_cmd:np.ndarray) -> np.ndarray:
         # Joint Space
         clipped_torque = np.clip(torque_cmd, -self.max_torque_per_joint, self.max_torque_per_joint)
@@ -146,14 +196,14 @@ class MotorManager:
         current_command_amp = torque_cmd / self.torque_to_current_denominator # Joint -> Motor
         return current_command_amp
 
-    def poll_state1(self, motor_index: int, timeout: float = 0.05) -> None:
-        """Read 0x9A error flags. Auto-picks blocking txrx (init, no reader)
-        vs fire-and-forget + cache read (after reader thread starts)."""
+    # ==================================
+    # Read byte signal 
+    # ==================================    
+    def poll_state1(self, motor_index: int, timeout: float = 0.05) -> bool:
+        """Read 0x9A error flags."""
         driver = self.motor_drivers[motor_index]
         if driver.can_interface.is_reader_running():
             # Reader thread mode: fire request, read prior reply from cache.
-            # 1 Hz call rate means worst-case staleness is ~1 s — fine for
-            # safety telemetry. First call returns None (no cached reply yet).
             driver.send_state1_request()
             response_message = driver.latest_state1()
         else:
@@ -161,16 +211,18 @@ class MotorManager:
             response_message = driver.read_state1(timeout=timeout)
 
         if response_message is None:
-            return
+            return False
 
         response_data = response_message.data
         self.motor_operating_state[motor_index] = int(response_data[6])
         self.motor_error_flags[motor_index] = int(response_data[7])
 
-    def poll_state2(self, motor_index: int, timeout: float = 0.05) -> None:
+        return True
+
+    def poll_state2(self, motor_index: int, timeout: float = 0.05) -> bool:
         response_message = self.motor_drivers[motor_index].read_state2(timeout=timeout)
         if response_message is None:
-            return
+            return False
 
         response_data = response_message.data
         # temperature: int8 [degC]
@@ -184,59 +236,23 @@ class MotorManager:
         # encoder: uint16 [count]
         self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
 
-    def poll_single_or_multi_turn(self, motor_index: int, timeout: float = 0.25) -> None:
-        motor_driver = self.motor_drivers[motor_index]
+        return True
 
-        def read_single_turn_angle() -> None:
-            response_message = motor_driver.read_single_turn(timeout=timeout)
-            if response_message is None:
-                return
-            response_data = response_message.data
-            self.motor_single_turn_angle_raw_0p001deg[motor_index] = int.from_bytes(response_data[4:8],
-                                                                                    byteorder="little",
-                                                                                    signed=False)
+    def poll_single_and_multi_turn(self, motor_index: int, timeout: float = 0.25) -> bool:
+        response_single = self.motor_drivers[motor_index].read_single_turn(timeout=timeout)
+        if response_single is not None:
+            self.motor_single_turn_angle_raw_0p001deg[motor_index] = int.from_bytes(response_single.data[4:8], byteorder="little", signed=False)
 
-        def read_multi_turn_angle() -> None:
-            response_message = motor_driver.read_multi_turn(timeout=timeout)
-            if response_message is None:
-                return
-            response_data = response_message.data
+        response_multi = self.motor_drivers[motor_index].read_multi_turn(timeout=timeout)
+        if response_multi is not None:
+            raw_7bytes = response_multi.data[1:8]
+            sign_extension_byte = b"\x00" if raw_7bytes[-1] < 0x80 else b"\xff"      
+            self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int.from_bytes(raw_7bytes + sign_extension_byte, byteorder="little", signed=True)
 
-            # multi-turn uses 7 bytes signed (little-endian) in data[1:8]
-            raw_7bytes = response_data[1:8]
-            sign_extension_byte = b"\x00" if raw_7bytes[-1] < 0x80 else b"\xff"
-
-            signed_int64 = int.from_bytes(raw_7bytes + sign_extension_byte,
-                                          byteorder="little",
-                                          signed=True)
-            self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(signed_int64)
-
-        # If both sets are empty, read both angles for all motors.
-        if not self.single_turn_motor_indices and not self.multi_turn_motor_indices:
-            read_single_turn_angle()
-            read_multi_turn_angle()
-            return
-
-        if motor_index in self.single_turn_motor_indices:
-            read_single_turn_angle()
-        if motor_index in self.multi_turn_motor_indices:
-            read_multi_turn_angle()
-    
-    def _get_joint_torque_nm(self, motor_current_amp: float, motor_index: int) -> float:
-        """Convert motor phase current [A] to joint torque [Nm] using config lists."""
-        if self.motor_torque_constant_nm_per_amp is None:
-            raise ValueError("motor_torque_constant_nm_per_amp is required for torque_nm output mode.")
-        if self.motor_gear_ratio is None:
-            raise ValueError("motor_gear_ratio is required for torque_nm output mode.")
-        if self.motor_direction is None:
-            raise ValueError("motor_direction is required for torque_nm output mode.")
-
-        motor_shaft_torque_nm = motor_current_amp * self.motor_torque_constant_nm_per_amp[motor_index]
-        joint_torque_nm = motor_shaft_torque_nm
-        return joint_torque_nm
-
+        return response_multi is not None or response_single is not None
+        
     # =========================================================================
-    # Raw Data -> MotorStatesData
+    # MotorStatesData Packaging
     # =========================================================================
     def _package_motor_states(self) -> MotorStatesData:
         """Raw Data -> MotorStatesData."""
@@ -266,7 +282,7 @@ class MotorManager:
             joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
 
             motor_current_amp = self.motor_phase_current_amp[motor_i]
-            joint_effort_like[joint_i] = self._get_joint_torque_nm(motor_current_amp, motor_i)
+            joint_effort_like[joint_i] = motor_current_amp * self.torque_to_current_denominator[motor_i]
 
         joint_position_rad = np.array(joint_position_rad) - self.joint_offsets
         
@@ -280,41 +296,13 @@ class MotorManager:
             motor_operating_state=self.motor_operating_state.copy(),
             timestamp_sec=time.time())
 
-    # =========================================================================
-    # Encoder integration helpers
-    # =========================================================================
-    def _seed_position_anchor(self) -> None:
-        """Capture absolute motor angle + matching encoder count as the
-        per-motor anchor. Called once after the init multi-turn poll."""
-        for motor_index in range(self.motor_count):
-            raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_index]
-            raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_index]
-            if raw_multi != 0:
-                anchor_motor_angle_deg = raw_multi * self.angle_deg_per_lsb
-            elif raw_single != 0:
-                anchor_motor_angle_deg = raw_single * self.angle_deg_per_lsb
-            else:
-                anchor_motor_angle_deg = 0.0
-
-            fold_center_deg = self.motor_fold_center_deg[motor_index]
-            if fold_center_deg is not None:
-                # Pull the boot reading into (center-180, center+180] so a
-                # full-turn discrepancy in the absolute-angle read cannot
-                # survive into the session's position baseline.
-                anchor_motor_angle_deg = fold_center_deg + ((anchor_motor_angle_deg - fold_center_deg + 180.0) % 360.0 - 180.0)
-
-            self.motor_anchor_motor_angle_deg[motor_index] = anchor_motor_angle_deg
-            self.motor_anchor_encoder_count[motor_index]   = self.motor_encoder_count[motor_index]
-            self.motor_prev_encoder_count[motor_index]     = self.motor_encoder_count[motor_index]
-            self.motor_encoder_wrap_count[motor_index]     = 0
-
     def _update_motor_angle_from_encoder(self, motor_index: int) -> None:
         """Integrate the latest uint16 encoder count into a multi-turn motor
         angle and write it back into motor_multi_turn_angle_raw_0p001deg so
         _package_motor_states picks it up without further changes."""
-        anchor_angle_deg = self.motor_anchor_motor_angle_deg[motor_index]
+        anchor_angle_deg = self.motor_anchor_angle_deg[motor_index]
         if anchor_angle_deg is None:
-            return  # anchor not seeded yet (init not done) — leave buffer alone
+            return 
 
         counts_per_rev = self.motor_encoder_counts_per_rev
         half_range = counts_per_rev // 2
@@ -339,43 +327,9 @@ class MotorManager:
         self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(round(motor_angle_deg / self.angle_deg_per_lsb))
 
     # =========================================================================
-    # [Read]
-    # =========================================================================
-    def decode_motor_encoder(self, perform_slow_poll: bool = True) -> MotorStatesData:
-        def fetch_motor_data(motor_index: int):
-            # Order matters: 0x92 multi-turn (anchor_motor_angle_deg) and
-            # 0x9C state2 (anchor_encoder_count) must be adjacent in time
-            # so the anchor pair refers to nearly the same physical motor
-            # position. Slow-poll first, then multi-turn, then state2 last.
-            if perform_slow_poll:
-                self.poll_state1(motor_index)                # 0x9A error flags
-                self.poll_single_or_multi_turn(motor_index)  # 0x92 / 0x94
-            self.poll_state2(motor_index)                    # 0x9C — pairs with 0x92
-
-        # Submit on the persistent pool and drain via f.result() so any
-        # exceptions surface instead of being silently swallowed by a
-        # discarded executor.map() iterator.
-        futures = [self._io_pool.submit(fetch_motor_data, i) for i in range(self.motor_count)]
-        for f in futures:
-            f.result()
-
-        # Seed (or re-seed) the encoder anchor exactly when we have a fresh
-        # multi-turn read available. Safe to call multiple times — it always
-        # re-aligns to the latest absolute angle.
-        if perform_slow_poll:
-            self._seed_position_anchor()
-
-        return self._package_motor_states()
-
-    # =========================================================================
     # [Write + Read]
     # =========================================================================
-    def write_torques_and_read_states(
-        self,
-        current_cmd_amp: Sequence[float],
-        timeout: float = 0.003,
-        perform_slow_poll: bool = False,
-    ) -> MotorStatesData:
+    def write_torques_and_read_states(self, current_cmd_amp: Sequence[float], timeout: float = 0.003) -> MotorStatesData:
         """Synchronous fire-all-then-wait-all torque + state2 pass.
 
         Phase 1 — clear each motor's 0xA1 reply event, then send its torque
@@ -385,11 +339,6 @@ class MotorManager:
         Phase 2 — for each motor, wait on its arrival event until the shared
                   deadline. On timeout, inject NaN so the kill switch fires
                   instead of letting stale data drive the controller.
-
-        Δt between successive ticks is now constant (the control timer
-        period), so the encoder wrap detector in
-        _update_motor_angle_from_encoder works as originally designed
-        without any speed-sign disambiguation.
         """
         # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
         # kernel TX ring without blocking on the wire.
@@ -409,8 +358,7 @@ class MotorManager:
             if response_message is None:
                 # Motor silent this tick. Mark its slot NaN so
                 # controller_node._sensor_data_has_nan() trips the kill
-                # switch — far safer than re-using stale state for a
-                # balance loop.
+                # switch — far safer than re-using stale state for a balance loop.
                 self.motor_speed_deg_per_sec[motor_index] = float("nan")
                 self.motor_phase_current_amp[motor_index] = float("nan")
                 continue

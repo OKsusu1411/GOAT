@@ -41,27 +41,18 @@ class CanInterface:
         self.bus: can.BusABC | None = None
 
         # Serialize txrx() to prevent response-frame "stealing" between callers.
-        # Only used by the init path; once the background reader thread starts,
-        # txrx() must not be called (the reader would consume the response).
         self.txrx_lock = threading.Lock()
 
-        # Background reader state. The reader owns RX after start_reader_thread().
-        # Keyed by (arbitration_id, cmd_byte) so 0xA1 (torque reply) and 0x9A
-        # (error-flag reply) from the same motor don't clobber each other.
+        # Background reader state.
         self.latest_rx_frames_by_key: dict[tuple[int, int], can.Message] = {}
         self._rx_lock = threading.Lock()
         self._rx_stop_event = threading.Event()
         self._rx_thread: threading.Thread | None = None
-        # Diagnostics: total frames seen + first 8 unique keys (for one-shot
-        # sanity log so we can verify whether motors reply on rx_id or tx_id).
+
         self.rx_frame_count: int = 0
         self._rx_first_keys_seen: set[tuple[int, int]] = set()
 
-        # Per-key arrival events for synchronous hot-path dispatch. Hot-path
-        # callers clear the event before sending a request, then wait on it
-        # for THIS tick's reply. The reader thread sets the event when a
-        # frame for that key is cached. Slow-poll path (0x9A) keeps using
-        # the cache directly.
+        # Per-key arrival events for synchronous hot-path dispatch. 
         self.frame_events: dict[tuple[int, int], threading.Event] = {}
         self._events_lock = threading.Lock()
 
