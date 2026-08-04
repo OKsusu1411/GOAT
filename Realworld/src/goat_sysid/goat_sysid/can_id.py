@@ -39,40 +39,39 @@ class MotorTelemetry:
 # Per-command parsers. Each takes the 8-byte payload and mutates the snapshot.
 # ---------------------------------------------------------------------------
  
-def _parse_state1(data: bytes, tel: MotorTelemetry, amp_per_lsb: float) -> None:
+def _parse_state1(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
     """0x9A -- temperature, bus voltage, bus current, state, error flags."""
     # tel.temperature_c = struct.unpack("<b", data[1:2])[0]
     # tel.bus_voltage_raw = struct.unpack("<h", data[2:4])[0]
     tel.bus_current_raw = struct.unpack("<h", data[4:6])[0]
-    tel.bus_current_a = tel.bus_current_raw * amp_per_lsb
  
  
-def _parse_state2(data: bytes, tel: MotorTelemetry, iq_amp_per_lsb: float, speed_dps_per_lsb: float) -> None:
+def _parse_state2(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
     """0x9C -- temperature, torque current iq, speed, encoder position."""
     # tel.temperature_c = struct.unpack("<b", data[1:2])[0]
     tel.iq_raw = struct.unpack("<h", data[2:4])[0]
     tel.speed_raw = struct.unpack("<h", data[4:6])[0]
     tel.encoder = struct.unpack("<H", data[6:8])[0]
  
-    tel.iq_amp = tel.iq_raw * iq_amp_per_lsb
-    tel.speed_dps = tel.speed_raw * speed_dps_per_lsb
+    tel.iq_amp = tel.iq_raw * cfg["motor_current_amp_per_lsb"]
+    tel.speed_dps = tel.speed_raw * cfg["speed_deg_per_sec_per_lsb"]
  
  
-def _parse_multi_turn(data: bytes, tel: MotorTelemetry, angle_deg_per_lsb: float) -> None:
+def _parse_multi_turn(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
     """0x92 -- accumulated multi-turn angle. int64 packed into 7 bytes."""
     raw7 = data[1:8]
     sign_byte = b"\x00" if raw7[-1] < 0x80 else b"\xff"
     tel.multi_turn_raw = int.from_bytes(raw7 + sign_byte, "little", signed=True)
-    tel.multi_turn_deg = tel.multi_turn_raw * angle_deg_per_lsb
+    tel.multi_turn_deg = tel.multi_turn_raw * cfg["angle_deg_per_lsb"]
  
  
-def _parse_single_turn(data: bytes, tel: MotorTelemetry, angle_deg_per_lsb: float) -> None:
+def _parse_single_turn(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
     """0x94 -- single-turn angle, wraps to 0 at the encoder zero point."""
     tel.single_turn_raw = struct.unpack("<I", data[4:8])[0]
-    tel.single_turn_deg = tel.single_turn_raw * angle_deg_per_lsb
+    tel.single_turn_deg = tel.single_turn_raw * cfg["angle_deg_per_lsb"]
  
  
-def _parse_encoder(data: bytes, tel: MotorTelemetry) -> None:
+def _parse_encoder(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
     """0x90 -- encoder value, raw value, and the stored zero offset."""
     tel.encoder_raw = struct.unpack("<H", data[4:6])[0]
     # tel.encoder_zeroed = struct.unpack("<H", data[2:4])[0]
@@ -93,12 +92,11 @@ _COMMANDS = (
 E7 = b"\x00" * 7
 
  
-def read_all(
-    can_interface,
-    motor_driver,
-    timeout: float = 0.2,
-    skip: tuple = (),
-) -> MotorTelemetry:
+def read_all(can_interface,
+             motor_driver,
+             cfg,
+             timeout: float = 0.2,
+             skip: tuple = ()) -> MotorTelemetry:
     """Poll every telemetry command on one motor and return a full snapshot.
  
     Args:
@@ -132,7 +130,7 @@ def read_all(
         if len(msg.data) != 8:
             continue
  
-        parser(bytes(msg.data), tel)
+        parser(bytes(msg.data), tel, cfg)
         replied.append(name)
  
     tel.replied = tuple(replied)
@@ -174,7 +172,7 @@ if __name__ == "__main__":
     n = 0
     try:
         while True:
-            tel = read_all(can, driver)
+            tel = read_all(can, driver, cfg)
             t = time.perf_counter() - t0
             print(f"[t={t:7.3f}] {format_telemetry(tel)}\n", flush=True)
             n += 1
