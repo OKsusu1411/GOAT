@@ -173,13 +173,11 @@ if __name__ == "__main__":
     t0 = time.perf_counter()
     n = 0
     try:
-        while args.repeat == 0 or n < args.repeat:
+        while True:
             tel = read_all(can, driver)
             t = time.perf_counter() - t0
             print(f"[t={t:7.3f}] {format_telemetry(tel)}\n", flush=True)
             n += 1
-            if args.repeat == 0 or n < args.repeat:
-                time.sleep(args.period)
     except KeyboardInterrupt:
         pass
     finally:
