@@ -3,7 +3,7 @@ import struct
 from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
 
 BUSES = ["can0", "can1"]
-NODE_IDS = [[1,2,3,4], [1,2,3,4]]   # 실제 YAML 값으로 교체
+NODE_IDS = [[1,3,5,7], [2,4,6,8]]   # 실제 YAML 값으로 교체
 PARAMS = {30: "inputTorqueLimit(16b)", 32: "inputSpeedLimit(32b)", 36: "inputCurrentRamp(32b)"}
 
 for bus_i, ch in enumerate(BUSES):
