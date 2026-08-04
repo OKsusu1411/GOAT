@@ -1,8 +1,8 @@
 from dataclasses import dataclass, asdict
 from typing import Optional
+from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams # CAN interface
 import struct, time, yaml
 import argparse
-from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams # CAN interface
 
 
 @dataclass
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     cfg = yaml.safe_load(open("src/goat_control/config/goat_config.yaml", encoding="utf-8"))
 
     can = CanInterface(channel=args.channel, interface="socketcan"); can.open()
-    driver = MotorDriver(can, MotorParams(node_id=args.node_id, cfg=cfg))
+    driver = MotorDriver(can, MotorParams(node_id=args.node_id))
     
     t0 = time.perf_counter()
     n = 0
