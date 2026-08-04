@@ -25,9 +25,6 @@ from goat_control.utils.controller.movable_policy_controller import MovableBaseP
 from goat_control.nodes.motor_io import MotorIO
 from goat_control.nodes.imu_io import ImuIO
 
-import sys
-sys.setswitchinterval(0.0005)
-
 class ControllerNode(Node):
     """ROS2 control node: sensor reception -> controller selection -> torque publishing.
 
