@@ -2,7 +2,7 @@
 import struct, time, yaml
 from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
 
-cfg = yaml.safe_load(open("goat_config.yaml", encoding="utf-8"))
+cfg = yaml.safe_load(open("src/goat_control/config/goat_config.yaml", encoding="utf-8"))
 CH, NODE_ID = "can0", 1          # 대상 모터로 교체
 
 ci = CanInterface(channel=CH, interface="socketcan"); ci.open()
