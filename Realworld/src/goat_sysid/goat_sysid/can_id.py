@@ -1,23 +1,25 @@
-# bench_send.py — 로봇 불필요, vcan0로도 됨
-# sudo modprobe vcan && sudo ip link add dev vcan0 type vcan && sudo ip link set up vcan0
-import can, time
+# read_params.py
+import struct
+from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
 
-bus = can.Bus(interface="socketcan", channel="vcan0")
-msgs = [can.Message(arbitration_id=0x141+i, data=bytes(8), is_extended_id=False)
-        for i in range(4)]
+BUSES = ["can0", "can1"]
+NODE_IDS = [[1,2,3,4], [1,2,3,4]]   # 실제 YAML 값으로 교체
+PARAMS = {30: "inputTorqueLimit(16b)", 32: "inputSpeedLimit(32b)", 36: "inputCurrentRamp(32b)"}
 
-# A: 지금 방식 — 매번 객체 생성
-t = time.perf_counter()
-for _ in range(1000):
-    for i in range(4):
-        bus.send(can.Message(arbitration_id=0x141+i, data=bytes(8), is_extended_id=False))
-print("A 생성+전송:", (time.perf_counter()-t)*1e3/1000, "ms / 4프레임")
-
-# B: 객체 재사용
-t = time.perf_counter()
-for _ in range(1000):
-    for m in msgs:
-        bus.send(m)
-print("B 재사용:  ", (time.perf_counter()-t)*1e3/1000, "ms / 4프레임")
-
-bus.shutdown()
+for bus_i, ch in enumerate(BUSES):
+    ci = CanInterface(channel=ch, interface="socketcan")
+    ci.open()
+    for nid in NODE_IDS[bus_i]:
+        drv = MotorDriver(ci, MotorParams(node_id=nid))
+        for pid, name in PARAMS.items():
+            payload = bytes([pid]) + b"\x00" * 6      # DATA[1]=paramID, 나머지 0
+            msg = ci.txrx(drv.can_ids.tx_id, drv.can_ids.rx_id,
+                          0xC0, payload, timeout=0.2)
+            if msg is None:
+                print(f"{ch} id{nid} {name}: NO REPLY")
+                continue
+            d = msg.data
+            v16 = struct.unpack("<h", d[3:5])[0]
+            v32 = struct.unpack("<i", d[3:7])[0]
+            print(f"{ch} id{nid} {name}: raw={d.hex()} v16={v16} v32={v32}")
+    ci.close()
