@@ -31,17 +31,18 @@ class MGUnitScales:
         motor_current_amp_per_lsb
         angle_deg_per_lsb
         speed_deg_per_sec_per_lsb
+        max_current_lsb
     """
     motor_current_amp_per_lsb: float
     angle_deg_per_lsb: float
     speed_deg_per_sec_per_lsb: float
-    max_current_per_lsb: float
+    max_current_lsb: int
 
 _DEFAULT_MG_UNIT_SCALES = MGUnitScales(
     motor_current_amp_per_lsb=CFG["motor_current_amp_per_lsb"],
     angle_deg_per_lsb=CFG["angle_deg_per_lsb"],
     speed_deg_per_sec_per_lsb=CFG["speed_deg_per_sec_per_lsb"],
-    max_current_per_lsb=CFG["max_current_per_lsb"])
+    max_current_lsb=CFG["max_current_lsb"])
 
 
 # -----------------------
@@ -135,13 +136,13 @@ def pack_iq_from_amp(current_amp: float) -> bytes:
     """
     Pack motor current (amps) into iq LSB (2 bytes, little-endian, signed).
     """
-    max_current_per_lsb = _DEFAULT_MG_UNIT_SCALES.max_current_per_lsb
-    max_current_amp = float(max_current_per_lsb) * _DEFAULT_MG_UNIT_SCALES.motor_current_amp_per_lsb
+    max_current_lsb = _DEFAULT_MG_UNIT_SCALES.max_current_lsb
+    max_current_amp = float(max_current_lsb) * _DEFAULT_MG_UNIT_SCALES.motor_current_amp_per_lsb
 
     clamped_current_amp = max(min(float(current_amp), max_current_amp), -max_current_amp)
 
     current_lsb = current_amp_to_lsb(clamped_current_amp)
-    current_lsb = max(min(current_lsb, max_current_per_lsb), -max_current_per_lsb)
+    current_lsb = max(min(current_lsb, max_current_lsb), -max_current_lsb)
 
     return pack_int16_little_endian_signed(current_lsb)
 

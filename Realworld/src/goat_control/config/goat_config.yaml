@@ -198,7 +198,7 @@ motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
-max_current_per_lsb: 2048
+max_current_lsb: 2048
 joint_offsets:
 - 0.06263986685407649
 - 0.02118829711921117

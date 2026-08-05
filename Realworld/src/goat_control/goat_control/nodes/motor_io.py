@@ -88,7 +88,7 @@ class MotorIO:
         js.effort = list(states.joint_effort_like)
         return js
 
-    def read_write_motor(self, torque_cmd_nm: np.ndarray) -> JointState:
+    def read_write_motor(self, torque_cmd_nm: np.ndarray):
         """Write torque to all motors and read back joint state in one CAN pass.
 
         Slow-poll (0x9A error-flag read) moved off the hot path — driven by a
