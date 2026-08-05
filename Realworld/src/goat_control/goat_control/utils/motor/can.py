@@ -125,6 +125,7 @@ class CanInterface:
             return
         if self.bus is None:
             raise RuntimeError("CAN bus not opened; call open() before start_reader_thread().")
+        
         self._rx_stop_event.clear()
         self._rx_thread = threading.Thread(target=self._rx_loop,
                                            daemon=True,
@@ -134,6 +135,9 @@ class CanInterface:
 
     def stop_reader_thread(self, timeout: float = 1.0) -> None:
         """Signal the reader thread to exit and join it."""
+        if self._rx_thread is None:
+            return
+        
         self._rx_stop_event.set()
         if self.is_reader_running():
             self._rx_thread.join(timeout=timeout)
