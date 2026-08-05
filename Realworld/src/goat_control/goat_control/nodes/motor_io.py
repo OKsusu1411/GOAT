@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 from sensor_msgs.msg import JointState
 
-from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
+from goat_control.utils.motor import CanInterface, MotorDriver
 from goat_control.utils.motor.motor_manager import MotorManager
 
 
@@ -60,7 +60,7 @@ class MotorIO:
             c.open()
 
         # One driver per joint, bound to its bus.
-        self.motor_drivers: list[MotorDriver] = [MotorDriver(self.cans[int(bus_i)], MotorParams(node_id=int(nid))) for nid, bus_i in zip(motor_node_ids, motor_bus_idx)]
+        self.motor_drivers: list[MotorDriver] = [MotorDriver(self.cans[int(bus_i)], nid) for nid, bus_i in zip(motor_node_ids, motor_bus_idx)]
 
         # Debug: print the joint -> (bus, id) mapping once.
         mapping_str = ", ".join(f"{name}=can{b}#id{nid}" for name, b, nid in zip(self.joint_names, motor_bus_idx, motor_node_ids))

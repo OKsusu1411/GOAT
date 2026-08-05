@@ -18,14 +18,12 @@ class CanInterface:
       - The background reader receives and caches replies.
     """
 
-    def __init__(
-        self,
-        channel: str = "can0",
-        interface: str = "socketcan",
-        bitrate: int | None = None,
-        receive_own_messages: bool = False,
-        logger: logging.Logger | None = None,
-    ):
+    def __init__(self,
+                 channel: str = "can0",
+                 interface: str = "socketcan",
+                 bitrate: int | None = None,
+                 receive_own_messages: bool = False,
+                 logger: logging.Logger | None = None):
         self.channel = channel
         self.interface = interface
         self.bitrate = bitrate

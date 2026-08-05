@@ -54,6 +54,7 @@ class MotorManager:
         self.angle_deg_per_lsb = float(self.cfg["angle_deg_per_lsb"])
         self.motor_current_amp_per_lsb = float(self.cfg["motor_current_amp_per_lsb"])
         self.speed_deg_per_sec_per_lsb = float(self.cfg["speed_deg_per_sec_per_lsb"])
+        self.max_current_lsb = int(self.cfg["max_current_lsb"])
         self.motor_encoder_counts_per_rev = int(self.cfg.get("motor_encoder_counts_per_rev", 65536)) # Encoder integration : convert the per-tick uint16 encoder
 
         # ------------------------------------------------------------------
@@ -346,7 +347,7 @@ class MotorManager:
         for motor_index, amp in enumerate(current_cmd_amp):
             driver = self.motor_drivers[motor_index]
             driver.clear_state2_event()
-            driver.send_torque_only(float(amp))
+            driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
         t_fired = time.perf_counter()                                            # [timing]
 
         # Phase 2 — bounded wait, one shared deadline so total RX time is
