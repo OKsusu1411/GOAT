@@ -180,6 +180,3 @@ if __name__ == "__main__":
         pass
     finally:
         can.close()
-
-
-    can.close()
