@@ -26,6 +26,7 @@ class MotorDriver:
 
     def __init__(self, can_interface: CanInterface, node_id: int):
         self.can_interface = can_interface
+        self.node_id = node_id
         self.can_ids = CanIds(tx_id=0x140 + node_id, rx_id=0x180 + node_id)
 
         # 0xA1 (torque) reply may land on rx_id OR tx_id depending on the motor setup.

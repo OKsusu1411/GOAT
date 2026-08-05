@@ -109,7 +109,7 @@ def read_all(can_interface,
     command names that did answer, so a silent motor is distinguishable from
     a zero reading.
     """
-    tel = MotorTelemetry(node_id=motor_driver.motor_params.node_id)
+    tel = MotorTelemetry(node_id=motor_driver.node_id)
     replied = []
  
     for cmd_byte, parser, name in _COMMANDS:
