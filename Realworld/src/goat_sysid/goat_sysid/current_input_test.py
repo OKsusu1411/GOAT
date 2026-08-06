@@ -65,11 +65,11 @@ def send_current_and_read(can_interface: CanInterface, motor_driver: MotorDriver
 def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
                      cfg: dict, args: Any, csv_path: Path) -> None:
 
-    target_current_amp = args.target_current_amp
+    target_current_amp = args.current
     zero_sec = args.zero
     apply_sec = args.apply
     recovery_sec = args.recovery
-    sample_hz = args.sample_hz
+    sample_hz = args.hz
     timeout = args.timeout
 
     total_duration_sec = zero_sec + apply_sec + recovery_sec
