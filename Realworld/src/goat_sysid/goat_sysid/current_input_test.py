@@ -158,7 +158,7 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(file_handle)
 
     bus_index = int(cfg["motor_bus_index"][args.joint_id])
-    channel = cfg["can_channel"][bus_index]
+    channel = cfg["can_channels"][bus_index]
     node_id = cfg["motor_node_ids"][args.joint_id]
 
     # CSV setting
