@@ -34,46 +34,6 @@ def read_and_print_pid(can_interface: CanInterface, motor_driver: MotorDriver,
 
     return pid
 
-def read_motor_state2(can_interface: CanInterface, motor_driver: MotorDriver,
-                      cfg: dict, timeout: float) -> dict:
-    """Request motor state 2 with command 0x9C."""
-    msg = can_interface.txrx(
-        tx_id=motor_driver.can_ids.tx_id,
-        rx_id=motor_driver.can_ids.rx_id,
-        cmd_byte=0x9C,
-        payload7=b"\x00" * 7,
-        timeout=timeout,
-        accept_rx_id=True,
-        accept_tx_echo_diff=True,
-    )
-
-    if msg is None or len(msg.data) != 8:
-        return {
-            "iq_lsb": None,
-            "iq_amp": None,
-            "speed_dps": None,
-            "encoder": None,
-        }
-
-    data = bytes(msg.data)
-
-    if data[0] != 0x9C:
-        return {
-            "iq_lsb": None,
-            "iq_amp": None,
-            "speed_dps": None,
-            "encoder": None,
-        }
-
-    iq_lsb = struct.unpack("<h", data[2:4])[0]
-    speed_lsb = struct.unpack("<h", data[4:6])[0]
-
-    return {
-        "iq_lsb": iq_lsb,
-        "iq_amp": iq_lsb * float(cfg["motor_current_amp_per_lsb"]),
-        "speed_dps": speed_lsb * float(cfg["speed_deg_per_sec_per_lsb"])
-    }
-
 def send_current_and_read(can_interface: CanInterface, motor_driver: MotorDriver,
                           cfg: dict, current_cmd_amp: float, timeout: float) -> dict:
     """Send one 0xA1 current command and parse its 0xA1 response."""
@@ -83,19 +43,22 @@ def send_current_and_read(can_interface: CanInterface, motor_driver: MotorDriver
 
     out = b"\x00\x00\x00" + int(current_cmd_lsb).to_bytes(2, byteorder="little", signed=True) + b"\x00\x00"
 
+    result = {
+        "iq_cmd_lsb": current_cmd_lsb,
+        "iq_cmd_amp": current_cmd_actual_amp,
+        "iq_lsb": None,
+        "iq_amp": None,
+        "iq_error_amp": None,
+        "speed_dps": None,
+    }
+
     msg = can_interface.txrx(tx_id=motor_driver.can_ids.tx_id,
                              rx_id=motor_driver.can_ids.rx_id,
                              cmd_byte=0xA1, payload7=out,
                              timeout=timeout, accept_rx_id=True, accept_tx_echo_diff=True)
 
     if msg is None or len(msg.data) != 8:
-        return {
-            "iq_cmd_lsb": current_cmd_lsb,
-            "iq_cmd_amp": current_cmd_actual_amp,
-            "iq_lsb": None,
-            "iq_amp": None,
-            "iq_error_amp": None,
-            "speed_dps": None}
+        return result
 
     data = bytes(msg.data)
 
@@ -105,12 +68,14 @@ def send_current_and_read(can_interface: CanInterface, motor_driver: MotorDriver
     iq_amp = iq_lsb * float(cfg["motor_current_amp_per_lsb"]) # LSB to current
     speed_dps = speed_lsb * float(cfg["speed_deg_per_sec_per_lsb"]) # LSB to deg/s
 
-    return {"iq_cmd_lsb": current_cmd_lsb,
-            "iq_cmd_amp": current_cmd_actual_amp,
-            "iq_lsb": iq_lsb,
-            "iq_amp": iq_amp,
-            "iq_error_amp": current_cmd_actual_amp - iq_amp,
-            "speed_dps": speed_dps}
+    result.update({
+        "iq_lsb": iq_lsb,
+        "iq_amp": iq_amp,
+        "iq_error_amp": current_cmd_actual_amp - iq_amp,
+        "speed_dps": speed_dps,
+    })
+
+    return result
 
 
 def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
@@ -164,20 +129,16 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             result = send_current_and_read(can_interface=can_interface,
                                            motor_driver=motor_driver,
                                            cfg=cfg, current_cmd_amp=current_cmd_amp, timeout=timeout)
-            
-            state2_result = read_motor_state2(can_interface=can_interface,
-                                              motor_driver=motor_driver,
-                                              cfg=cfg, timeout=timeout)
 
             writer.writerow({
                 "time_sec": elapsed_sec,
                 "iq_cmd_requested_amp": current_cmd_amp,
                 "iq_cmd_lsb": result["iq_cmd_lsb"],
                 "iq_cmd_amp": result["iq_cmd_amp"],
-                "iq_lsb": state2_result["iq_lsb"],
-                "iq_amp": state2_result["iq_amp"],
+                "iq_lsb": result["iq_lsb"],
+                "iq_amp": result["iq_amp"],
                 "iq_error_amp": result["iq_error_amp"],
-                "speed_dps": state2_result["speed_dps"],
+                "speed_dps": result["speed_dps"],
             })
 
             next_sample_time += sample_period_sec
@@ -196,7 +157,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--zero", type=float, default=1.0)
     parser.add_argument("--apply", type=float, default=10.0)
-    parser.add_argument("--recursive", type=int, default=100)
+    parser.add_argument("--recursive", type=int, default=50)
     parser.add_argument("--recovery", type=float, default=1.0)
 
     parser.add_argument("--hz", type=float, default=500.0)
