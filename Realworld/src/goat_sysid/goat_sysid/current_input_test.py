@@ -148,7 +148,7 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             # Torque
             if elapsed_sec < zero_sec:
                 current_cmd_amp = 0.0
-            elif elapsed_sec < zero_sec + apply_cycle:
+            elif elapsed_sec < zero_sec + apply_sec:
                 delta = elapsed_sec - zero_sec
                 sign = 1 if delta % (sec_per_apply_cycle) < sec_per_apply_cycle/2 else -1.0
                 current_cmd_amp = target_current_amp * sign
