@@ -23,27 +23,16 @@ def read_and_print_pid(can_interface: CanInterface, motor_driver: MotorDriver,
         accept_tx_echo_diff=True,
     )
 
-    if msg is None or len(msg.data) != 8:
-        raise RuntimeError("Failed to read motor PID parameters.")
-
     data = bytes(msg.data)
 
-    if data[0] != 0x30:
-        raise RuntimeError(
-            f"Unexpected PID response command: 0x{data[0]:02X}"
-        )
-
-    pid = {
-        "iq_kp": data[6],
-        "iq_ki": data[7],
-    }
+    pid = {"iq_kp": data[6],
+           "iq_ki": data[7]}
 
     print("\nMotor PI parameters")
     print(f"  Iq Kp    : {pid['iq_kp']}")
     print(f"  Iq Ki    : {pid['iq_ki']}\n")
 
     return pid
-
 
 def read_motor_state2(can_interface: CanInterface, motor_driver: MotorDriver,
                       cfg: dict, timeout: float) -> dict:
@@ -84,23 +73,6 @@ def read_motor_state2(can_interface: CanInterface, motor_driver: MotorDriver,
         "iq_amp": iq_lsb * float(cfg["motor_current_amp_per_lsb"]),
         "speed_dps": speed_lsb * float(cfg["speed_deg_per_sec_per_lsb"])
     }
-
-
-
-def get_current_command(elapsed_sec: float, target_current_amp: float,
-                        zero_sec: float, apply_sec: float) -> float:
-    """0 A -> target current -> 0 A profile."""
-    if elapsed_sec < zero_sec:
-        return 0.0
-    
-    if elapsed_sec < zero_sec + apply_sec:
-
-        
-
-        return target_current_amp
-
-    return 0.0
-
 
 def send_current_and_read(can_interface: CanInterface, motor_driver: MotorDriver,
                           cfg: dict, current_cmd_amp: float, timeout: float) -> dict:
@@ -216,18 +188,6 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             else:
                 next_sample_time = time.perf_counter()
 
-
-def send_zero_current(can_interface: CanInterface, motor_driver: MotorDriver,
-                      cfg: dict, args: Any) -> None:
-    """Send zero-current commands several times before shutdown."""
-    for _ in range(3):
-        send_current_and_read(can_interface=can_interface,
-                              motor_driver=motor_driver,
-                              cfg=cfg, current_cmd_amp=0.0,
-                              timeout=args.timeout)
-        time.sleep(0.01)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -236,7 +196,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--zero", type=float, default=1.0)
     parser.add_argument("--apply", type=float, default=10.0)
-    parser.add_argument("--recursive", type=int, default=40)
+    parser.add_argument("--recursive", type=int, default=20)
     parser.add_argument("--recovery", type=float, default=2.0)
 
     parser.add_argument("--hz", type=float, default=500.0)
@@ -272,8 +232,7 @@ if __name__ == "__main__":
         read_and_print_pid(can_interface=can_interface,
                            motor_driver=motor_driver,
                            timeout=args.timeout)
-
-        # Test & Logging
+        
         run_current_test(can_interface=can_interface, 
                          motor_driver=motor_driver,
                          cfg=cfg, args=args, csv_path=csv_path)
@@ -283,9 +242,12 @@ if __name__ == "__main__":
 
     finally:
         # Zero torque send
-        send_zero_current(can_interface=can_interface,
-                          motor_driver=motor_driver,
-                          cfg=cfg, args=args)
+        for _ in range(3):
+            send_current_and_read(can_interface=can_interface,
+                                motor_driver=motor_driver,
+                                cfg=cfg, current_cmd_amp=0.0,
+                                timeout=args.timeout)
+        time.sleep(0.01)
 
         can_interface.close()
 
