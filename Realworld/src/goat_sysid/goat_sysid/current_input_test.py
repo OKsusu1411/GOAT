@@ -16,8 +16,11 @@ def get_current_command(elapsed_sec: float, target_current_amp: float,
     """0 A -> target current -> 0 A profile."""
     if elapsed_sec < zero_sec:
         return 0.0
-
+    
     if elapsed_sec < zero_sec + apply_sec:
+
+        
+
         return target_current_amp
 
     return 0.0
@@ -68,11 +71,13 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
     target_current_amp = args.current
     zero_sec = args.zero
     apply_sec = args.apply
+    apply_cycle = args.recursive
     recovery_sec = args.recovery
     sample_hz = args.hz
     timeout = args.timeout
 
     total_duration_sec = zero_sec + apply_sec + recovery_sec
+    sec_per_apply_cycle = apply_sec / apply_cycle
     sample_period_sec = 1.0 / sample_hz
 
     fieldnames = ["time_sec",
@@ -97,9 +102,16 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             if elapsed_sec >= total_duration_sec:
                 break
 
-            current_cmd_amp = get_current_command(elapsed_sec=elapsed_sec,
-                                                  target_current_amp=target_current_amp,
-                                                  zero_sec=zero_sec, apply_sec=apply_sec)
+            # Torque
+            if elapsed_sec < zero_sec:
+                current_cmd_amp = 0.0
+            elif elapsed_sec < zero_sec + apply_cycle:
+                delta = elapsed_sec - zero_sec
+                sign = 1 if delta % (sec_per_apply_cycle) < sec_per_apply_cycle/2 else -1.0
+                current_cmd_amp = target_current_amp * sign
+            else:
+                current_cmd_amp = 0.0
+
 
             result = send_current_and_read(can_interface=can_interface,
                                            motor_driver=motor_driver,
@@ -143,8 +155,9 @@ if __name__ == "__main__":
     parser.add_argument("--current", type=float, required=True)
 
     parser.add_argument("--zero", type=float, default=1.0)
-    parser.add_argument("--apply", type=float, default=2.0)
-    parser.add_argument("--recovery", type=float, default=1.0)
+    parser.add_argument("--apply", type=float, default=10.0)
+    parser.add_argument("--recursirve", type=int, default=5)
+    parser.add_argument("--recovery", type=float, default=2.0)
 
     parser.add_argument("--hz", type=float, default=500.0)
     parser.add_argument("--timeout", type=float, default=0.05)
@@ -162,7 +175,7 @@ if __name__ == "__main__":
     node_id = cfg["motor_node_ids"][args.joint_id]
 
     # CSV setting
-    log_dir = Path("logs")
+    log_dir = Path("src/goat_sysid/logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
