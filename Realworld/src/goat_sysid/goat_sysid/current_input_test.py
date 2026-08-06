@@ -11,6 +11,49 @@ from pathlib import Path
 from goat_control.utils.motor import CanInterface, MotorDriver
 
 
+def read_and_print_pid(can_interface: CanInterface, motor_driver: MotorDriver,
+                       timeout: float) -> dict:
+    """Read and print the motor PID raw parameters using command 0x30."""
+    msg = can_interface.txrx(
+        tx_id=motor_driver.can_ids.tx_id,
+        rx_id=motor_driver.can_ids.rx_id,
+        cmd_byte=0x30,
+        payload7=b"\x00" * 7,
+        timeout=timeout,
+        accept_rx_id=True,
+        accept_tx_echo_diff=True,
+    )
+
+    if msg is None or len(msg.data) != 8:
+        raise RuntimeError("Failed to read motor PID parameters.")
+
+    data = bytes(msg.data)
+
+    if data[0] != 0x30:
+        raise RuntimeError(
+            f"Unexpected PID response command: 0x{data[0]:02X}"
+        )
+
+    pid = {
+        "angle_kp": data[2],
+        "angle_ki": data[3],
+        "speed_kp": data[4],
+        "speed_ki": data[5],
+        "iq_kp": data[6],
+        "iq_ki": data[7],
+    }
+
+    print("\nMotor PID parameters")
+    print(f"  Angle Kp : {pid['angle_kp']}")
+    print(f"  Angle Ki : {pid['angle_ki']}")
+    print(f"  Speed Kp : {pid['speed_kp']}")
+    print(f"  Speed Ki : {pid['speed_ki']}")
+    print(f"  Iq Kp    : {pid['iq_kp']}")
+    print(f"  Iq Ki    : {pid['iq_ki']}\n")
+
+    return pid
+
+
 def get_current_command(elapsed_sec: float, target_current_amp: float,
                         zero_sec: float, apply_sec: float) -> float:
     """0 A -> target current -> 0 A profile."""
@@ -155,8 +198,8 @@ if __name__ == "__main__":
     parser.add_argument("--current", type=float, required=True)
 
     parser.add_argument("--zero", type=float, default=1.0)
-    parser.add_argument("--apply", type=float, default=10.0)
-    parser.add_argument("--recursive", type=int, default=5)
+    parser.add_argument("--apply", type=float, default=20.0)
+    parser.add_argument("--recursive", type=int, default=10)
     parser.add_argument("--recovery", type=float, default=2.0)
 
     parser.add_argument("--hz", type=float, default=500.0)
@@ -188,6 +231,11 @@ if __name__ == "__main__":
     motor_driver = MotorDriver(can_interface, node_id=node_id)
 
     try:
+
+        read_and_print_pid(can_interface=can_interface,
+                           motor_driver=motor_driver,
+                           timeout=args.timeout)
+
         # Test & Logging
         run_current_test(can_interface=can_interface, 
                          motor_driver=motor_driver,
