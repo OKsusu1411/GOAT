@@ -10,7 +10,6 @@ from pathlib import Path
 
 from goat_control.utils.motor import CanInterface, MotorDriver
 
-
 def read_and_print_pid(can_interface: CanInterface, motor_driver: MotorDriver,
                        timeout: float) -> dict:
     """Read and print the motor PID raw parameters using command 0x30."""
@@ -35,23 +34,57 @@ def read_and_print_pid(can_interface: CanInterface, motor_driver: MotorDriver,
         )
 
     pid = {
-        "angle_kp": data[2],
-        "angle_ki": data[3],
-        "speed_kp": data[4],
-        "speed_ki": data[5],
         "iq_kp": data[6],
         "iq_ki": data[7],
     }
 
-    print("\nMotor PID parameters")
-    print(f"  Angle Kp : {pid['angle_kp']}")
-    print(f"  Angle Ki : {pid['angle_ki']}")
-    print(f"  Speed Kp : {pid['speed_kp']}")
-    print(f"  Speed Ki : {pid['speed_ki']}")
+    print("\nMotor PI parameters")
     print(f"  Iq Kp    : {pid['iq_kp']}")
     print(f"  Iq Ki    : {pid['iq_ki']}\n")
 
     return pid
+
+
+def read_motor_state2(can_interface: CanInterface, motor_driver: MotorDriver,
+                      cfg: dict, timeout: float) -> dict:
+    """Request motor state 2 with command 0x9C."""
+    msg = can_interface.txrx(
+        tx_id=motor_driver.can_ids.tx_id,
+        rx_id=motor_driver.can_ids.rx_id,
+        cmd_byte=0x9C,
+        payload7=b"\x00" * 7,
+        timeout=timeout,
+        accept_rx_id=True,
+        accept_tx_echo_diff=True,
+    )
+
+    if msg is None or len(msg.data) != 8:
+        return {
+            "iq_lsb": None,
+            "iq_amp": None,
+            "speed_dps": None,
+            "encoder": None,
+        }
+
+    data = bytes(msg.data)
+
+    if data[0] != 0x9C:
+        return {
+            "iq_lsb": None,
+            "iq_amp": None,
+            "speed_dps": None,
+            "encoder": None,
+        }
+
+    iq_lsb = struct.unpack("<h", data[2:4])[0]
+    speed_lsb = struct.unpack("<h", data[4:6])[0]
+
+    return {
+        "iq_lsb": iq_lsb,
+        "iq_amp": iq_lsb * float(cfg["motor_current_amp_per_lsb"]),
+        "speed_dps": speed_lsb * float(cfg["speed_deg_per_sec_per_lsb"])
+    }
+
 
 
 def get_current_command(elapsed_sec: float, target_current_amp: float,
@@ -159,16 +192,20 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             result = send_current_and_read(can_interface=can_interface,
                                            motor_driver=motor_driver,
                                            cfg=cfg, current_cmd_amp=current_cmd_amp, timeout=timeout)
+            
+            state2_result = read_motor_state2(can_interface=can_interface,
+                                              motor_driver=motor_driver,
+                                              cfg=cfg, timeout=timeout)
 
             writer.writerow({
                 "time_sec": elapsed_sec,
                 "iq_cmd_requested_amp": current_cmd_amp,
                 "iq_cmd_lsb": result["iq_cmd_lsb"],
                 "iq_cmd_amp": result["iq_cmd_amp"],
-                "iq_lsb": result["iq_lsb"],
-                "iq_amp": result["iq_amp"],
+                "iq_lsb": state2_result["iq_lsb"],
+                "iq_amp": state2_result["iq_amp"],
                 "iq_error_amp": result["iq_error_amp"],
-                "speed_dps": result["speed_dps"],
+                "speed_dps": state2_result["speed_dps"],
             })
 
             next_sample_time += sample_period_sec
