@@ -74,8 +74,6 @@ def _parse_single_turn(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
 def _parse_encoder(data: bytes, tel: MotorTelemetry, cfg: dict) -> None:
     """0x90 -- encoder value, raw value, and the stored zero offset."""
     tel.encoder_raw = struct.unpack("<H", data[4:6])[0]
-    # tel.encoder_zeroed = struct.unpack("<H", data[2:4])[0]
-    # tel.encoder_offset = struct.unpack("<H", data[6:8])[0]
 
 # ---------------------------------------------------------------------------
 # Public entry point
@@ -116,15 +114,11 @@ def read_all(can_interface,
         if cmd_byte in skip:
             continue
  
-        msg = can_interface.txrx(
-                                tx_id=motor_driver.can_ids.tx_id,
-                                rx_id=motor_driver.can_ids.rx_id,
-                                cmd_byte=cmd_byte,
-                                payload7=E7,
-                                timeout=timeout,
-                                accept_rx_id=True,
-                                accept_tx_echo_diff=True,
-                            )
+        msg = can_interface.txrx(tx_id=motor_driver.can_ids.tx_id,
+                                 rx_id=motor_driver.can_ids.rx_id,
+                                 cmd_byte=cmd_byte,payload7=E7,
+                                 timeout=timeout,accept_rx_id=True,
+                                 accept_tx_echo_diff=True)
         if msg is None:
             continue
         if len(msg.data) != 8:
@@ -153,7 +147,6 @@ def format_telemetry(tel: MotorTelemetry) -> str:
     out.append(line("multi_turn", tel.multi_turn_raw, tel.multi_turn_deg, "deg"))
     out.append(line("single_turn", tel.single_turn_raw, tel.single_turn_deg, "deg"))
     out.append(line("bus_current", tel.bus_current_raw, tel.bus_current_a, "A"))
-    # out.append(line("bus_voltage", tel.bus_voltage_raw, tel.bus_voltage_v, "V"))
     out.append(f"  {'encoder':<18s} pos={tel.encoder} ")
     return "\n".join(out)
 
