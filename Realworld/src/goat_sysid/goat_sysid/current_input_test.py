@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--zero", type=float, default=1.0)
     parser.add_argument("--apply", type=float, default=10.0)
-    parser.add_argument("--recursirve", type=int, default=5)
+    parser.add_argument("--recursive", type=int, default=5)
     parser.add_argument("--recovery", type=float, default=2.0)
 
     parser.add_argument("--hz", type=float, default=500.0)
