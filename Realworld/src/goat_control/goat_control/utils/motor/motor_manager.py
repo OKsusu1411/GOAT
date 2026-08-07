@@ -163,7 +163,7 @@ class MotorManager:
             is_valid_flag   = self.poll_state1(motor_index)                 # 0x9A error flags
             is_valid_angle  = self.poll_single_and_multi_turn(motor_index)  # 0x92 / 0x94
             is_valid_state2 = self.poll_state2(motor_index)                 # 0x9C — pairs with 0x92
-            if motor_index in (self.cfg["leg_indices"]):
+            if motor_index in (self.cfg["joint_indices"]):
                 is_valid_pi_gain = self.poll_leg_pi_gain(motor_index)              
             else:
                 is_valid_pi_gain = self.poll_wheel_pi_gain(motor_index)
@@ -250,7 +250,7 @@ class MotorManager:
             return False
 
         data = bytes(response_message.data)
-        
+
         self.motor_pi_gain[motor_index][0] = data[6]
         self.motor_pi_gain[motor_index][1] = data[7]
 
