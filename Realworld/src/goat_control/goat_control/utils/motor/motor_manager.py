@@ -89,7 +89,7 @@ class MotorManager:
         self.motor_phase_current_amp: List[float] = [float("nan")] * self.motor_count
         self.motor_speed_deg_per_sec: List[float] = [float("nan")] * self.motor_count
         self.motor_encoder_count: List[int] = [0] * self.motor_count
-        self.motor_pi_gain: List[List[float]] = [[0, 0]] * self.motor_count
+        self.motor_pi_gain: List[List[int]] = [[0, 0] for _ in range(self.motor_count)]
 
         self.motor_single_turn_angle_raw_0p001deg: List[Optional[int]] = [None] * self.motor_count
         self.motor_multi_turn_angle_raw_0p001deg: List[Optional[int]] = [None] * self.motor_count
