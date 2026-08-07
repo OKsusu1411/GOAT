@@ -163,7 +163,10 @@ class MotorManager:
             is_valid_flag   = self.poll_state1(motor_index)                 # 0x9A error flags
             is_valid_angle  = self.poll_single_and_multi_turn(motor_index)  # 0x92 / 0x94
             is_valid_state2 = self.poll_state2(motor_index)                 # 0x9C — pairs with 0x92
-            is_valid_pi_gain = self.poll_pi_gain(motor_index)               # 0x30
+            if motor_index in (self.cfg["leg_indices"]):
+                is_valid_pi_gain = self.poll_leg_pi_gain(motor_index)              
+            else:
+                is_valid_pi_gain = self.poll_wheel_pi_gain(motor_index)
 
             return motor_index, (is_valid_flag and is_valid_angle and is_valid_state2 and is_valid_pi_gain)
 
@@ -241,14 +244,27 @@ class MotorManager:
 
         return True
 
-    def poll_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
+    def poll_wheel_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
         response_message = self.motor_drivers[motor_index].read_pi_gain(timeout=timeout)
         if response_message is None:
             return False
 
-        response_message = bytes(response_message.data)
-        self.motor_pi_gain[motor_index][0] = response_message[6]
-        self.motor_pi_gain[motor_index][1] = response_message[7]
+        data = bytes(response_message.data)
+        
+        self.motor_pi_gain[motor_index][0] = data[6]
+        self.motor_pi_gain[motor_index][1] = data[7]
+
+        return True
+    
+    def poll_leg_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
+        response_message = self.motor_drivers[motor_index].read_current_pi_gain(timeout=timeout)
+        if response_message is None:
+            return False
+
+        data = bytes(response_message.data)
+
+        self.motor_pi_gain[motor_index][0] = int.from_bytes(data[2:4], byteorder="little", signed=False)
+        self.motor_pi_gain[motor_index][1] = int.from_bytes(data[4:6], byteorder="little", signed=False)
 
         return True
         

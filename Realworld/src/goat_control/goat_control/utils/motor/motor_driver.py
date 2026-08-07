@@ -64,9 +64,14 @@ class MotorDriver:
         '''Read single-turn angle'''
         return self._txrx(0x94, E7, timeout)
 
-    def read_pi_gain(self, timeout: float = 0.05):
+    def read_wheel_pi_gain(self, timeout: float = 0.05):
         """Read 0x30 controller gain"""
         return self._txrx(0x30, E7, timeout)
+
+    def read_leg_pi_gain(self, timeout: float = 0.05):
+        """Read current/torque-loop PID parameters."""
+        payload = b"\x0C" + b"\x00" * 6
+        return self._txrx(0xC0, payload, timeout)
 
     # =======================
     # Manager helpers [WRITE]
