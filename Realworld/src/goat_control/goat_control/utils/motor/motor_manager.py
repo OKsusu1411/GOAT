@@ -245,7 +245,7 @@ class MotorManager:
         return True
 
     def poll_wheel_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
-        response_message = self.motor_drivers[motor_index].read_pi_gain(timeout=timeout)
+        response_message = self.motor_drivers[motor_index].read_wheel_pi_gain(timeout=timeout)
         if response_message is None:
             return False
 
@@ -257,7 +257,7 @@ class MotorManager:
         return True
     
     def poll_leg_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
-        response_message = self.motor_drivers[motor_index].read_current_pi_gain(timeout=timeout)
+        response_message = self.motor_drivers[motor_index].read_leg_pi_gain(timeout=timeout)
         if response_message is None:
             return False
 
