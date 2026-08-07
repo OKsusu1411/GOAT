@@ -89,6 +89,7 @@ class MotorManager:
         self.motor_phase_current_amp: List[float] = [float("nan")] * self.motor_count
         self.motor_speed_deg_per_sec: List[float] = [float("nan")] * self.motor_count
         self.motor_encoder_count: List[int] = [0] * self.motor_count
+        self.motor_pi_gain: List[List[float]] = [[0, 0]] * self.motor_count
 
         self.motor_single_turn_angle_raw_0p001deg: List[Optional[int]] = [None] * self.motor_count
         self.motor_multi_turn_angle_raw_0p001deg: List[Optional[int]] = [None] * self.motor_count
@@ -159,9 +160,10 @@ class MotorManager:
             # 0x9C state2 (anchor_encoder_count) must be adjacent in time
             # so the anchor pair refers to nearly the same physical motor
             # position.
-            is_valid_flag   = self.poll_state1(motor_index)                # 0x9A error flags
+            is_valid_flag   = self.poll_state1(motor_index)                 # 0x9A error flags
             is_valid_angle  = self.poll_single_and_multi_turn(motor_index)  # 0x92 / 0x94
-            is_valid_state2 = self.poll_state2(motor_index)                # 0x9C — pairs with 0x92
+            is_valid_state2 = self.poll_state2(motor_index)                 # 0x9C — pairs with 0x92
+            # is_valid_pi_gain = self.poll_pi_gain(motor_index)               # 0x30
 
             return motor_index, (is_valid_flag and is_valid_angle and is_valid_state2)
 
@@ -239,6 +241,17 @@ class MotorManager:
 
         return True
 
+    def poll_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
+        response_message = self.motor_drivers[motor_index].read_pi_gain(timeout=timeout)
+        if response_message is None:
+            return False
+
+        response_message = bytes(response_message.data)
+        self.motor_pi_gain[motor_index][0] = response_message[6]
+        self.motor_pi_gain[motor_index][1] = response_message[7]
+
+        return True
+        
     def poll_single_and_multi_turn(self, motor_index: int, timeout: float = 0.25) -> bool:
         response_single = self.motor_drivers[motor_index].read_single_turn(timeout=timeout)
         if response_single is not None:
