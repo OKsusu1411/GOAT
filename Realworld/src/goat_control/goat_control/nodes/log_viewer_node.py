@@ -81,6 +81,7 @@ class LogViewerNode(Node):
             header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
+            header += [f"{name}_actual_torque" for name in self.joint_names]
 
             self.csv_writer.writerow(header)
             self.csv_file.flush()
@@ -170,6 +171,7 @@ class LogViewerNode(Node):
             row  = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
             row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
             row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
+            row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
 
             self.csv_writer.writerow(row)
             self.csv_file.flush()
