@@ -112,7 +112,7 @@ class ActuatorTargetTestNode(Node):
         self.current_wheel_index = 6
         self.joint_names = self.cfg["joint_names"]
         self.num_joints = len(self.joint_names)
-        self.position_command = np.asarray([0.0, 0.0, 0.3490, -0.3490, 0.3490, -0.3490, 0.0, 0.0])
+        self.position_command = np.asarray([0.0, 0.0, 0.5235, -0.5235, 0.5235, -0.5235, 0.0, 0.0])
         self.velocity_command = np.zeros(self.num_joints, dtype=np.float32)
         self.leg_test = False
         self.wheel_test = False
