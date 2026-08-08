@@ -11,6 +11,7 @@ import termios
 import tty
 import threading
 import yaml
+import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -109,7 +110,11 @@ class ActuatorTargetTestNode(Node):
         self.max_torque_per_joint = 2.0
         self.max_torque_per_wheel = 1.0
         self.velocity_increment = 0.5
-        self.current_wheel_index = 6
+        self.wheel_sin_amplitude = 0.5
+        self.wheel_sin_period = 2               # Second
+        self.wheel_sin_duration = 10.0          # Sin phase length in seconds
+        self.wheel_sin_start_time: Optional[float] = None 
+
         self.joint_names = self.cfg["joint_names"]
         self.num_joints = len(self.joint_names)
         self.position_command = np.asarray([0.0, 0.0, 0.738, -0.738, 1.462, -1.462, 0.0, 0.0])
@@ -145,6 +150,7 @@ class ActuatorTargetTestNode(Node):
         self.current_wheel_index = 6
         self.leg_test = False
         self.wheel_test = False
+        self.wheel_sin_start_time = None
 
     def leg_control(self, q: np.ndarray , q_dot: np.ndarray, q_ref: np.ndarray) -> None:
         """PD control for torque command."""
@@ -289,6 +295,26 @@ class ActuatorTargetTestNode(Node):
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
 
+    # ---------------------------------------------------------------------
+    # Sin input
+    # ---------------------------------------------------------------------    
+    def sin_torque(self,
+                   t_sec: float,
+                   amplitude_torque: float,
+                   period_sec: float,
+                   phase_rad: float = 0.0) -> float:
+        """Sinusoidal torque command for friction ID.
+
+        t_sec            : seconds since the sine phase started (0 at phase start)
+        amplitude_torque : peak torque [Nm]
+        period_sec       : sine period [s]  (frequency = 1 / period_sec)
+        phase_rad        : initial phase offset [rad]; default 0 so the command
+                           starts at 0 Nm and ramps smoothly out of the zero hold.
+        """
+        if period_sec <= 0.0:
+            raise ValueError("period_sec must be > 0")
+        omega = 2.0 * math.pi / period_sec
+        return amplitude_torque * math.sin(omega * t_sec + phase_rad)
 
     # ---------------------------------------------------------------------
     # Control Loop
@@ -322,9 +348,14 @@ class ActuatorTargetTestNode(Node):
         if self.leg_test:
             q_ref[self.joint_ids] = self.position_command[self.joint_ids]
             tau[self.joint_ids] = self.leg_control(q[self.joint_ids], q_dot[self.joint_ids], q_ref[self.joint_ids])
+
         if self.wheel_test:
-            v_ref[self.wheel_ids] = self.velocity_command[self.wheel_ids]
-            tau[self.wheel_ids] = self.wheel_control(q_dot[self.wheel_ids], v_ref[self.wheel_ids])
+            if self.wheel_sin_start_time is None:
+                self.wheel_sin_start_time = now_time
+
+            t_since_sin = now_time - self.wheel_sin_start_time
+            tau_wheel = self.sin_torque(t_since_sin, self.wheel_sin_amplitude, self.wheel_sin_period)
+            tau[self.wheel_ids] = [tau_wheel, -tau_wheel]
 
         # pulbish torque command
         self.motor_io.read_write_motor(tau)   
