@@ -238,6 +238,11 @@ class ActuatorTargetTestNode(Node):
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
                 self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
             else:
