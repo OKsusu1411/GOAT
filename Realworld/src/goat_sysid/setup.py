@@ -34,6 +34,7 @@ setup(
     entry_points={
         'console_scripts': [
             'actuator_target_test = goat_sysid.actuator_target_test:main',
+            'motor_friction_id = goat_sysid.motor_friction_id:main',
             'motor_id = goat_sysid.motor_id:main',
             'breakaway_torque_tester = goat_sysid.breakaway_torque_tester:main',
             'dynamic_friction_sysid = goat_sysid.dynamic_friction_sysid:main',
