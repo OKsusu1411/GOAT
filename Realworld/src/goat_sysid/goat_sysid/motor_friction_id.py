@@ -34,10 +34,7 @@ class ActuatorTargetTestNode(Node):
         self.declare_parameter("imu_baudrate", 115200)
         self.declare_parameter("imu_timeout", 1.0)
 
-        self.set_parameters([
-            rclpy.parameter.Parameter(
-                "use_sim_time",
-                rclpy.Parameter.Type.BOOL,
+        self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL,
                 False,
             )
         ])

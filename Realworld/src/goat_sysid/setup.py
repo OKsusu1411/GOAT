@@ -35,12 +35,8 @@ setup(
         'console_scripts': [
             'actuator_target_test = goat_sysid.actuator_target_test:main',
             'motor_friction_id = goat_sysid.motor_friction_id:main',
-            'motor_id = goat_sysid.motor_id:main',
-            'breakaway_torque_tester = goat_sysid.breakaway_torque_tester:main',
-            'dynamic_friction_sysid = goat_sysid.dynamic_friction_sysid:main',
+            'motor_param_id = goat_sysid.motor_param_id:main',
             'friction_id_node = goat_sysid.dynamic_friction_id_node:main',
-            'wheel_friction_id = goat_sysid.wheel_friction_id_node:main',
-            'sine_motion_logger_node = goat_sysid.sine_motion_logger_node:main',
         ],
     },
 )

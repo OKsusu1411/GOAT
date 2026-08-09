@@ -74,14 +74,15 @@ class MotorIO:
             can.start_reader_thread()
 
         # Initialization Logging
-        self.logger.info("[MotorIO] initialized — owns both CAN buses (in-process).")
-        pi_gain_lines = ["[MotorIO] Motor Specification:"]
-        for i, (name, bus_i, node_id) in enumerate(zip(self.joint_names, motor_bus_idx, motor_node_ids)):
-            iq_kp, iq_ki = self.motor_manager.motor_pi_gain[i]
+        if self.logger is not None:
+            self.logger.info("[MotorIO] initialized — owns both CAN buses (in-process).")
+            pi_gain_lines = ["[MotorIO] Motor Specification:"]
+            for i, (name, bus_i, node_id) in enumerate(zip(self.joint_names, motor_bus_idx, motor_node_ids)):
+                iq_kp, iq_ki = self.motor_manager.motor_pi_gain[i]
 
-            pi_gain_lines.append(f"  {name:<12} can{bus_i} id={node_id:<2} " f"Iq_Kp={iq_kp:<3} Iq_Ki={iq_ki:<3}")
+                pi_gain_lines.append(f"  {name:<12} can{bus_i} id={node_id:<2} " f"Iq_Kp={iq_kp:<3} Iq_Ki={iq_ki:<3}")
 
-        self.logger.info("\n".join(pi_gain_lines))
+            self.logger.info("\n".join(pi_gain_lines))
 
     def _to_joint_state_msg(self, states) -> JointState:
         """Pack MotorStatesData into a JointState container (no ROS node needed)."""

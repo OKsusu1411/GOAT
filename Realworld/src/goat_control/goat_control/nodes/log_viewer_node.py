@@ -174,7 +174,6 @@ class LogViewerNode(Node):
             row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
 
             self.csv_writer.writerow(row)
-            self.csv_file.flush()
 
         # Update count
         self._print_count += 1

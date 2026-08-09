@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# goat_sysid/goat_sysid/motor_id.py
+# goat_sysid/goat_sysid/motor_param_id.py
 """Motor unit-scale verification node (READ-ONLY).
 
 Verifies that the unit scales in `goat_sysid/config/config.yaml` match the real
@@ -63,11 +63,11 @@ def parse_multi_turn(data: bytes) -> int:
     return int.from_bytes(raw_7bytes + sign_extension_byte, byteorder="little", signed=True)
 
 
-class MotorIdNode(Node):
+class MotorParamIdNode(Node):
     """Interactive, single-motor unit-scale verification node."""
 
     def __init__(self) -> None:
-        super().__init__("motor_id_node")
+        super().__init__("motor_param_id_node")
 
         # -----------------------------------------------------------------
         # Parameters (launch-overridable)
@@ -740,7 +740,7 @@ def main(args=None) -> None:
         pass
 
     rclpy.init(args=args)
-    node = MotorIdNode()
+    node = MotorParamIdNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
