@@ -108,7 +108,7 @@ class ActuatorTargetTestNode(Node):
         self.wheel_ids = self.cfg["wheel_indices"]
         self.max_torque_per_joint = 2.0
         self.max_torque_per_wheel = 1.0
-        self.velocity_increment = 0.5
+        self.velocity_increment = 1.0
         self.current_wheel_index = 6
         self.joint_names = self.cfg["joint_names"]
         self.num_joints = len(self.joint_names)
