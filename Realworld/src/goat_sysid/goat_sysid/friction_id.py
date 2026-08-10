@@ -153,7 +153,7 @@ if __name__ == "__main__":
     log_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = log_dir / f"response_{joint_name}_{timestamp}.csv"
+    csv_path = log_dir / f"response_{joint_name}_{timestamp}_{args.soft_factor}.csv"
 
     # Motorio
     motor_io = MotorIO(cfg=cfg, logger=None, can_tx_timeout_sec=float(cfg.get("can_tx_timeout_sec", 0.05)))
