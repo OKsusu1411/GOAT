@@ -3,6 +3,7 @@ import csv
 import struct
 import time
 import yaml
+import math
 
 from typing import Any
 from datetime import datetime
@@ -10,29 +11,58 @@ from pathlib import Path
 
 from goat_control.utils.motor import CanInterface, MotorDriver
 
-def read_and_print_pid(can_interface: CanInterface, motor_driver: MotorDriver,
-                       timeout: float) -> dict:
-    """Read and print the motor PID raw parameters using command 0x30."""
-    msg = can_interface.txrx(
-        tx_id=motor_driver.can_ids.tx_id,
-        rx_id=motor_driver.can_ids.rx_id,
-        cmd_byte=0x30,
-        payload7=b"\x00" * 7,
-        timeout=timeout,
-        accept_rx_id=True,
-        accept_tx_echo_diff=True,
-    )
+def read_and_print_pi(can_interface: CanInterface, motor_driver: MotorDriver,
+                       timeout: float, is_leg: bool = False) -> dict:
+    """Read and print the motor PI raw parameters"""
+    if is_leg:
+        msg = can_interface.txrx(
+              tx_id=motor_driver.can_ids.tx_id,
+              rx_id=motor_driver.can_ids.rx_id,
+              cmd_byte=0xC0,
+              payload7=b"\x0C" + b"\x00" * 6,
+              timeout=timeout,
+              accept_rx_id=True,
+              accept_tx_echo_diff=True,
+        )
 
+    else:
+        msg = can_interface.txrx(
+              tx_id=motor_driver.can_ids.tx_id,
+              rx_id=motor_driver.can_ids.rx_id,
+              cmd_byte=0x30,
+              payload7=b"\x00" * 7,
+              timeout=timeout,
+              accept_rx_id=True,
+              accept_tx_echo_diff=True,
+        )
+    
     data = bytes(msg.data)
 
-    pid = {"iq_kp": data[6],
-           "iq_ki": data[7]}
+    pi = {"iq_kp": int.from_bytes(data[2:4], byteorder="little", signed=False),
+           "iq_ki": int.from_bytes(data[4:6], byteorder="little", signed=False)}
 
     print("\nMotor PI parameters")
-    print(f"  Iq Kp    : {pid['iq_kp']}")
-    print(f"  Iq Ki    : {pid['iq_ki']}\n")
+    print(f"  Iq Kp    : {pi['iq_kp']}")
+    print(f"  Iq Ki    : {pi['iq_ki']}\n")
 
-    return pid
+    return pi
+
+def sin_current_amp(t_sec: float,
+                    amplitude_amp: float,
+                    period_sec: float,
+                    phase_rad: float = 0.0) -> float:
+    """Sinusoidal current command for friction ID.
+
+    t_sec         : seconds since the sine phase started (0 at phase start)
+    amplitude_amp : peak current [A]  (peak-to-peak = 2 * amplitude_amp)
+    period_sec    : sine period [s]   (frequency = 1 / period_sec)
+    phase_rad     : initial phase offset [rad]; default 0 so the command
+                    starts at 0 A and ramps smoothly out of the zero hold.
+    """
+    if period_sec <= 0.0:
+        raise ValueError("period_sec must be > 0")
+    omega = 2.0 * math.pi / period_sec
+    return amplitude_amp * math.sin(omega * t_sec + phase_rad)
 
 def send_current_and_read(can_interface: CanInterface, motor_driver: MotorDriver,
                           cfg: dict, current_cmd_amp: float, timeout: float) -> dict:
@@ -149,11 +179,88 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             else:
                 next_sample_time = time.perf_counter()
 
+
+def run_sin_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
+                        cfg: dict, args: Any, csv_path: Path) -> None:
+    """Zero warmup → sine drive → zero recover, logged to CSV."""
+
+    amplitude_amp = args.current           # peak current [A]
+    period_sec = args.sin_period           # sin period  [s]
+    zero_sec = args.zero
+    apply_sec = args.apply                 # sin drive length [s]
+    recovery_sec = args.recovery
+    sample_hz = args.hz
+    timeout = args.timeout
+
+    total_duration_sec = zero_sec + apply_sec + recovery_sec
+    sample_period_sec = 1.0 / sample_hz
+
+    fieldnames = ["time_sec",
+                    "mode",
+                    "iq_cmd_amp_ideal",       # un-quantised sin value
+                    "iq_cmd_requested_amp",
+                    "iq_cmd_lsb",
+                    "iq_cmd_amp",
+                    "iq_lsb",
+                    "iq_amp",
+                    "iq_error_amp",
+                    "speed_dps"]
+
+    start_time = time.perf_counter()
+    next_sample_time = start_time
+
+    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        while True:
+            elapsed_sec = time.perf_counter() - start_time
+            if elapsed_sec >= total_duration_sec:
+                break
+
+            # Pick command by phase
+            if elapsed_sec < zero_sec:
+                current_cmd_amp_ideal = 0.0
+            elif elapsed_sec < zero_sec + apply_sec:
+                t_since_sin = elapsed_sec - zero_sec
+                current_cmd_amp_ideal = sin_current_amp(t_since_sin, amplitude_amp, period_sec)
+            else:
+                current_cmd_amp_ideal = 0.0
+
+            result = send_current_and_read(can_interface=can_interface,
+                                            motor_driver=motor_driver,
+                                            cfg=cfg,
+                                            current_cmd_amp=current_cmd_amp_ideal,
+                                            timeout=timeout)
+
+            writer.writerow({
+                "time_sec": elapsed_sec,
+                "mode": "sin",
+                "iq_cmd_amp_ideal": current_cmd_amp_ideal,
+                "iq_cmd_requested_amp": current_cmd_amp_ideal,
+                "iq_cmd_lsb": result["iq_cmd_lsb"],
+                "iq_cmd_amp": result["iq_cmd_amp"],
+                "iq_lsb": result["iq_lsb"],
+                "iq_amp": result["iq_amp"],
+                "iq_error_amp": result["iq_error_amp"],
+                "speed_dps": result["speed_dps"],
+            })
+
+            next_sample_time += sample_period_sec
+            sleep_sec = next_sample_time - time.perf_counter()
+            if sleep_sec > 0.0:
+                time.sleep(sleep_sec)
+            else:
+                next_sample_time = time.perf_counter()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--joint_id", type=int, default=6)
+    parser.add_argument("--joint_id", type=int, default=0)
     parser.add_argument("--current", type=float, required=True)
+
+    parser.add_argument("--sin_amp", type=float, default=1.0)
+    parser.add_argument("--sin_period", type=float, default=2.0)
 
     parser.add_argument("--zero", type=float, default=1.0)
     parser.add_argument("--apply", type=float, default=10.0)
@@ -190,13 +297,18 @@ if __name__ == "__main__":
 
     try:
 
-        read_and_print_pid(can_interface=can_interface,
+        read_and_print_pi(can_interface=can_interface,
                            motor_driver=motor_driver,
-                           timeout=args.timeout)
+                           timeout=args.timeout,
+                           is_leg=True)
         
-        run_current_test(can_interface=can_interface, 
-                         motor_driver=motor_driver,
-                         cfg=cfg, args=args, csv_path=csv_path)
+        # run_current_test(can_interface=can_interface, 
+        #                  motor_driver=motor_driver,
+        #                  cfg=cfg, args=args, csv_path=csv_path)
+
+        run_sin_current_test(can_interface=can_interface, 
+                             motor_driver=motor_driver,
+                             cfg=cfg, args=args, csv_path=csv_path)
 
     except KeyboardInterrupt:
         print("\nCurrent test interrupted.")
@@ -205,9 +317,9 @@ if __name__ == "__main__":
         # Zero torque send
         for _ in range(3):
             send_current_and_read(can_interface=can_interface,
-                                motor_driver=motor_driver,
-                                cfg=cfg, current_cmd_amp=0.0,
-                                timeout=args.timeout)
+                                  motor_driver=motor_driver,
+                                  cfg=cfg, current_cmd_amp=0.0,
+                                  timeout=args.timeout)
         time.sleep(0.01)
 
         can_interface.close()
