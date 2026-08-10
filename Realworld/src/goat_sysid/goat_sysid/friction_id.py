@@ -13,7 +13,7 @@ from pathlib import Path
 
 from goat_control.nodes.motor_io import MotorIO
 
-def set_sine_position_reference(position_range, repeat, num_points):
+def set_sin_position_reference(position_range, repeat, num_points):
     lower, upper = np.asarray(position_range, dtype=float)
 
     center = 0.5 * (lower + upper)
@@ -25,7 +25,7 @@ def set_sine_position_reference(position_range, repeat, num_points):
     return center + amplitude * np.sin(phase)
 
 
-def set_sine_velocity_reference(velocity_limit, repeat, num_points):
+def set_sin_velocity_reference(velocity_limit, repeat, num_points):
     phase = 2.0 * np.pi * repeat * np.arange(num_points) / num_points
     return float(velocity_limit) * np.sin(phase)
 
@@ -39,8 +39,7 @@ def wheel_control(kp_wheel: float, q_dot: np.ndarray, q_dot_ref: np.ndarray, max
     return np.clip(kp_wheel * (q_dot_ref - q_dot), -max_torque_per_wheel, max_torque_per_wheel)
 
 
-def run(motor_interface: MotorIO,
-        cfg: dict, args: Any, csv_path: Path) -> None:
+def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         # Arguments
         joint_id = args.joint_id
         duration = args.duration
@@ -48,6 +47,7 @@ def run(motor_interface: MotorIO,
         period = 1.0 / args.hz
         num_points = int(duration / period)
         is_leg = True if joint_id < 6 else False
+
         # Configs
         joint_names = cfg["joint_names"]
         target_joint_name = joint_names[joint_id]
@@ -55,9 +55,10 @@ def run(motor_interface: MotorIO,
         kp_leg = cfg["policy_leg_proportional_gain"][0]
         kd_leg = cfg["policy_leg_derivative_gain"][0]
         kp_wheel = cfg["policy_wheel_proportional_gain"][0]
-        max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * 0.4     # soft relaxation
-        max_vel_per_joint = np.array([15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0], dtype=np.float32)
-        max_torque_per_joint = 2
+        max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * 0.4                         # Position amplitude (soft relaxation)
+        max_vel_per_joint = np.array([15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0], dtype=np.float32)    # Velocity amplitude
+        max_torque_leg = 4                                                                                  # Torque clipping
+        max_torque_wheel = 2
 
         header =  ["time_sec"] 
         header += [f"{name}_pos_rad" for name in joint_names]
@@ -77,9 +78,9 @@ def run(motor_interface: MotorIO,
 
             # Set target
             if is_leg:
-                ref = set_sine_position_reference(max_pos_per_joint[joint_id, :], repeat, num_points)
+                ref = set_sin_position_reference(max_pos_per_joint[joint_id, :], repeat, num_points)
             else:
-                ref = set_sine_velocity_reference(max_vel_per_joint[joint_id], repeat, num_points)
+                ref = set_sin_velocity_reference(max_vel_per_joint[joint_id], repeat, num_points)
 
             # Send and log
             for i in range(num_points):
@@ -89,8 +90,8 @@ def run(motor_interface: MotorIO,
                 if elapsed_time >= duration:
                     break
 
-                # Update target
-                ref_i = ref[i]
+                # Update reference input
+                ref_now = ref[i]
 
                 joint_state_msg = motor_interface.latest_joint_state
                 q = np.asarray(joint_state_msg.position, dtype=np.float32)
@@ -99,9 +100,9 @@ def run(motor_interface: MotorIO,
 
                 # Calculate torque (joint specific)
                 if is_leg:
-                    tau[joint_id] = leg_control(kp_leg, kd_leg, q[joint_id], q_dot[joint_id], ref_i, max_torque_per_joint)
+                    tau[joint_id] = leg_control(kp_leg, kd_leg, q[joint_id], q_dot[joint_id], ref_now, max_torque_leg)
                 else:
-                    tau[joint_id] = wheel_control(kp_wheel, q_dot[joint_id], ref_i, max_torque_per_joint)
+                    tau[joint_id] = wheel_control(kp_wheel, q_dot[joint_id], ref_now, max_torque_wheel)
 
                 # Send torque
                 motor_interface.read_write_motor(tau)
@@ -111,7 +112,7 @@ def run(motor_interface: MotorIO,
                 row += [q[i] for i in range(num_joints)]
                 row += [q_dot[i] for i in range(num_joints)]
                 row += [q_tau[i] for i in range(num_joints)]
-                row += [ref_i]
+                row += [ref_now]
                 row += [prev_tau[joint_id]]
                 writer.writerow(row)
 
@@ -128,7 +129,7 @@ def run(motor_interface: MotorIO,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--joint_id", type=int, default=6)
+    parser.add_argument("--joint_id", type=int, default=4)
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument("--hz", type=float, default=200.0)
@@ -146,7 +147,7 @@ if __name__ == "__main__":
     joint_name = cfg["joint_names"][args.joint_id]
 
     # CSV setting
-    log_dir = Path("src/goat_sysid/logs")
+    log_dir = Path("src/goat_sysid/logs/fixed_test")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
