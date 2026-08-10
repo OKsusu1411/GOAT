@@ -64,6 +64,7 @@ class SimFrictionIdtNode(Node):
         header += [f"{name}_vel_rad/s" for name in self.joint_names]
         header += [f"{name}_actual_torque" for name in self.joint_names] 
         header += [f"{self.target_joint_name}_target_pos_rad"]
+        header += [f"{self.target_joint_name}_target_torque"]
 
         self.csv_writer.writerow(header)
         self.csv_file.flush()
@@ -92,7 +93,7 @@ class SimFrictionIdtNode(Node):
         # Manual command
         self.max_torque_per_joint = 2.0
         self.max_velocity_per_joint = 15.0
-        self.position_limit = np.asarray(self.cfg["joint_pos_limit"], dtype=np.float32).reshape(-1, 2) * 0.5
+        self.position_limit = np.asarray(self.cfg["joint_pos_limit"], dtype=np.float32).reshape(-1, 2) * 0.4
         if self.is_leg:
             self.command = self.set_sine_position_reference(self.position_limit[self.joint_id, :])
         else:
@@ -104,6 +105,8 @@ class SimFrictionIdtNode(Node):
         self.kp_wheel = self.cfg["policy_wheel_proportional_gain"][0]
 
         # Timing
+        self.prev_torque = np.zeros(self.num_joints, dtype=np.float32)
+        self.start_time_sec = None
         self.last_tick_time = time.perf_counter()
         self.count = 0
 
@@ -126,6 +129,8 @@ class SimFrictionIdtNode(Node):
         phase = 2.0 * np.pi * self.repeat * np.arange(self.num_points) / self.num_points
         return float(self.max_velocity_per_joint) * np.sin(phase)
 
+    def stamp_to_sec(self, stamp):
+        return (stamp.sec + stamp.nanosec * 1e-9)
 
     # ---------------------------------------------------------------------
     # Controller
@@ -174,18 +179,16 @@ class SimFrictionIdtNode(Node):
     # ---------------------------------------------------------------------    
     def _tick(self, joint_state_msg: JointState, imu_msg: ImuState):
         """Main control loop called by create_timer at control_rate_hz."""
-        if self.count >= self.num_points:
-            self.logger.info("Time Expire. \r")
-            rclpy.shutdown()
+        if self.start_time_sec is None:
+            self.start_time_sec = self.stamp_to_sec(joint_state_msg.header.stamp)
         self.now_stamp = joint_state_msg.header.stamp
-        now_time = time.perf_counter()
+        self.now_sec = self.stamp_to_sec(joint_state_msg.header.stamp)
 
-        # Time - Time → Duration; convert to seconds via nanoseconds.
-        dt_sec = (now_time - self.last_tick_time)
-        if dt_sec <= 0.0:
-            dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        self.last_tick_time = now_time   
-
+        elapsed_time = self.now_sec - self.start_time_sec
+        if elapsed_time >= self.duration:
+            self.logger.info("Time Expire.")
+            rclpy.shutdown()
+            return
         # Commands
         tau = np.zeros(self.num_joints, dtype=np.float32)
         ref_i = self.command[self.count]
@@ -202,16 +205,19 @@ class SimFrictionIdtNode(Node):
             tau[self.joint_id] = self.wheel_control(q_dot[self.joint_id], ref_i)
 
         # CSV logging
-        row = [now_time]
+        row = [self.now_sec]
         row += [q[i] for i in range(self.num_joints)]
         row += [q_dot[i] for i in range(self.num_joints)]
         row += [q_tau[i] for i in range(self.num_joints)]
         row += [ref_i]
+        row += [self.prev_torque[self.joint_id]]
         self.csv_writer.writerow(row)
 
         # Publish
         self._publish_joint_command(np.zeros(self.num_joints), np.zeros(self.num_joints), tau)
 
+        # Update
+        self.prev_torque[self.joint_id] = tau[self.joint_id]
         self.count += 1
 
 

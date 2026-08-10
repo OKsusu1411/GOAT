@@ -54,7 +54,7 @@ def run(motor_interface: MotorIO,
         kp_leg = cfg["policy_leg_proportional_gain"][0]
         kd_leg = cfg["policy_leg_derivative_gain"][0]
         kp_wheel = cfg["policy_wheel_proportional_gain"][0]
-        max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * 0.5     # soft relaxation
+        max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * 0.4     # soft relaxation
         max_vel_per_joint = np.array([15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0], dtype=np.float32)
         max_torque_per_joint = 2
 
@@ -64,6 +64,7 @@ def run(motor_interface: MotorIO,
         header += [f"{name}_actual_torque" for name in joint_names] 
 
         tau = np.zeros(num_joints, dtype=np.float32)
+        prev_tau = np.zeros(num_joints, dtype=np.float32)
         elapsed_time = 0.0
         start_time = time.perf_counter()
         next_time = start_time
@@ -108,14 +109,17 @@ def run(motor_interface: MotorIO,
                 row += [q[i] for i in range(num_joints)]
                 row += [q_dot[i] for i in range(num_joints)]
                 row += [q_tau[i] for i in range(num_joints)]
+                row += [ref_i]
+                row += [prev_tau[joint_id]]
                 writer.writerow(row)
 
                 next_time += period
                 sleep_time = next_time - time.perf_counter()
 
+                prev_tau = tau
                 if sleep_time > 0:
                     time.sleep(sleep_time)
-
+    
             files.flush()
 
 
