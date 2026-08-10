@@ -50,6 +50,7 @@ def run(motor_interface: MotorIO,
         is_leg = True if joint_id < 6 else False
         # Configs
         joint_names = cfg["joint_names"]
+        target_joint_name = joint_names[joint_id]
         num_joints = len(cfg["joint_names"])
         kp_leg = cfg["policy_leg_proportional_gain"][0]
         kd_leg = cfg["policy_leg_derivative_gain"][0]
@@ -61,7 +62,8 @@ def run(motor_interface: MotorIO,
         header =  ["time_sec"] 
         header += [f"{name}_pos_rad" for name in joint_names]
         header += [f"{name}_vel_rad/s" for name in joint_names]
-        header += [f"{name}_actual_torque" for name in joint_names] 
+        header += [f"{name}_actual_torque" for name in joint_names]
+        header += [f"{target_joint_name}_target_torque"]
 
         tau = np.zeros(num_joints, dtype=np.float32)
         prev_tau = np.zeros(num_joints, dtype=np.float32)
