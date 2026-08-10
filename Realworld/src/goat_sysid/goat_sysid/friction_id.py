@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--joint_id", type=int, default=6)
     parser.add_argument("--duration", type=float, default=30.0)
-    parser.add_argument("--repeat", type=int, default=5)
+    parser.add_argument("--repeat", type=int, default=10)
     parser.add_argument("--hz", type=float, default=200.0)
     parser.add_argument("--timeout", type=float, default=0.05)
     parser.add_argument("--config", default="src/goat_control/config/goat_config.yaml")

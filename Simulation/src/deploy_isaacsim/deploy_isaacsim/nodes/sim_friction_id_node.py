@@ -28,8 +28,8 @@ class SimFrictionIdtNode(Node):
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("joint_id", 0)
-        self.declare_parameter("duration", 30.0)
-        self.declare_parameter("repeat", 5)
+        self.declare_parameter("duration", 60.0)
+        self.declare_parameter("repeat", 30)
 
         self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, False)])
 
@@ -185,7 +185,7 @@ class SimFrictionIdtNode(Node):
         self.now_sec = self.stamp_to_sec(joint_state_msg.header.stamp)
 
         elapsed_time = self.now_sec - self.start_time_sec
-        if elapsed_time >= self.duration:
+        if (elapsed_time >= self.duration) or (self.count >= self.num_points):
             self.logger.info("Time Expire.")
             rclpy.shutdown()
             return
