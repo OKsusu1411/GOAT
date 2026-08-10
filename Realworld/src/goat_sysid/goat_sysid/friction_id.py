@@ -65,6 +65,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         header += [f"{name}_pos_rad" for name in joint_names]
         header += [f"{name}_vel_rad/s" for name in joint_names]
         header += [f"{name}_actual_torque" for name in joint_names]
+        header += [f"{target_joint_name}_target_ref"]
         header += [f"{target_joint_name}_target_torque"]
 
         tau = np.zeros(num_joints, dtype=np.float32)
@@ -125,7 +126,6 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
                     time.sleep(sleep_time)
     
             files.flush()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
