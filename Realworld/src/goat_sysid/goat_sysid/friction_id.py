@@ -43,6 +43,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         # Arguments
         joint_id = args.joint_id
         duration = args.duration
+        soft_factor = args.soft_factor
         repeat = args.repeat
         period = 1.0 / args.hz
         num_points = int(duration / period)
@@ -55,7 +56,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         kp_leg = cfg["policy_leg_proportional_gain"][0]
         kd_leg = cfg["policy_leg_derivative_gain"][0]
         kp_wheel = cfg["policy_wheel_proportional_gain"][0]
-        max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * 0.4                         # Position amplitude (soft relaxation)
+        max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * soft_factor                 # Position amplitude (soft relaxation)
         max_vel_per_joint = np.array([15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0], dtype=np.float32)    # Velocity amplitude
         max_torque_leg = 4                                                                                  # Torque clipping
         max_torque_wheel = 2
@@ -131,6 +132,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--joint_id", type=int, default=4)
     parser.add_argument("--duration", type=float, default=30.0)
+    parser.add_argument("--soft_factor", type=float, default=0.4)
     parser.add_argument("--repeat", type=int, default=10)
     parser.add_argument("--hz", type=float, default=200.0)
     parser.add_argument("--timeout", type=float, default=0.05)
