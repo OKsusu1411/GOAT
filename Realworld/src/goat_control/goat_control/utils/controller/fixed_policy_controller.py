@@ -101,7 +101,7 @@ class FixedBasePolicyController(PolicyController):
             self._joint_command[:] = 0.0
             return "Joint command reset to zero\r"
 
-        if key == "n":
+        if key == "d":
             self._joint_command = np.array([0.0, 0.0, 0.738, -0.738, 1.462, -1.462], dtype=np.float32)
 
         return None
@@ -111,6 +111,6 @@ class FixedBasePolicyController(PolicyController):
             "--- Joint Position Command ---",
             "'1'/'2'/'3': select hip/thigh/knee",
             "Up/Down arrow: selected joint +/-",
-            "'n': Natural standing position",
+            "'d': Default standing position",
             "'space': reset joint command\r",
         ]

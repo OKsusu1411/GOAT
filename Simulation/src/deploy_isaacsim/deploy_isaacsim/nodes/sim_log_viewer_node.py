@@ -44,7 +44,7 @@ class SimLogViewerNode(Node):
         self.declare_parameter("yaml_path", default_yaml_path)
         self.declare_parameter("csv_path", "experiment_logs.csv")
         self.declare_parameter("log_degrees", False)
-        self.declare_parameter("is_csv_logging", True)
+        self.declare_parameter("csv", True)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -73,7 +73,7 @@ class SimLogViewerNode(Node):
 
         # CSV logging
         self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve().with_name(f"{time.strftime('%Y%m%d_%H%M%S')}_sim_experiment_logs.csv"))
-        self.is_csv_logging = bool(self.get_parameter("is_csv_logging").value)
+        self.is_csv_logging = bool(self.get_parameter("csv").value)
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
 
         if self.is_csv_logging:
