@@ -59,7 +59,7 @@ class SimControllerNode(Node):
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        checkpoint_path_param = str(self.get_parameter("checkpoint_path").value)
+        self.checkpoint_path = str(self.get_parameter("checkpoint_path").value)
 
         # ------------------------------------------------------------------
         # YAML config
@@ -73,12 +73,7 @@ class SimControllerNode(Node):
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
         # Checkpoint path.
-        # The YAML default is CWD-relative and only resolves when launched from
-        # the Realworld workspace root, so the launch file injects the absolute
-        # installed path instead. Fall back to the YAML value if not provided.
-        if checkpoint_path_param:
-            self.cfg["policy_checkpoint_path"] = checkpoint_path_param
-        self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
+        self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path)
 
         # ------------------------------------------------------------------
         # Logger
@@ -311,6 +306,7 @@ class SimControllerNode(Node):
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
         safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
+
 
         if is_blocked:
             q_ref = np.zeros(self.num_joints, dtype=np.float32)

@@ -27,7 +27,7 @@ def generate_launch_description():
     default_checkpoint_path = PathJoinSubstitution([
         FindPackageShare("goat_control"),
         "checkpoint",
-        "stand.onnx",
+        "fixed.onnx",
     ])
 
     # Arguments
