@@ -57,7 +57,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         kd_leg = cfg["policy_leg_derivative_gain"][0]
         kp_wheel = cfg["policy_wheel_proportional_gain"][0]
         max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * soft_factor                 # Position amplitude (soft relaxation)
-        max_vel_per_joint = np.array([15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0], dtype=np.float32)    # Velocity amplitude
+        max_vel_per_joint = 33.0 * soft_factor                                                              # Velocity amplitude
         max_torque_leg = 4                                                                                  # Torque clipping
         max_torque_wheel = 2
 
@@ -82,7 +82,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
             if is_leg:
                 ref = set_sin_position_reference(max_pos_per_joint[joint_id, :], repeat, num_points)
             else:
-                ref = set_sin_velocity_reference(max_vel_per_joint[joint_id], repeat, num_points)
+                ref = set_sin_velocity_reference(max_vel_per_joint, repeat, num_points)
 
             # Send and log
             for i in range(num_points):
