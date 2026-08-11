@@ -1,6 +1,7 @@
 # controller_node.py — ROS2 Sim ControllerNode with H1-style synchronized I/O pipeline
 from __future__ import annotations
 
+import os
 import copy
 import threading
 import termios
@@ -72,9 +73,6 @@ class SimControllerNode(Node):
 
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
-        # Checkpoint path.
-        self.cfg["policy_checkpoint_path"] = copy.deepcopy(self.checkpoint_path)
-
         # ------------------------------------------------------------------
         # Logger
         # ------------------------------------------------------------------
@@ -86,8 +84,10 @@ class SimControllerNode(Node):
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
         self.nominal_controller = NominalController(self.cfg, self.logger)
         if self.cfg["policy_mode"] == "fixed":
+            self.cfg["policy_checkpoint_path"] = os.path.join(self.checkpoint_path, "fixed.onnx")
             self.policy_controller = FixedBasePolicyController(self.cfg, self.logger)
         elif self.cfg["policy_mode"] == "movable":
+            self.cfg["policy_checkpoint_path"] = os.path.join(self.checkpoint_path, "stand.onnx")
             self.policy_controller = MovableBasePolicyController(self.cfg, self.logger)
         else:
             raise RuntimeError(f"Invalid Mode : {self.cfg['policy_mode']}")
