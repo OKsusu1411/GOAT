@@ -92,8 +92,8 @@ nsc_wheel_outer_derivative_gain: 0.02
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_mode: fixed
-policy_checkpoint_path: src/goat_control/checkpoint/fixed.onnx
+policy_mode: movable
+policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
