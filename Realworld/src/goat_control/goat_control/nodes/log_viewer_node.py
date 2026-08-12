@@ -49,7 +49,7 @@ class LogViewerNode(Node):
         with open(yaml_path, "r", encoding="utf-8") as file_handle:
             self.cfg = yaml.safe_load(file_handle)
 
-        self.declare_parameter("print_rate_hz", 100.0)
+        self.declare_parameter("print_rate_hz", 50.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("precision", 3)
 
