@@ -49,13 +49,14 @@ class LogViewerNode(Node):
         with open(yaml_path, "r", encoding="utf-8") as file_handle:
             self.cfg = yaml.safe_load(file_handle)
 
-        self.declare_parameter("print_rate_hz", 50.0)
+        self.declare_parameter("print_rate_hz", 100.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("precision", 3)
 
         self.print_rate_hz = float(self.get_parameter("print_rate_hz").value)
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
+        self.start_time = None
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -72,7 +73,6 @@ class LogViewerNode(Node):
         self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve().with_name(f"{time.strftime('%Y%m%d_%H%M%S')}_real_experiment_logs.csv"))
         self.is_csv_logging = bool(self.get_parameter("csv").value)
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
-        self.csv_logging_interval_sec = 0.02
 
         if self.is_csv_logging:
             self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
@@ -99,9 +99,7 @@ class LogViewerNode(Node):
         self.create_timer(period_sec, self._tick)
 
         # Logging interval
-        self.csv_logging_interval = max(1, int(round(self.csv_logging_interval_sec / period_sec)))
-
-        self.get_logger().info("LogViewerNode started." f" (names of Joints: {self.joint_names}).")
+        self.csv_logging_interval = 1
 
     def _on_joint_ref(self, msg: JointState) -> None:
         self.joint_ref = msg
@@ -110,6 +108,8 @@ class LogViewerNode(Node):
         self.joint_current = msg
 
     def _tick(self) -> None:
+        if self.start_time is None:
+            self.start_time = self.get_clock().now().nanoseconds
         # No subscription
         if self.joint_current is None:
             return
@@ -167,7 +167,7 @@ class LogViewerNode(Node):
             else:
                 joint_pos_log = np.array(self.joint_current.position, dtype=float)
                 joint_vel_log = np.array(self.joint_current.velocity, dtype=float)
-            now_sec = self.get_clock().now().nanoseconds * 1e-9
+            now_sec = (self.get_clock().now().nanoseconds - self.start_time) * 1e-9
             row  = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
             row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
             row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]

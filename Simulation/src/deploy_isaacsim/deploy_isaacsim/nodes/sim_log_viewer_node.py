@@ -59,6 +59,7 @@ class SimLogViewerNode(Node):
         self.print_rate_hz = float(self.get_parameter("print_rate_hz").value)
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
+        self.start_time = None
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -101,9 +102,35 @@ class SimLogViewerNode(Node):
         self.sync.registerCallback(self._tick)
 
         # Logging interval
-        self.csv_logging_interval = 1
+        if self.is_csv_logging:
+            self.csv_timer = self.create_timer(1.0 / self.print_rate_hz, self._write_csv)
+
+
+    def _write_csv(self) -> None:
+        if self.joint_current is None or self.joint_ref is None:
+            return
+
+        if self.log_degrees:
+            joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
+            joint_vel_log = np.rad2deg(np.array(self.joint_current.velocity, dtype=float))
+        else:
+            joint_pos_log = np.array(self.joint_current.position, dtype=float)
+            joint_vel_log = np.array(self.joint_current.velocity, dtype=float)
+
+        joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
+
+        now_sec = (self.get_clock().now().nanoseconds - self.start_time) * 1e-9
+
+        row =  [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
+        row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
+        row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
+
+        self.csv_writer.writerow(row)
+
 
     def _tick(self, joint_state_msg: JointState, joint_command_msg: JointState) -> None:
+        if self.start_time is None:
+            self.start_time = self.get_clock().now().nanoseconds
         self.joint_current = joint_state_msg
         self.joint_ref = joint_command_msg
 
@@ -148,25 +175,6 @@ class SimLogViewerNode(Node):
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
         self.get_logger().info("\n" + "\n".join(lines))
-
-        # Save joint position only to CSV
-        if self.is_csv_logging and (self._print_count % self.csv_logging_interval == 0):
-            if self.log_degrees:
-                joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
-                joint_vel_log = np.rad2deg(np.array(self.joint_current.velocity, dtype=float))
-            else:
-                joint_pos_log = np.array(self.joint_current.position, dtype=float)
-                joint_vel_log = np.array(self.joint_current.velocity, dtype=float)
-            now_sec = self.get_clock().now().nanoseconds * 1e-9
-            row  = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
-            row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
-            row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
-
-            self.csv_writer.writerow(row)
-            self.csv_file.flush()
-
-        # Update count
-        self._print_count += 1
 
 def main(args=None):
     rclpy.init(args=args)
