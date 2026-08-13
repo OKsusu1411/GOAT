@@ -34,10 +34,24 @@ import yaml
 HERE = Path(__file__).resolve().parent
 
 
+def get_gravity_orientation(quaternion: np.ndarray) -> np.ndarray:
+    qw = quaternion[0]
+    qx = quaternion[1]
+    qy = quaternion[2]
+    qz = quaternion[3]
+
+    gravity_orientation = np.zeros(3)
+
+    gravity_orientation[0] = 2 * (-qz * qx + qw * qy)
+    gravity_orientation[1] = -2 * (qz * qy + qw * qx)
+    gravity_orientation[2] = 1 - 2 * (qw * qw + qz * qz)
+
+    return gravity_orientation
+
 class Policy:
     """ONNX policy driving PD on the legs and P on the wheels.
 
-    obs = [ang_vel(3), quat_wxyz(4), command(3),
+    obs = [ang_vel(3), gravity(3), command(3),
            leg_pos - natural(6), joint_vel(8), previous_action(8)]
 
     previous_action is the raw network output, before ``action_scale``.
@@ -59,7 +73,7 @@ class Policy:
         self.inp = self.session.get_inputs()[0]
         self.out_name = self.session.get_outputs()[0].name
 
-        self.obs_dim = 3 + 4 + 3 + self.leg.size + self.natural.size + self.scale.size
+        self.obs_dim = 3 + 3 + 3 + self.leg.size + self.natural.size + self.scale.size
         want = self.inp.shape[-1]
         if isinstance(want, int) and want != self.obs_dim:
             raise SystemExit(f"ONNX wants obs dim {want}, config builds {self.obs_dim}")
@@ -74,7 +88,8 @@ class Policy:
         self.tick = 0
 
     def _infer(self, ang_vel, quat, pos, vel) -> None:
-        obs = np.hstack([ang_vel, quat, self.command,
+        gravity_vector = get_gravity_orientation(quat)
+        obs = np.hstack([ang_vel, gravity_vector, self.command,
                          pos[self.leg] - self.natural[self.leg], vel,
                          self.previous_action]).astype(np.float32)[None]
         action = self.session.run([self.out_name], {self.inp.name: obs})[0].ravel()
