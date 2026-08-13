@@ -11,6 +11,7 @@ import termios
 import tty
 import threading
 import yaml
+import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -19,10 +20,9 @@ from motor_interfaces.msg import ImuState
 from goat_control.nodes.motor_io import MotorIO
 from goat_control.nodes.imu_io import ImuIO
 
-
-class ActuatorTorqueTestNode(Node):
+class ActuatorTargetTestNode(Node):
     def __init__(self):
-        super().__init__("actuator_torque_test_node")
+        super().__init__("actuator_target_test_node")
 
 
         # Parameters by Launch File
@@ -34,10 +34,7 @@ class ActuatorTorqueTestNode(Node):
         self.declare_parameter("imu_baudrate", 115200)
         self.declare_parameter("imu_timeout", 1.0)
 
-        self.set_parameters([
-            rclpy.parameter.Parameter(
-                "use_sim_time",
-                rclpy.Parameter.Type.BOOL,
+        self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL,
                 False,
             )
         ])
@@ -103,21 +100,29 @@ class ActuatorTorqueTestNode(Node):
 
         # Messages
         self.now_stamp = self.get_clock().now().to_msg()
-        self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
-        self.imu_msg = self.imu_io.latest_imu_state              # seeded by ImuIO's initial read
-        
-        # Mode switch (None = idle, no torque until keyboard selects a mode)
-        self.publish_mode = None
-        self._prev_mode = None
-        self._start = False
 
         # Manual command
-        self.max_torque_per_joint = 0.5
-        self.torque_increment = 0.1
-        self.current_joint_index = 0
+        self.joint_ids = self.cfg["joint_indices"]
+        self.wheel_ids = self.cfg["wheel_indices"]
+        self.max_torque_per_joint = 2.0
+        self.max_torque_per_wheel = 1.0
+        self.velocity_increment = 0.5
+        self.wheel_sin_amplitude = 0.5
+        self.wheel_sin_period = 2               # Second
+        self.wheel_sin_duration = 10.0          # Sin phase length in seconds
+        self.wheel_sin_start_time: Optional[float] = None 
+
         self.joint_names = self.cfg["joint_names"]
         self.num_joints = len(self.joint_names)
-        self.torque_command = np.zeros(self.num_joints, dtype=np.float32)
+        self.position_command = np.asarray([0.0, 0.0, 0.738, -0.738, 1.462, -1.462, 0.0, 0.0])
+        self.velocity_command = np.zeros(self.num_joints, dtype=np.float32)
+        self.leg_test = False
+        self.wheel_test = False
+
+        # Controller gain
+        self.kp_leg = self.cfg["policy_leg_proportional_gain"]
+        self.kd_leg = self.cfg["policy_leg_derivative_gain"]
+        self.kp_wheel = self.cfg["policy_wheel_proportional_gain"]
 
         # Timing — use ROS clock so it works under sim time too.
         self.last_tick_time = time.perf_counter()
@@ -138,9 +143,19 @@ class ActuatorTorqueTestNode(Node):
     def reset(self) -> None:
         """Reset internal states (controller + safety limiter memory)."""
         self.logger.info(f"Reset internal states.")
-        self.torque_command = np.zeros(self.num_joints, dtype=np.float32)
-        self.current_joint_index = 0
+        self.velocity_command[:] = 0.0
+        self.current_wheel_index = 6
+        self.leg_test = False
+        self.wheel_test = False
+        self.wheel_sin_start_time = None
 
+    def leg_control(self, q: np.ndarray , q_dot: np.ndarray, q_ref: np.ndarray) -> None:
+        """PD control for torque command."""
+        return np.clip(self.kp_leg * (q_ref - q) + self.kd_leg * (-q_dot), -self.max_torque_per_joint, self.max_torque_per_joint)
+
+    def wheel_control(self, q_dot: np.ndarray, q_dot_ref: np.ndarray) -> None:
+        """P control for torque command."""
+        return np.clip(self.kp_wheel * (q_dot_ref - q_dot), -self.max_torque_per_wheel, self.max_torque_per_wheel)
 
     # ---------------------------------------------------------------------
     # Callback Functions
@@ -148,7 +163,8 @@ class ActuatorTorqueTestNode(Node):
     def _print_menu(self) -> None:
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
-        self.logger.info("'UP'/'DOWN': torque +/-  |  'RIGHT'/'LEFT': joint index +/-")
+        self.logger.info("'l': Leg position tracking test")
+        self.logger.info("'w': Wheel velocity tracking test")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")
@@ -177,39 +193,64 @@ class ActuatorTorqueTestNode(Node):
         while rclpy.ok():
             key = self._get_key()
 
-            if key == "UP":
-                torque_command = np.clip(self.torque_command[self.current_joint_index] + self.torque_increment, 0, self.max_torque_per_joint)   
-                self.torque_command[self.current_joint_index] = torque_command
-                self.logger.info(f"Joint [{self.current_joint_index}] {self.joint_names[self.current_joint_index]} torque command: {torque_command:.3f}\r")
+            if key == "l":
+                self.leg_test = True
+                self.wheel_test = False
+                self.logger.info("Leg position tracking test mode activated.\r")
 
-            elif key == "DOWN":
-                torque_command = np.clip(self.torque_command[self.current_joint_index] - self.torque_increment, 0, self.max_torque_per_joint)   
-                self.torque_command[self.current_joint_index] = torque_command
-                self.logger.info(f"Joint [{self.current_joint_index}] {self.joint_names[self.current_joint_index]} torque command: {torque_command:.3f}\r")
-
-            elif key == "LEFT":
-                self.torque_command[self.current_joint_index] = 0
-                self.current_joint_index = (self.current_joint_index - 1) % self.num_joints
-                self.logger.info(f"Selected joint: [{self.current_joint_index}] {self.joint_names[self.current_joint_index]}\r")
-
-            elif key == "RIGHT":
-                self.torque_command[self.current_joint_index] = 0
-                self.current_joint_index = (self.current_joint_index + 1) % self.num_joints
-                self.logger.info(f"Selected joint: [{self.current_joint_index}] {self.joint_names[self.current_joint_index]}\r")
+            elif key == "w":
+                self.wheel_test = True
+                self.leg_test = False
+                self.logger.info("Wheel velocity tracking test mode activated.\r")
 
             elif key == 'r':
                 self.reset()
 
+            elif key == "UP":
+                if not self.wheel_test:
+                    self.logger.info("Wheel test mode is not activated. Please press 'w' to activate wheel test mode.\r")
+                    continue
+                velocity_command = self.velocity_command[self.current_wheel_index] + self.velocity_increment   
+                self.velocity_command[self.current_wheel_index] = velocity_command
+                self.logger.info(f"Joint [{self.current_wheel_index}] {self.joint_names[self.current_wheel_index]} velocity command: {velocity_command:.3f} rad/s\r")
+
+            elif key == "DOWN":
+                if not self.wheel_test:
+                    self.logger.info("Wheel test mode is not activated. Please press 'w' to activate wheel test mode.\r")
+                    continue
+                velocity_command = self.velocity_command[self.current_wheel_index] - self.velocity_increment 
+                self.velocity_command[self.current_wheel_index] = velocity_command
+                self.logger.info(f"Joint [{self.current_wheel_index}] {self.joint_names[self.current_wheel_index]} velocity command: {velocity_command:.3f} rad/s\r")
+
+            elif key == "LEFT":
+                if not self.wheel_test:
+                    self.logger.info("Wheel test mode is not activated. Please press 'w' to activate wheel test mode.\r")
+                    continue
+                self.velocity_command[self.current_wheel_index] = 0
+                self.current_wheel_index = max(self.current_wheel_index - 1, 6)
+                self.logger.info(f"Selected joint: [{self.current_wheel_index}] {self.joint_names[self.current_wheel_index]}\r")
+
+            elif key == "RIGHT":
+                if not self.wheel_test:
+                    self.logger.info("Wheel test mode is not activated. Please press 'w' to activate wheel test mode.\r")
+                    continue                
+                self.velocity_command[self.current_wheel_index] = 0
+                self.current_wheel_index = min(self.current_wheel_index + 1, 7)
+                self.logger.info(f"Selected joint: [{self.current_wheel_index}] {self.joint_names[self.current_wheel_index]}\r")
+
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
             else:
                 self.logger.info("Wrong key! Please enter the right key")
                 self._print_menu()
-
-
 
     # ---------------------------------------------------------------------
     # Publish function
@@ -251,6 +292,26 @@ class ActuatorTorqueTestNode(Node):
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
 
+    # ---------------------------------------------------------------------
+    # Sin input
+    # ---------------------------------------------------------------------    
+    def sin_torque(self,
+                   t_sec: float,
+                   amplitude_torque: float,
+                   period_sec: float,
+                   phase_rad: float = 0.0) -> float:
+        """Sinusoidal torque command for friction ID.
+
+        t_sec            : seconds since the sine phase started (0 at phase start)
+        amplitude_torque : peak torque [Nm]
+        period_sec       : sine period [s]  (frequency = 1 / period_sec)
+        phase_rad        : initial phase offset [rad]; default 0 so the command
+                           starts at 0 Nm and ramps smoothly out of the zero hold.
+        """
+        if period_sec <= 0.0:
+            raise ValueError("period_sec must be > 0")
+        omega = 2.0 * math.pi / period_sec
+        return amplitude_torque * math.sin(omega * t_sec + phase_rad)
 
     # ---------------------------------------------------------------------
     # Control Loop
@@ -274,7 +335,51 @@ class ActuatorTorqueTestNode(Node):
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
-        tau   = self.torque_command
+        tau   = np.zeros(self.num_joints, dtype=np.float32)
+
+        # Current state
+        q = np.asarray(joint_state_msg.position, dtype=np.float32)
+        q_dot = np.asarray(joint_state_msg.velocity, dtype=np.float32)
+
+        # Control logic
+        if self.leg_test:
+            q_ref[self.joint_ids] = self.position_command[self.joint_ids]
+            tau[self.joint_ids] = self.leg_control(q[self.joint_ids], q_dot[self.joint_ids], q_ref[self.joint_ids])
+
+        if self.wheel_test:
+            if self.wheel_sin_start_time is None:
+                self.wheel_sin_start_time = now_time
+
+            t_since_sin = now_time - self.wheel_sin_start_time
+            tau_wheel = self.sin_torque(t_since_sin, self.wheel_sin_amplitude, self.wheel_sin_period)
+            tau[self.wheel_ids] = [tau_wheel, -tau_wheel]
 
         # pulbish torque command
+        self.motor_io.read_write_motor(tau)   
         self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ActuatorTargetTestNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            if hasattr(node, "tty"):
+                termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
+                node.tty.close()
+        finally:
+            if hasattr(node, "motor_io"):
+                node.motor_io.close()
+            if hasattr(node, "imu_io"):
+                node.imu_io.close()
+            node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()
+
+if __name__ == "__main__":
+    main()

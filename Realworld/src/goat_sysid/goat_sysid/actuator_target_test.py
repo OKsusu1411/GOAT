@@ -21,7 +21,7 @@ from goat_control.nodes.imu_io import ImuIO
 
 class ActuatorTargetTestNode(Node):
     def __init__(self):
-        super().__init__("actuator_torque_test_node")
+        super().__init__("actuator_target_test_node")
 
 
         # Parameters by Launch File
@@ -106,13 +106,13 @@ class ActuatorTargetTestNode(Node):
         # Manual command
         self.joint_ids = self.cfg["joint_indices"]
         self.wheel_ids = self.cfg["wheel_indices"]
-        self.max_torque_per_joint = 3.0
+        self.max_torque_per_joint = 2.0
         self.max_torque_per_wheel = 1.0
-        self.velocity_increment = 0.1
+        self.velocity_increment = 1.0
         self.current_wheel_index = 6
         self.joint_names = self.cfg["joint_names"]
         self.num_joints = len(self.joint_names)
-        self.position_command = np.asarray(self.cfg["policy_movable"]["natural_joint_position"], dtype=np.float32)
+        self.position_command = np.asarray([0.0, 0.0, 0.738, -0.738, 1.462, -1.462, 0.0, 0.0])
         self.velocity_command = np.zeros(self.num_joints, dtype=np.float32)
         self.leg_test = False
         self.wheel_test = False
@@ -161,7 +161,7 @@ class ActuatorTargetTestNode(Node):
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
         self.logger.info("'l': Leg position tracking test")
-        self.logger.info("'w': Wheel position tracking test")
+        self.logger.info("'w': Wheel velocity tracking test")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")
@@ -237,6 +237,12 @@ class ActuatorTargetTestNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
             else:

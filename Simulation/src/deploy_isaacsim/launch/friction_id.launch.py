@@ -27,6 +27,7 @@ def generate_launch_description():
     default_checkpoint_path = PathJoinSubstitution([
         FindPackageShare("goat_control"),
         "checkpoint",
+        "stand.onnx",
     ])
 
     # Arguments
@@ -53,13 +54,12 @@ def generate_launch_description():
 
     controller_node = Node(
         package="deploy_isaacsim",
-        executable="sim_controller_node",
-        name="sim_controller_node",
+        executable="sim_friction_id_node",
+        name="sim_friction_id_node",
         output="screen",
         parameters=[{
             "yaml_path": LaunchConfiguration("yaml_path"),
             "urdf_path": LaunchConfiguration("urdf_path"),
-            "checkpoint_path": LaunchConfiguration("checkpoint_path"),
             "control_rate_hz": LaunchConfiguration("control_rate_hz"),
             "use_sim_time": True,
         }],

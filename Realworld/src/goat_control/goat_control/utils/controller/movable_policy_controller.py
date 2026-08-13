@@ -37,18 +37,10 @@ class MovableBasePolicyController(PolicyController):
                            joint_pos: np.ndarray,
                            joint_vel: np.ndarray) -> np.ndarray:
 
-        # obs = np.hstack([base_ang_vel,
-        #                   base_quat,
-        #                   self._base_command,
-        #                   joint_pos[self._joint_indices] - self._natural_pos[self._joint_indices],
-        #                   joint_vel,
-        #                   self.previous_action]).reshape(1, -1).astype(np.float32)
-
-        # values = ", ".join(f"{value:.3f}" for value in obs.flatten())
-        # self.logger.info(f"[{values}]\r")
+        gravity_vector = self.get_gravity_orientation(base_quat)
 
         return np.hstack([base_ang_vel,
-                          base_quat,
+                          gravity_vector,
                           self._base_command,
                           joint_pos[self._joint_indices] - self._natural_pos[self._joint_indices],
                           joint_vel,

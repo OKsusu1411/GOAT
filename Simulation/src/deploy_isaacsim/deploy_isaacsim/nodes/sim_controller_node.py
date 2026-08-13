@@ -1,6 +1,7 @@
 # controller_node.py — ROS2 Sim ControllerNode with H1-style synchronized I/O pipeline
 from __future__ import annotations
 
+import os
 import copy
 import threading
 import termios
@@ -59,7 +60,7 @@ class SimControllerNode(Node):
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
         self.yaml_path = str(self.get_parameter("yaml_path").value)
-        checkpoint_path_param = str(self.get_parameter("checkpoint_path").value)
+        self.checkpoint_path = str(self.get_parameter("checkpoint_path").value)
 
         # ------------------------------------------------------------------
         # YAML config
@@ -72,14 +73,6 @@ class SimControllerNode(Node):
 
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
-        # Checkpoint path.
-        # The YAML default is CWD-relative and only resolves when launched from
-        # the Realworld workspace root, so the launch file injects the absolute
-        # installed path instead. Fall back to the YAML value if not provided.
-        if checkpoint_path_param:
-            self.cfg["policy_checkpoint_path"] = checkpoint_path_param
-        self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
-
         # ------------------------------------------------------------------
         # Logger
         # ------------------------------------------------------------------
@@ -91,8 +84,10 @@ class SimControllerNode(Node):
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
         self.nominal_controller = NominalController(self.cfg, self.logger)
         if self.cfg["policy_mode"] == "fixed":
+            self.cfg["policy_checkpoint_path"] = os.path.join(self.checkpoint_path, "fixed.onnx")
             self.policy_controller = FixedBasePolicyController(self.cfg, self.logger)
         elif self.cfg["policy_mode"] == "movable":
+            self.cfg["policy_checkpoint_path"] = os.path.join(self.checkpoint_path, "stand.onnx")
             self.policy_controller = MovableBasePolicyController(self.cfg, self.logger)
         else:
             raise RuntimeError(f"Invalid Mode : {self.cfg['policy_mode']}")
@@ -273,9 +268,6 @@ class SimControllerNode(Node):
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau = np.zeros(self.num_joints, dtype=np.float32)
 
-        # tau[6] = 0.1
-        # tau[7] = 0.1
-
         # --------------------------------------------------------------
         # Proactive condition check
         # --------------------------------------------------------------
@@ -294,15 +286,15 @@ class SimControllerNode(Node):
         if self.publish_mode == "policy":
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
-                                                                            imu_msg,
-                                                                            dt_sec, True)
+                                                                              imu_msg,
+                                                                              dt_sec, True)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
-                                                                   imu_msg, 
-                                                                   dt_sec, True)
+                                                                     imu_msg, 
+                                                                     dt_sec, True)
             v_ref[-2:] = 0.0
 
         else:
@@ -314,6 +306,7 @@ class SimControllerNode(Node):
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
         safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
+
 
         if is_blocked:
             q_ref = np.zeros(self.num_joints, dtype=np.float32)
