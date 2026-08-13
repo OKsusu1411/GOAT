@@ -224,7 +224,7 @@
         </collision>
     </link>
 
-    <link name="wheel_L_Link">
+    <!-- <link name="wheel_L_Link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -240,16 +240,37 @@
             </geometry>
         </collision>
         <inertial>
-            <!-- C_rel_mirror = [0, 7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 7.264E-03 -0.002E-03" />
             <mass value="0.239" />
-            <!-- I_C_new_mirror -->
             <inertia ixx="338.788E-06" ixy="-0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="0.001E-06" izz="338.791E-06" />
         </inertial>
-    </link>  
+    </link>   -->
 
-    <link name="wheel_R_Link">
+    <link name="wheel_L_Link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="package://goat_description//meshes/New_wheel_L_Link.stl"/>
+            </geometry>
+            <material name="orange" />
+            <color rgba="0.69804 0.69804 0.69804 1" />
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 -0.03 0" />
+            <geometry>
+                <cylinder length="0.05" radius="0.1" />
+            </geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0.00E-03 -30.66E-03 -0.00E-03" />
+            <mass value="0.985" />
+            <inertia ixx="4292E-06" ixy="-0.00E-06" ixz="-0.00E-06" 
+                    iyy="6306E-06" iyz="0.00E-06" izz="4292E-06" />
+        </inertial>
+    </link>
+
+    <!-- <link name="wheel_R_Link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -265,14 +286,36 @@
             </geometry>
         </collision>
         <inertial>
-            <!-- C_rel = [0, -7.264, -0.002] mm -->
             <origin rpy="0 0 0" xyz="0.0E-03 -7.264E-03 -0.002E-03" />
             <mass value="0.217" />
-            <!-- I_C_new -->
             <inertia ixx="338.788E-06" ixy="0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="-0.001E-06" izz="338.791E-06" />
         </inertial>
+    </link> -->
+
+    <link name="wheel_R_Link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="package://goat_description/meshes/New_wheel_R_Link.stl"/>
+            </geometry>
+            <material name="orange" />
+            <color rgba="0.69804 0.69804 0.69804 1" />
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 0.03 0" />
+            <geometry>
+                <cylinder length="0.05" radius="0.1" />
+            </geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0.00E-03 30.66E-03 0.00E-03" />
+            <mass value="0.985" />
+            <inertia ixx="4292E-06" ixy="0.00E-06" ixz="-0.00E-06" 
+                    iyy="6306E-06" iyz="-0.00E-06" izz="4292E-06" />
+        </inertial>
     </link>
+
 
     <link name="imu_link">
         <!-- <visual>
