@@ -30,7 +30,6 @@
     </asset>
 
     <default>
-        <joint damping="0.0" frictionloss="0.0"/>
         <geom contype="1" conaffinity="1" friction="0.6 0.1 0.1"/>
         <motor ctrllimited="true"/>
     </default>
@@ -47,25 +46,25 @@
             <geom type="box" size="0.107 0.100 0.095" pos="-0.02 0 -0.015" group="3"/>
 
             <body name="hip_L_Link" pos="0.038386 0.094233 -0.152597">
-                <joint name="hip_L_Joint" type="hinge" axis="-1 0 0" range="-1.7453 1.0123" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                <joint name="hip_L_Joint" type="hinge" axis="-1 0 0" range="-1.7453 1.0123" damping="0.06 0.0 0.0" frictionloss="0.05" armature="0.00202"/>
                 <inertial pos="-0.048092 -0.038296 -0.000162" mass="0.316" fullinertia="0.000143701 0.000215732 0.000197705 -0.000012808 -0.000001530 -0.000000447"/>
                 <geom type="mesh" mesh="hip_L_Link" material="black" contype="0" conaffinity="0" group="1"/>
                 <geom type="cylinder" size="0.042 0.0675" pos="-0.0535 0 0" euler="1.57 0 0" group="3"/>
 
                 <body name="thigh_L_Link" pos="-0.054 -0.017 0">
-                    <joint name="thigh_L_Joint" type="hinge" axis="0 1 0" range="-0.3840 2.0071" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                    <joint name="thigh_L_Joint" type="hinge" axis="0 1 0" range="-0.3840 2.0071" damping="0.04 0.0 0.0" frictionloss="0.04" armature="0.00202"/>
                     <inertial pos="-0.002015 0.042352 -0.035272" mass="0.496" fullinertia="0.003893000 0.002945000 0.001254000 0.000020446085 -0.000110100 0.000343500"/>
                     <geom type="mesh" mesh="thigh_L_Link" material="white" contype="0" conaffinity="0" group="1"/>
                     <geom type="box" size="0.045 0.025 0.0725" pos="-0.011 0.016 -0.116" group="3"/>
 
                     <body name="calf_L_Link" pos="0 0.018 -0.205">
-                        <joint name="knee_L_Joint" type="hinge" axis="0 -1 0" range="-0.523599 2.3387" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                        <joint name="knee_L_Joint" type="hinge" axis="0 -1 0" range="-0.523599 2.3387" damping="0.08 0.0 0.0" frictionloss="0.2" armature="0.00808"/>
                         <inertial pos="0.001969 0.000712 -0.160161" mass="0.326" fullinertia="0.009381000 0.009422000 0.000096695739 0.000000280420 0.000064503362 0.000041025966"/>
                         <geom type="mesh" mesh="calf_L_Link" material="black" contype="0" conaffinity="0" group="1"/>
                         <geom type="cylinder" size="0.0325 0.1165" pos="0 0 -0.116" group="3"/>
 
                         <body name="wheel_L_Link" pos="0 0.016555 -0.200">
-                            <joint name="wheel_L_Joint" type="hinge" axis="0 1 0" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                            <joint name="wheel_L_Joint" type="hinge" axis="0 1 0" damping="0.002 0.0 0.0" frictionloss="0.02" armature="0.0014"/>
                             <inertial pos="0.000000 0.007264 -0.000002" mass="0.239" fullinertia="0.000338788 0.000647488 0.000338791 -0.000000001 -0.000000008 0.000000001"/>
                             <geom type="mesh" mesh="wheel_L_Link" material="orange" contype="0" conaffinity="0" group="1"/>
                             <geom name="wheel_L_collision" type="cylinder" size="0.07275 0.016" pos="0 0.007 0" euler="1.5707 0 0" group="3"/>
@@ -75,25 +74,25 @@
             </body>
 
             <body name="hip_R_Link" pos="0.038386 -0.094233 -0.152597">
-                <joint name="hip_R_Joint" type="hinge" axis="-1 0 0" range="-1.0123 1.7453" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                <joint name="hip_R_Joint" type="hinge" axis="-1 0 0" range="-1.0123 1.7453" damping="0.06 0.0 0.0" frictionloss="0.05" armature="0.00202"/>
                 <inertial pos="-0.048092 0.038296 -0.000162" mass="0.322" fullinertia="0.000143701 0.000215732 0.000197705 0.000012808 -0.000001530 0.000000447"/>
                 <geom type="mesh" mesh="hip_R_Link" material="black" contype="0" conaffinity="0" group="1"/>
                 <geom type="cylinder" size="0.042 0.0675" pos="-0.0535 0 0" euler="1.57 0 0" group="3"/>
 
                 <body name="thigh_R_Link" pos="-0.054 0.017 0">
-                    <joint name="thigh_R_Joint" type="hinge" axis="0 -1 0" range="-2.0071 0.3840" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                    <joint name="thigh_R_Joint" type="hinge" axis="0 -1 0" range="-2.0071 0.3840" damping="0.04 0.0 0.0" frictionloss="0.04" armature="0.00202"/>
                     <inertial pos="-0.002015 -0.042352 -0.035272" mass="0.495" fullinertia="0.003893000 0.002945000 0.001254000 -0.000020446085 -0.000110100 -0.000343500"/>
                     <geom type="mesh" mesh="thigh_R_Link" material="white" contype="0" conaffinity="0" group="1"/>
                     <geom type="box" size="0.045 0.025 0.0725" pos="-0.011 -0.016 -0.116" group="3"/>
 
                     <body name="calf_R_Link" pos="0 -0.018 -0.205">
-                        <joint name="knee_R_Joint" type="hinge" axis="0 1 0" range="-2.3387 0.523599" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                        <joint name="knee_R_Joint" type="hinge" axis="0 1 0" range="-2.3387 0.523599" damping="0.08 0.0 0.0" frictionloss="0.2" armature="0.00808"/>
                         <inertial pos="0.001969 -0.000712 -0.160161" mass="0.327" fullinertia="0.009381000 0.009422000 0.000096695739 -0.000000280420 0.000064503362 -0.000041025966"/>
                         <geom type="mesh" mesh="calf_R_Link" material="black" contype="0" conaffinity="0" group="1"/>
                         <geom type="cylinder" size="0.0325 0.1165" pos="0 0 -0.116" group="3"/>
 
                         <body name="wheel_R_Link" pos="0 -0.016555 -0.200">
-                            <joint name="wheel_R_Joint" type="hinge" axis="0 -1 0" damping="0.0" frictionloss="0.0" armature="0.001"/>
+                            <joint name="wheel_R_Joint" type="hinge" axis="0 -1 0" damping="0.002 0.0 0.0" frictionloss="0.02" armature="0.0014"/>
                             <inertial pos="0.000000 -0.007264 -0.000002" mass="0.217" fullinertia="0.000338788 0.000647488 0.000338791 0.000000001 -0.000000008 -0.000000001"/>
                             <geom type="mesh" mesh="wheel_R_Link" material="orange" contype="0" conaffinity="0" group="1"/>
                             <geom name="wheel_R_collision" type="cylinder" size="0.07275 0.016" pos="0 -0.007 0" euler="1.5707 0 0" group="3"/>

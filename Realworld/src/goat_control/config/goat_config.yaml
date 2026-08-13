@@ -126,7 +126,7 @@ policy_fixed:
 policy_movable:
   observation_info:
     base_ang_vel: 3
-    base_quat: 4
+    gravity_vector: 3
     base_command: 3
     joint_pos: 6
     joint_vel: 8
