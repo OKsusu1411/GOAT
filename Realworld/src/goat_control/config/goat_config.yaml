@@ -66,7 +66,7 @@ motor_direction:
 - 1
 - 1
 - 1
-wheel_radius: 0.07275
+wheel_radius: 0.095
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
 - 30.0
@@ -78,17 +78,17 @@ nsc_leg_proportional_gain:
 - 0.0
 - 0.0
 nsc_leg_derivative_gain:
-- 6.0
-- 6.0
-- 6.0
-- 6.0
-- 6.0
-- 6.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
 - 0.0
 - 0.0
 nsc_num_traj_points: 1000
-nsc_wheel_outer_proportional_gain: 0.02
-nsc_wheel_outer_derivative_gain: 0.02
+nsc_wheel_outer_proportional_gain: 0.03
+nsc_wheel_outer_derivative_gain: 0.03
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
@@ -193,7 +193,8 @@ joint_pos_limit:
 - -.inf
 - .inf
 joint_pos_soft_limit_coeff: 0.95
-joint_vel_estop_threshold: 8.0
+joint_vel_estop_threshold: 4.0
+joint_vel_estop_sample_num: 5
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
