@@ -78,12 +78,12 @@ nsc_leg_proportional_gain:
 - 0.0
 - 0.0
 nsc_leg_derivative_gain:
-- 3.0
-- 3.0
-- 3.0
-- 3.0
-- 3.0
-- 3.0
+- 5.0
+- 5.0
+- 5.0
+- 5.0
+- 5.0
+- 5.0
 - 0.0
 - 0.0
 nsc_num_traj_points: 1000

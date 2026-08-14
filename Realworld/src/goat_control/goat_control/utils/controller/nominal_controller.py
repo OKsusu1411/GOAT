@@ -192,6 +192,17 @@ class NominalController(BaseController):
         self.base_lin_v_curr = np.asarray([imu_state.vel.x, imu_state.vel.y, imu_state.vel.z])
         self.base_ang_v_curr = np.asarray([imu_state.gyro.x, imu_state.gyro.y, imu_state.gyro.z])
         self.base_quat_curr  = np.asarray([imu_state.quat.x, imu_state.quat.y, imu_state.quat.z, imu_state.quat.w])
+
+        # Lazy initialization
+        if self.count_tick == 0:
+            
+            # NOTE: test line =====================================================
+            # self.q_target = self.joint_q_curr
+            # =====================================================================
+
+            # Reference assign
+            for i, (start, end) in enumerate(zip(self.joint_q_curr, self.q_target)):
+                self.q_ref_traj[:, i] = np.linspace(start, end, self.num_traj_points)
             
         # Control Logic
         self.base_q_curr = np.concatenate((np.zeros(3), self.base_quat_curr))        
@@ -220,8 +231,8 @@ class NominalController(BaseController):
         ## ============= Joint control ================ ##
 
         # Update reference
-        # self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
-        self.q_ref[7:] = self.q_target
+        self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
+        # self.q_ref[7:] = self.q_target
 
         # Error Feedback for desired generalized acceleration
         q_err = self.q_ref[7:] - self.q_curr[7:]
@@ -235,10 +246,13 @@ class NominalController(BaseController):
         Jc_dot_v = self.compute_contact_jacobian_dot_times_v()
         Qu = self.compute_constraint_nullspace(Jc)
 
-        qdd_ref = self.project_to_contact_consistent_acceleration(self.a_ref, Jc, Jc_dot_v)
-        tau_w = np.array([wheel_tau, -wheel_tau])
-        tau_leg = self.solve_contact_consistent_dynamics(M, C @ self.v_curr + G, qdd_ref, tau_w, Jc, Jc_dot_v, Qu)
-        tau_constrained_full = self.S_leg.T @ tau_leg + self.S_wheel.T @ tau_w
+        # Constraints-consistent projection using nullspace method
+        a_ref_constrained = self.project_to_contact_consistent_acceleration(self.a_ref, Jc, Jc_dot_v)
+
+        # Torque from reduced dynamics
+        tau_constrained = self.solve_leg_torque_reduced_dynamics(M, C @ self.v_curr + G, a_ref_constrained, np.array([wheel_tau, -wheel_tau]), Qu)
+        tau_constrained_full = self.S_leg.T @ tau_constrained + self.S_wheel.T @ np.array([wheel_tau, -wheel_tau])
+
         # Index Mapping (Pin -> ROS)
         tau_cmd[:] = tau_constrained_full[6:][self.pin_to_ros_ids]
 
@@ -317,72 +331,97 @@ class NominalController(BaseController):
 
     ### =============================== Auxilary Functions (Leg) =============================== ###
 
-    @staticmethod
-    def _skew(v: np.ndarray) -> np.ndarray:
-        """Return the 3x3 skew-symmetric matrix [v]_x."""
-        return np.array([
-            [0.0, -v[2],  v[1]],
-            [v[2],  0.0, -v[0]],
-            [-v[1], v[0],  0.0]])
-
     def compute_contact_jacobian(self) -> np.ndarray:
-        """Compute the 6-D rolling/no-slip wheel contact Jacobian."""
         pin.computeJointJacobians(self.model, self.data, self.q_curr)
         pin.updateFramePlacements(self.model, self.data)
 
         rf = pin.ReferenceFrame.LOCAL_WORLD_ALIGNED
-        placement = pin.SE3.Identity()
 
-        J6_L = pin.getFrameJacobian(self.model, self.data, self.wheel_L_joint_pin_id, placement, rf)
-        J6_R = pin.getFrameJacobian(self.model, self.data, self.wheel_R_joint_pin_id, placement, rf)
+        # Use wheel center (Identity placement) — offset [0,0,-r] would rotate
+        # with the wheel joint, drifting away from the true ground contact point.
+        placement_L = pin.SE3.Identity()
+        placement_R = pin.SE3.Identity()
 
-        Jv_L, Jw_L = J6_L[:3, :], J6_L[3:, :]
-        Jv_R, Jw_R = J6_R[:3, :], J6_R[3:, :]
+        J6_L = pin.getFrameJacobian(
+            self.model,
+            self.data,
+            self.wheel_L_joint_pin_id,
+            placement_L,
+            rf,
+        )
+        J6_R = pin.getFrameJacobian(
+            self.model,
+            self.data,
+            self.wheel_R_joint_pin_id,
+            placement_R,
+            rf,
+        )
 
-        n = self.contact_normal_world
-        r = -self.wheel_radius * n
-        r_skew = self._skew(r)
+        Jv_L = J6_L[:3, :]
+        Jv_R = J6_R[:3, :]
 
-        Jc_L = Jv_L - r_skew @ Jw_L
-        Jc_R = Jv_R - r_skew @ Jw_R
+        n = self.contact_normal_world.reshape(1, 3)
 
-        return np.vstack((Jc_L, Jc_R))
+        Jc = np.vstack([
+            n @ Jv_L,
+            n @ Jv_R,
+        ])
+
+        return Jc
 
     def compute_contact_jacobian_dot_times_v(self) -> np.ndarray:
-        """Compute Jdot_c(q,v) * v for the 6-D rolling/no-slip constraints.
-
-        With r = -R*n fixed in the world frame for flat-ground rolling,
-
-            J_Ci = J_vi - [r]_x J_wi
-            Jdot_Ci v = Jdot_vi v - [r]_x Jdot_wi v.
-
-        Pinocchio's classical frame acceleration at qdd=0 supplies Jdot_vi v
-        and its angular part supplies Jdot_wi v.
+        """
+        Compute Jdot_c(q,v) * v in R^4
         """
         rf = pin.ReferenceFrame.LOCAL_WORLD_ALIGNED
-        placement = pin.SE3.Identity()
+
+        placement_L = pin.SE3.Identity()
+        placement_R = pin.SE3.Identity()
+
         a_zero = np.zeros(self.model.nv)
 
+        # second-order forward kinematics
         pin.forwardKinematics(self.model, self.data, self.q_curr, self.v_curr, a_zero)
         pin.updateFramePlacements(self.model, self.data)
 
-        acc_L = pin.getFrameClassicalAcceleration(self.model, self.data, self.wheel_L_joint_pin_id, placement, rf)
-        acc_R = pin.getFrameClassicalAcceleration(self.model, self.data, self.wheel_R_joint_pin_id, placement, rf)
+        # classical acceleration of the contact point
+        acc_L = pin.getFrameClassicalAcceleration(
+            self.model,
+            self.data,
+            self.wheel_L_joint_pin_id,
+            placement_L,
+            rf
+        )
+        acc_R = pin.getFrameClassicalAcceleration(
+            self.model,
+            self.data,
+            self.wheel_R_joint_pin_id,
+            placement_R,
+            rf
+        )
+
+        # linear part = Jdot(q,v) * v   when a = 0
+        a_lin_L = acc_L.linear
+        a_lin_R = acc_R.linear
 
         n = self.contact_normal_world
-        r = -self.wheel_radius * n
-        r_skew = self._skew(r)
 
-        Jcdot_v_L = np.asarray(acc_L.linear) - r_skew @ np.asarray(acc_L.angular)
-        Jcdot_v_R = np.asarray(acc_R.linear) - r_skew @ np.asarray(acc_R.angular)
+        Jcdot_v = np.array([
+            n @ a_lin_L,   # left normal
+            n @ a_lin_R,   # right normal
+        ])
 
-        return np.concatenate((Jcdot_v_L, Jcdot_v_R))
+        return Jcdot_v
 
-    def compute_constraint_nullspace(self, Jc: np.ndarray, tol: float = 1e-6) -> np.ndarray:
-        """Compute Q_u such that J_c Q_u = 0."""
-        _, singular_values, Vt = np.linalg.svd(Jc, full_matrices=True)
-        rank = np.sum(singular_values > tol)
-        return Vt.T[:, rank:]
+    def compute_constraint_nullspace(self, Jc: np.ndarray, tol: float = 1e-8) -> np.ndarray:
+        """
+        Compute nullspace basis Q_u such that J_c @ Q_u = 0
+        Q_u shape: (nv, nv-rank(Jc))
+        """
+        U, S, Vt = np.linalg.svd(Jc, full_matrices=True)
+        rank = np.sum(S > tol)
+        Qu = Vt.T[:, rank:]   # nullspace basis
+        return Qu
 
     def project_to_contact_consistent_acceleration(self,
                                                    qdd_nom: np.ndarray,
@@ -402,67 +441,19 @@ class NominalController(BaseController):
         qdd_d = qdd_nom - correction
         return qdd_d
 
-    def solve_contact_consistent_dynamics(self,
+    def solve_leg_torque_reduced_dynamics(self,
                                           M: np.ndarray,
                                           h: np.ndarray,
-                                          qdd_ref: np.ndarray,
+                                          qdd_d: np.ndarray,
                                           tau_w: np.ndarray,
-                                          Jc: np.ndarray,
-                                          Jcdot_v: np.ndarray,
-                                          Qu: np.ndarray,
-                                          tau_regularization: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
-        """Solve generalized acceleration and leg torque simultaneously.
-
-            min_{qdd, tau_l}
-                0.5 ||qdd - qdd_ref||^2 + tau_regularization * ||tau_l||^2
-
-            s.t.
-                J_c qdd + Jdot_c v = 0
-
-                Q_u^T (M qdd + h - S_l^T tau_l - S_w^T tau_w) = 0
-
-        qdd_ref is assumed to be the output of
-        project_to_contact_consistent_acceleration().
+                                          Qu: np.ndarray) -> np.ndarray:
         """
-        n_u = Qu.shape[1]
-        n_leg = self.S_leg.shape[0]
-        n_x = n_u + n_leg
+        Solve leg torque from reduced constrained dynamics:
+            tau_j = (Qu^T Sj^T)^dagger Qu^T (M qdd_d + h - Sw^T tau_w)
+        """
+        rhs_full = M @ qdd_d + h - self.S_wheel.T @ tau_w
+        A = Qu.T @ self.S_leg.T
+        b = Qu.T @ rhs_full
 
-        # x = [z, tau_leg]
-        H = np.zeros((n_x, n_x))
-        H[:n_u, :n_u] = np.eye(n_u)
-        H[n_u:, n_u:] = tau_regularization * np.eye(n_leg)
-
-        # No linear objective term:
-        # 0.5 * ||z||^2 + 0.5 * eps * ||tau_leg||^2
-        g = np.zeros(n_x)
-
-        # Reduced dynamics:
-        #
-        # Qu^T M Qu z - Qu^T S_leg^T tau_leg
-        # = Qu^T (S_wheel^T tau_w - h - M qdd_ref)
-        Aeq = np.hstack((
-            Qu.T @ M @ Qu,
-            -Qu.T @ self.S_leg.T
-        ))
-
-        beq = Qu.T @ (
-            self.S_wheel.T @ tau_w
-            - h
-            - M @ qdd_ref
-        )
-
-        KKT = np.block([
-            [H, Aeq.T],
-            [Aeq, np.zeros((Aeq.shape[0], Aeq.shape[0]))]
-        ])
-
-        rhs = np.concatenate((-g, beq))
-        solution = np.linalg.solve(KKT, rhs)
-
-        x = solution[:n_x]
-
-        z = x[:n_u]
-        tau_leg = x[n_u:]
-
-        return tau_leg
+        tau_j = np.linalg.pinv(A) @ b
+        return tau_j
