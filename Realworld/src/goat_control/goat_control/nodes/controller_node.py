@@ -219,7 +219,9 @@ class ControllerNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                for _ in range(10):
+                    self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                    time.sleep(0.1)
                 rclpy.shutdown()
                 break
 
@@ -234,6 +236,9 @@ class ControllerNode(Node):
                 self.reset()
 
             elif key == '\x03': # Ctrl+C
+                for _ in range(10):
+                    self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                    time.sleep(0.1)
                 rclpy.shutdown()
                 break
 
