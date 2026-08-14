@@ -34,7 +34,7 @@ class SafetyLimiter:
     """
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
-        self.joint_indices: List[int] = list(cfg["self.joint_indices"])
+        self.joint_indices: List[int] = list(cfg["joint_indices"])
         self.num_joints: int = len(cfg["joint_names"])
 
         self.logger = logger
