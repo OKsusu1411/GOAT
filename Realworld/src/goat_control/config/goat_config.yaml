@@ -193,8 +193,8 @@ joint_pos_limit:
 - -.inf
 - .inf
 joint_pos_soft_limit_coeff: 0.95
-joint_vel_estop_threshold: 4.0
-joint_vel_estop_sample_num: 5
+joint_vel_estop_threshold: 6.0
+joint_vel_estop_sample_num: 10
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
