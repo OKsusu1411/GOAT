@@ -66,7 +66,7 @@ motor_direction:
 - 1
 - 1
 - 1
-wheel_radius: 0.07275
+wheel_radius: 0.095
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
 - 30.0
@@ -78,17 +78,17 @@ nsc_leg_proportional_gain:
 - 0.0
 - 0.0
 nsc_leg_derivative_gain:
-- 6.0
-- 6.0
-- 6.0
-- 6.0
-- 6.0
-- 6.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
+- 3.0
 - 0.0
 - 0.0
 nsc_num_traj_points: 1000
-nsc_wheel_outer_proportional_gain: 0.02
-nsc_wheel_outer_derivative_gain: 0.02
+nsc_wheel_outer_proportional_gain: 0.03
+nsc_wheel_outer_derivative_gain: 0.03
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
