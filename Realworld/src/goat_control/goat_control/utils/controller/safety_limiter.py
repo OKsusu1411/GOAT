@@ -55,7 +55,7 @@ class SafetyLimiter:
         self._estop_indices = np.asarray(self.joint_indices, dtype=int)
         self._estop_threshold = float(cfg["joint_vel_estop_threshold"])
         self._estop_sample_num = int(cfg.get("joint_vel_estop_sample_num", 1))
-        self._vel_buffer: deque[np.ndarray] = deque(np.zeros((self._estop_sample_num, len(self.joint_indices))) ,maxlen=self._estop_sample_num)
+        self._vel_buffer: deque[np.ndarray] = deque(np.zeros((self._estop_sample_num, len(self.joint_indices))), maxlen=self._estop_sample_num)
 
         # --- LPF state ---
         self._prev_torque = np.zeros(self.num_joints, dtype=float)
@@ -130,7 +130,7 @@ class SafetyLimiter:
     def _check_joint_vel_estop(self, vel: np.ndarray) -> bool:
         """Return True if any estop joint's windowed speed exceeds the threshold."""
         joint_vel = np.asarray(vel, dtype=float).flatten()
-        self._vel_buffer.append(joint_vel)
+        self._vel_buffer.append(joint_vel[self.joint_indices])
         vel_buffer_np = np.asarray(self._vel_buffer, dtype=float)   # (sample_num, num_joints)
         vel_mean = np.mean(np.abs(vel_buffer_np), axis=0)         # [rad/s]
         over_threshold = vel_mean[self._estop_indices] > self._estop_threshold
