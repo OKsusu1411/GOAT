@@ -60,6 +60,7 @@ class SimLogViewerNode(Node):
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
         self.start_time = None
+        self.log_start = False
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -119,8 +120,14 @@ class SimLogViewerNode(Node):
 
         joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
 
-        now_sec = (self.get_clock().now().nanoseconds - self.start_time) * 1e-9
+        if not self.log_start:
+            if np.any(np.abs(joint_effort_ref) > 0.1):
+                self.log_start = True
+                self.start_time = self.get_clock().now().nanoseconds
+            else:
+                return
 
+        now_sec = (self.get_clock().now().nanoseconds - self.start_time) * 1e-9
         row =  [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
         row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
@@ -129,8 +136,6 @@ class SimLogViewerNode(Node):
 
 
     def _tick(self, joint_state_msg: JointState, joint_command_msg: JointState) -> None:
-        if self.start_time is None:
-            self.start_time = self.get_clock().now().nanoseconds
         self.joint_current = joint_state_msg
         self.joint_ref = joint_command_msg
 
@@ -191,6 +196,17 @@ def main(args=None):
             node.csv_file.flush()
             node.csv_file.close()
             print(f"CSV file '{node.csv_path}' closed.")
+
+            # Check csv file validity
+            with open(node.csv_path, "r", newline="") as f:
+                reader = csv.reader(f)
+                # Call header and first low data
+                _ = next(reader, None)
+                first_data = next(reader, None) 
+            # Delete empty csv file
+            if first_data is None:
+                Path(node.csv_path).unlink()
+                print(f"Delete CSV file because it is empty.")
 
         node.destroy_node()
 
