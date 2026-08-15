@@ -219,9 +219,6 @@ class ControllerNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
-                for _ in range(10):
-                    self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                    time.sleep(0.1)
                 rclpy.shutdown()
                 break
 
@@ -236,9 +233,6 @@ class ControllerNode(Node):
                 self.reset()
 
             elif key == '\x03': # Ctrl+C
-                for _ in range(10):
-                    self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                    time.sleep(0.1)
                 rclpy.shutdown()
                 break
 
@@ -496,6 +490,9 @@ def main(args=None):
                 termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
                 node.tty.close()
         finally:
+            for _ in range(10):
+                node.motor_io.read_write_motor(np.zeros(node.num_joints, dtype=np.float32))
+                time.sleep(0.1)
             if hasattr(node, "motor_io"):
                 node.motor_io.close()
             if hasattr(node, "imu_io"):
