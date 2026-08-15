@@ -157,7 +157,7 @@ class LogViewerNode(Node):
 
         # CSV Logging start logic
         if not self.log_start:
-            if np.any(np.abs(joint_effort_real) > 0.1):
+            if np.any(np.abs(joint_effort_real) > 0.5):
                 self.log_start = True
                 self.start_time = self.get_clock().now().nanoseconds
 
