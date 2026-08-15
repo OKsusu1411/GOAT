@@ -219,7 +219,6 @@ class ControllerNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
 
@@ -420,11 +419,11 @@ class ControllerNode(Node):
             tau[:] = safe_torque
 
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
-        self.motor_io.read_write_motor(tau)                                     
+        q_current = self.motor_io.read_write_motor(tau)                                     
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
-        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)
+        self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
@@ -491,6 +490,9 @@ def main(args=None):
                 termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
                 node.tty.close()
         finally:
+            for _ in range(10):
+                node.motor_io.read_write_motor(np.zeros(node.num_joints, dtype=np.float32))
+                time.sleep(0.1)
             if hasattr(node, "motor_io"):
                 node.motor_io.close()
             if hasattr(node, "imu_io"):

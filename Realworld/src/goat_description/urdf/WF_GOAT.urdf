@@ -224,7 +224,7 @@
         </collision>
     </link>
 
-    <!-- <link name="wheel_L_Link">
+    <link name="wheel_L_Link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -245,9 +245,9 @@
             <inertia ixx="338.788E-06" ixy="-0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="0.001E-06" izz="338.791E-06" />
         </inertial>
-    </link>   -->
+    </link>  
 
-    <link name="wheel_L_Link">
+    <!-- <link name="wheel_L_Link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -268,9 +268,9 @@
             <inertia ixx="4292E-06" ixy="-0.00E-06" ixz="-0.00E-06" 
                     iyy="6306E-06" iyz="0.00E-06" izz="4292E-06" />
         </inertial>
-    </link>
+    </link> -->
 
-    <!-- <link name="wheel_R_Link">
+    <link name="wheel_R_Link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -291,9 +291,9 @@
             <inertia ixx="338.788E-06" ixy="0.001E-06" ixz="-0.008E-06" 
                     iyy="647.488E-06" iyz="-0.001E-06" izz="338.791E-06" />
         </inertial>
-    </link> -->
+    </link>
 
-    <link name="wheel_R_Link">
+    <!-- <link name="wheel_R_Link">
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -314,7 +314,7 @@
             <inertia ixx="4292E-06" ixy="0.00E-06" ixz="-0.00E-06" 
                     iyy="6306E-06" iyz="-0.00E-06" izz="4292E-06" />
         </inertial>
-    </link>
+    </link> -->
 
 
     <link name="imu_link">

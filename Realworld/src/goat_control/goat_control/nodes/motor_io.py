@@ -108,6 +108,8 @@ class MotorIO:
         # Cache for next tick + return to caller.
         self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
 
+        return self.latest_joint_state
+
     def close(self) -> None:
         """Close both CAN buses on shutdown (stops reader threads first)."""
         for can_interface in getattr(self, "cans", []):

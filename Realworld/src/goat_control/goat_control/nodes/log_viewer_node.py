@@ -57,6 +57,7 @@ class LogViewerNode(Node):
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
         self.start_time = None
+        self.log_start = False
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -98,9 +99,6 @@ class LogViewerNode(Node):
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-        # Logging interval
-        self.csv_logging_interval = 1
-
     def _on_joint_ref(self, msg: JointState) -> None:
         self.joint_ref = msg
 
@@ -108,12 +106,10 @@ class LogViewerNode(Node):
         self.joint_current = msg
 
     def _tick(self) -> None:
-        if self.start_time is None:
-            self.start_time = self.get_clock().now().nanoseconds
         # No subscription
         if self.joint_current is None:
             return
-        
+                
         if self.joint_ref is None:
             self.joint_ref = self.joint_current
 
@@ -159,8 +155,14 @@ class LogViewerNode(Node):
         # Leading newline: print one line below the logger prefix ([INFO] ...)
         self.get_logger().info("\n" + "\n".join(lines))
 
+        # CSV Logging start logic
+        if not self.log_start:
+            if np.any(np.abs(joint_effort_real) > 0.5):
+                self.log_start = True
+                self.start_time = self.get_clock().now().nanoseconds
+
         # Save joint position only to CSV
-        if self.is_csv_logging and (self._print_count % self.csv_logging_interval == 0):
+        if self.is_csv_logging and self.log_start:
             if self.log_degrees:
                 joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
                 joint_vel_log = np.rad2deg(np.array(self.joint_current.velocity, dtype=float))
@@ -174,9 +176,6 @@ class LogViewerNode(Node):
             row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
 
             self.csv_writer.writerow(row)
-
-        # Update count
-        self._print_count += 1
 
 def main(args=None):
     rclpy.init(args=args)
@@ -193,6 +192,17 @@ def main(args=None):
             node.csv_file.flush()
             node.csv_file.close()
             print(f"CSV file '{node.csv_path}' closed.")
+
+            # Check csv file validity
+            with open(node.csv_path, "r", newline="") as f:
+                reader = csv.reader(f)
+                # Call header and first low data
+                _ = next(reader, None)
+                first_data = next(reader, None) 
+            # Delete empty csv file
+            if first_data is None:
+                Path(node.csv_path).unlink()
+                print(f"Delete CSV file because it is empty.")
 
         node.destroy_node()
 

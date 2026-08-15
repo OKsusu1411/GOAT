@@ -60,6 +60,9 @@ class SimLogViewerNode(Node):
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
         self.start_time = None
+        self.log_start = False
+        self.log_interval = 2 # 100hz
+        self._print_count = 0
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -69,7 +72,6 @@ class SimLogViewerNode(Node):
 
         self.joint_current: Optional[JointState] = None
         self.joint_ref: Optional[JointState] = None
-        self._print_count = 0
         self.command_unit = "Nm"
 
         # CSV logging
@@ -101,27 +103,30 @@ class SimLogViewerNode(Node):
         self.sync = TimeSynchronizer([self._joint_states_sub, self._joint_command_sub], 10)
         self.sync.registerCallback(self._tick)
 
-        # Logging interval
-        if self.is_csv_logging:
-            self.csv_timer = self.create_timer(1.0 / self.print_rate_hz, self._write_csv)
 
-
-    def _write_csv(self) -> None:
-        if self.joint_current is None or self.joint_ref is None:
-            return
-
+    def _write_csv(self, joint_state_msg: JointState, joint_command_msg: JointState) -> None:
         if self.log_degrees:
-            joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
-            joint_vel_log = np.rad2deg(np.array(self.joint_current.velocity, dtype=float))
+            joint_pos_log = np.rad2deg(np.asarray(joint_state_msg.position, dtype=float))
+            joint_vel_log = np.rad2deg(np.asarray(joint_state_msg.velocity, dtype=float))
         else:
-            joint_pos_log = np.array(self.joint_current.position, dtype=float)
-            joint_vel_log = np.array(self.joint_current.velocity, dtype=float)
+            joint_pos_log = np.asarray(joint_state_msg.position, dtype=float)
+            joint_vel_log = np.asarray(joint_state_msg.velocity, dtype=float)
 
-        joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
+        joint_effort_ref = np.asarray(joint_command_msg.effort, dtype=float)
 
-        now_sec = (self.get_clock().now().nanoseconds - self.start_time) * 1e-9
+        stamp_ns = (joint_state_msg.header.stamp.sec * 1_000_000_000 + joint_state_msg.header.stamp.nanosec)
 
-        row =  [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
+        if not self.log_start:
+            if np.any(np.abs(joint_effort_ref) > 0.1):
+                self.log_start = True
+                self.start_time = stamp_ns
+            else:
+                return
+
+        now_sec = (stamp_ns - self.start_time) * 1e-9
+
+        row = [now_sec]
+        row += [float(joint_pos_log[i]) for i in range(self.num_joints)]
         row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
 
@@ -129,8 +134,6 @@ class SimLogViewerNode(Node):
 
 
     def _tick(self, joint_state_msg: JointState, joint_command_msg: JointState) -> None:
-        if self.start_time is None:
-            self.start_time = self.get_clock().now().nanoseconds
         self.joint_current = joint_state_msg
         self.joint_ref = joint_command_msg
 
@@ -176,6 +179,12 @@ class SimLogViewerNode(Node):
         # Leading newline: print one line below the logger prefix ([INFO] ...)
         self.get_logger().info("\n" + "\n".join(lines))
 
+        if self.is_csv_logging and (self._print_count % self.log_interval == 0):
+            self._write_csv(joint_state_msg, joint_command_msg)
+
+        self._print_count += 1
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = SimLogViewerNode()
@@ -191,6 +200,17 @@ def main(args=None):
             node.csv_file.flush()
             node.csv_file.close()
             print(f"CSV file '{node.csv_path}' closed.")
+
+            # Check csv file validity
+            with open(node.csv_path, "r", newline="") as f:
+                reader = csv.reader(f)
+                # Call header and first low data
+                _ = next(reader, None)
+                first_data = next(reader, None) 
+            # Delete empty csv file
+            if first_data is None:
+                Path(node.csv_path).unlink()
+                print(f"Delete CSV file because it is empty.")
 
         node.destroy_node()
 
