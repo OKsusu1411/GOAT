@@ -179,80 +179,6 @@ def run_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
             else:
                 next_sample_time = time.perf_counter()
 
-
-def run_sin_current_test(can_interface: CanInterface, motor_driver: MotorDriver,
-                        cfg: dict, args: Any, csv_path: Path) -> None:
-    """Zero warmup → sine drive → zero recover, logged to CSV."""
-
-    amplitude_amp = args.current           # peak current [A]
-    period_sec = args.sin_period           # sin period  [s]
-    zero_sec = args.zero
-    apply_sec = args.apply                 # sin drive length [s]
-    recovery_sec = args.recovery
-    sample_hz = args.hz
-    timeout = args.timeout
-
-    total_duration_sec = zero_sec + apply_sec + recovery_sec
-    sample_period_sec = 1.0 / sample_hz
-
-    fieldnames = ["time_sec",
-                    "mode",
-                    "iq_cmd_amp_ideal",       # un-quantised sin value
-                    "iq_cmd_requested_amp",
-                    "iq_cmd_lsb",
-                    "iq_cmd_amp",
-                    "iq_lsb",
-                    "iq_amp",
-                    "iq_error_amp",
-                    "speed_dps"]
-
-    start_time = time.perf_counter()
-    next_sample_time = start_time
-
-    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        writer.writeheader()
-
-        while True:
-            elapsed_sec = time.perf_counter() - start_time
-            if elapsed_sec >= total_duration_sec:
-                break
-
-            # Pick command by phase
-            if elapsed_sec < zero_sec:
-                current_cmd_amp_ideal = 0.0
-            elif elapsed_sec < zero_sec + apply_sec:
-                t_since_sin = elapsed_sec - zero_sec
-                current_cmd_amp_ideal = sin_current_amp(t_since_sin, amplitude_amp, period_sec)
-            else:
-                current_cmd_amp_ideal = 0.0
-
-            result = send_current_and_read(can_interface=can_interface,
-                                            motor_driver=motor_driver,
-                                            cfg=cfg,
-                                            current_cmd_amp=current_cmd_amp_ideal,
-                                            timeout=timeout)
-
-            writer.writerow({
-                "time_sec": elapsed_sec,
-                "mode": "sin",
-                "iq_cmd_amp_ideal": current_cmd_amp_ideal,
-                "iq_cmd_requested_amp": current_cmd_amp_ideal,
-                "iq_cmd_lsb": result["iq_cmd_lsb"],
-                "iq_cmd_amp": result["iq_cmd_amp"],
-                "iq_lsb": result["iq_lsb"],
-                "iq_amp": result["iq_amp"],
-                "iq_error_amp": result["iq_error_amp"],
-                "speed_dps": result["speed_dps"],
-            })
-
-            next_sample_time += sample_period_sec
-            sleep_sec = next_sample_time - time.perf_counter()
-            if sleep_sec > 0.0:
-                time.sleep(sleep_sec)
-            else:
-                next_sample_time = time.perf_counter()
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -302,13 +228,9 @@ if __name__ == "__main__":
                            timeout=args.timeout,
                            is_leg=True)
         
-        # run_current_test(can_interface=can_interface, 
-        #                  motor_driver=motor_driver,
-        #                  cfg=cfg, args=args, csv_path=csv_path)
-
-        run_sin_current_test(can_interface=can_interface, 
-                             motor_driver=motor_driver,
-                             cfg=cfg, args=args, csv_path=csv_path)
+        run_current_test(can_interface=can_interface, 
+                         motor_driver=motor_driver,
+                         cfg=cfg, args=args, csv_path=csv_path)
 
     except KeyboardInterrupt:
         print("\nCurrent test interrupted.")
