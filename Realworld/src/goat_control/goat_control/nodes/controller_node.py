@@ -423,6 +423,7 @@ class ControllerNode(Node):
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
+        q_current.header.timestamp = self.get_clock().now().to_msg()
         self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
