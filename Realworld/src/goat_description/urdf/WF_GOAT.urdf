@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot name="wheel_GOAT">
-    <!-- 
-      Uncomment to support the robot by fixing its base link to the world frame. 
-      This anchors the robot in place, preventing movement.
-    -->
+    <!-- Enable when Base link is fixed -->
     
     <!-- 
     <link name="world"/>
@@ -13,33 +10,6 @@
         <child link="base_Link"/>
     </joint>
     -->
-    <material name="black">
-        <color rgba="0.0 0.0 0.0 1.0"/>
-    </material>
-    <material name="blue">
-        <color rgba="0.0 0.0 0.8 1.0"/>
-    </material>
-    <material name="green">
-        <color rgba="0.0 0.8 0.0 1.0"/>
-    </material>
-    <material name="grey">
-        <color rgba="0.2 0.2 0.2 1.0"/>
-    </material>
-    <material name="silver">
-        <color rgba="0.9137254901960784 0.9137254901960784 0.8470588235294118 1.0"/>
-    </material>
-    <material name="orange">
-        <color rgba="1.0 0.4235294117647059 0.0392156862745098 1.0"/>
-    </material>
-    <material name="brown">
-        <color rgba="0.8705882352941177 0.8117647058823529 0.7647058823529411 1.0"/>
-    </material>
-    <material name="red">
-        <color rgba="0.8 0.0 0.0 1.0"/>
-    </material>
-    <material name="white">
-        <color rgba="1.0 1.0 1.0 1.0"/>
-    </material>
 
     <!-- ****************************************** Link ******************************************************** -->
 
@@ -53,10 +23,10 @@
         <visual>
             <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/base_Link.stl"/>
+                <mesh filename="../meshes/base_Link.stl"/>
             </geometry>
-            <material name="black">
-                <color rgba="0.79216 0.81961 0.93333 1"/>
+            <material name="blue">
+                <color rgba="0.0 0.0 0.8 1.0"/>
             </material>
         </visual>
         <collision>
@@ -71,7 +41,10 @@
                 <box size="0.07 0.25 0.08"/>
             </geometry>
         </collision>
+<<<<<<< HEAD
 
+=======
+>>>>>>> 65-new-floating-base-test
     </link>
 
     <link name="hip_L_Link">
@@ -84,10 +57,10 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/hip_L_Link.stl"/>
+                <mesh filename="../meshes/hip_L_Link.stl"/>
             </geometry>
-            <material name="">
-                <color rgba="0.79216 0.81961 0.93333 1"/>
+            <material name="white">
+                <color rgba="1.0 1.0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
@@ -108,10 +81,10 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/hip_R_Link.stl"/>
+                <mesh filename="../meshes/hip_R_Link.stl"/>
             </geometry>
-            <material name="">
-                <color rgba="0.79216 0.81961 0.93333 1"/>
+            <material name="white">
+                <color rgba="1.0 1.0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
@@ -132,10 +105,10 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/thigh_L_Link.stl"/>
+                <mesh filename="../meshes/thigh_L_Link.stl"/>
             </geometry>
-            <material name="">
-                <color rgba="1 1 1 1"/>
+            <material name="white">
+                <color rgba="1.0 1.0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
@@ -157,10 +130,10 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/thigh_R_Link.stl"/>
+                <mesh filename="../meshes/thigh_R_Link.stl"/>
             </geometry>
-            <material name="">
-                <color rgba="1 1 1 1"/>
+            <material name="white">
+                <color rgba="1.0 1.0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
@@ -181,10 +154,10 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/calf_L_Link.stl"/>
+                <mesh filename="../meshes/calf_L_Link.stl"/>
             </geometry>
-            <material name="">
-                <color rgba="0.79216 0.81961 0.93333 1"/>
+            <material name="white">
+                <color rgba="1.0 1.0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
@@ -205,10 +178,10 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="package://goat_description/meshes/calf_R_Link.stl"/>
+                <mesh filename="../meshes/calf_R_Link.stl"/>
             </geometry>
-            <material name="">
-                <color rgba="0.79216 0.81961 0.93333 1"/>
+            <material name="white">
+                <color rgba="1.0 1.0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
@@ -219,6 +192,10 @@
         </collision>
     </link>
 
+<<<<<<< HEAD
+=======
+    <!-- BFW -->
+>>>>>>> 65-new-floating-base-test
     <link name="wheel_L_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="0.00E-03 30.66E-03 -0.00E-03" />
@@ -226,6 +203,7 @@
             <inertia ixx="3366E-06" ixy="0.00E-06" ixz="0.00E-06" 
                     iyy="6306E-06" iyz="0.00E-06" izz="3366E-06" />
         </inertial>
+<<<<<<< HEAD
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
@@ -295,13 +273,94 @@
             <inertia ixx="352.7E-06" ixy="0.0" ixz="0.0" 
                     iyy="674E-06" iyz="0.0" izz="352.7E-06" />
         </inertial>
+=======
+>>>>>>> 65-new-floating-base-test
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
-                <mesh filename="package://goat_description/meshes/wheel_R_Link.stl"/>
+                <mesh filename="../meshes/BF_wheel_L_Link.stl"/>
             </geometry>
+<<<<<<< HEAD
             <material name="orange" />
             <color rgba="0.69804 0.69804 0.69804 1" />
+=======
+            <material name="black">
+                <color rgba="0.0 0.0 0.0 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 0.03 0" />
+            <geometry>
+                <cylinder length="0.05" radius="0.1" />
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- <link name="wheel_L_Link">
+        <inertial>
+            <origin rpy="0 0 0" xyz="0.0 8.265E-03 0.0" />
+            <mass value="0.220" />
+            <inertia ixx="352.7E-06" ixy="0.0" ixz="0.0" 
+                    iyy="674E-06" iyz="0.0" izz="352.7E-06" />
+        </inertial>
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="../meshes/wheel_L_Link.stl"/>
+            </geometry>
+            <material name="black">
+                <color rgba="0.0 0.0 0.0 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 7E-03 0" />
+            <geometry>
+                <cylinder length="7E-03" radius="72.75E-03" />
+            </geometry>
+        </collision>
+    </link> -->
+
+    <!-- BFW -->
+    <link name="wheel_R_Link">
+        <inertial>
+            <origin rpy="0 0 0" xyz="0.00E-03 -30.66E-03 0.00E-03" />
+            <mass value="0.985" />
+            <inertia ixx="3366E-06" ixy="0.00E-06" ixz="0.00E-06" 
+                    iyy="6306E-06" iyz="0.00E-06" izz="3366E-06" />
+        </inertial>
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="../meshes/BF_wheel_R_Link.stl"/>
+            </geometry>
+            <material name="black">
+                <color rgba="0.0 0.0 0.0 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin rpy="1.5707963267948966 0 0" xyz="0 -0.03 0" />
+            <geometry>
+                <cylinder length="0.05" radius="0.1" />
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- <link name="wheel_R_Link">
+        <inertial>
+            <origin rpy="0 0 0" xyz="0.0 -8.265E-03 0.0" />
+            <mass value="0.220" />
+            <inertia ixx="352.7E-06" ixy="0.0" ixz="0.0" 
+                    iyy="674E-06" iyz="0.0" izz="352.7E-06" />
+        </inertial>
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <geometry>
+                <mesh filename="../meshes/wheel_R_Link.stl"/>
+            </geometry>
+            <material name="black">
+                <color rgba="0.0 0.0 0.0 1.0"/>
+            </material>
+>>>>>>> 65-new-floating-base-test
         </visual>
         <collision>
             <origin rpy="1.5707963267948966 0 0" xyz="0 -7E-03 0" />
@@ -311,6 +370,10 @@
         </collision>
     </link> -->
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 65-new-floating-base-test
     <link name="imu_link">
         <!-- <visual>
             <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -368,7 +431,11 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
+<<<<<<< HEAD
         <limit effort="4.5" lower="-0.523599" upper="2.3387" velocity="33.5"/>
+=======
+        <limit effort="9.0" lower="-0.523599" upper="2.3387" velocity="33.5"/>
+>>>>>>> 65-new-floating-base-test
         <dynamics damping="0.0" stiffness ="0.0"/>
         <dynamics friction="0.0" />
     </joint>
@@ -378,7 +445,11 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
+<<<<<<< HEAD
         <limit effort="4.5" lower="-2.3387" upper="0.523599" velocity="33.5"/>
+=======
+        <limit effort="9.0" lower="-2.3387" upper="0.523599" velocity="33.5"/>
+>>>>>>> 65-new-floating-base-test
         <dynamics damping="0.0" stiffness ="0.0"/>
         <dynamics friction="0.0" />
     </joint>
