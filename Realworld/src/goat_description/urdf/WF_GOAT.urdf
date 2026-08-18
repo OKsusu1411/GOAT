@@ -219,7 +219,7 @@
         </collision>
     </link>
 
-    <!-- <link name="wheel_L_Link">
+    <link name="wheel_L_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="0.00E-03 30.66E-03 -0.00E-03" />
             <mass value="0.985" />
@@ -240,9 +240,9 @@
                 <cylinder length="0.05" radius="0.1" />
             </geometry>
         </collision>
-    </link> -->
+    </link>
 
-    <link name="wheel_L_Link">
+    <!-- <link name="wheel_L_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="0.0 8.265E-03 0.0" />
             <mass value="0.220" />
@@ -263,9 +263,9 @@
                 <cylinder length="7E-03" radius="72.75E-03" />
             </geometry>
         </collision>
-    </link>
+    </link> -->
 
-    <!-- <link name="wheel_R_Link">
+    <link name="wheel_R_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="0.00E-03 -30.66E-03 0.00E-03" />
             <mass value="0.985" />
@@ -286,9 +286,9 @@
                 <cylinder length="0.05" radius="0.1" />
             </geometry>
         </collision>
-    </link> -->
+    </link>
 
-    <link name="wheel_R_Link">
+    <!-- <link name="wheel_R_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="0.0 -8.265E-03 0.0" />
             <mass value="0.220" />
@@ -309,7 +309,7 @@
                 <cylinder length="7E-03" radius="72.75E-03" />
             </geometry>
         </collision>
-    </link>
+    </link> -->
 
     <link name="imu_link">
         <!-- <visual>
