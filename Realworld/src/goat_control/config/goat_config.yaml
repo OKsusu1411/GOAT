@@ -99,7 +99,7 @@ policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
 policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
-policy_command_joint_step: 10.0
+policy_command_joint_step: 30.0
 policy_decimation: 2.0
 policy_fixed:
   observation_info:

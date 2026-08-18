@@ -272,7 +272,7 @@ class SimControllerNode(Node):
         # Proactive condition check
         # --------------------------------------------------------------
         if self.publish_mode is None:
-            self._publish_joint_command(q_ref, v_ref, tau)
+            self._publish_joint_command(q_ref, v_ref, tau, joint_msg.header.stamp)
             return
         
         # --------------------------------------------------------------
@@ -318,9 +318,9 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
-        self._publish_joint_command(q_ref, v_ref, tau)
+        self._publish_joint_command(q_ref, v_ref, tau, joint_msg.header.stamp)
 
-    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray) -> None:
+    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray, stamp) -> None:
         """Publish command to /joint_command.
 
         Message semantic:
@@ -329,7 +329,7 @@ class SimControllerNode(Node):
           effort:   torque
         """
         msg = JointState()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = stamp
 
         msg.name = [
             "hip_L_Joint",
