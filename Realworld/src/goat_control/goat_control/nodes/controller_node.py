@@ -445,7 +445,7 @@ class ControllerNode(Node):
             return
         # Update joint state message for logging
         msg_joint = JointState()
-        msg_joint.header.stamp = self.now_stamp
+        msg_joint.header.stamp = joint_state_msg.header.stamp
         msg_joint.header.frame_id = "base_link"
         msg_joint.name = joint_state_msg.name
         msg_joint.position = joint_state_msg.position
@@ -453,7 +453,7 @@ class ControllerNode(Node):
         msg_joint.effort = joint_state_msg.effort
         # Update IMU message for logging 
         msg_imu = ImuState()
-        msg_imu.header.stamp = self.now_stamp
+        msg_imu.header.stamp = joint_state_msg.header.stamp
         msg_imu.quat = imu_msg.quat
         msg_imu.gyro = imu_msg.gyro
         msg_imu.vel = imu_msg.vel
@@ -462,7 +462,7 @@ class ControllerNode(Node):
 
         # Update joint command message
         msg_command = JointState()
-        msg_command.header.stamp = self.now_stamp
+        msg_command.header.stamp = joint_state_msg.header.stamp
         # Use configured joint names so /commands stays consistent with the
         # actual num_joints (8 in normal setup, 6 in wheel-less bring-up).
         msg_command.name = list(self.cfg["joint_names"])

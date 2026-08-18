@@ -11,13 +11,8 @@ import yaml
 import csv
 from pathlib import Path
 from rclpy.node import Node
-from message_filters import Subscriber, ApproximateTimeSynchronizer
+from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
-
-@dataclass
-class LatestLog:
-    vector: Optional[np.ndarray] = None
-
 
 class LogViewerNode(Node):
     """
@@ -49,7 +44,7 @@ class LogViewerNode(Node):
         with open(yaml_path, "r", encoding="utf-8") as file_handle:
             self.cfg = yaml.safe_load(file_handle)
 
-        self.declare_parameter("print_rate_hz", 100.0)
+        self.declare_parameter("print_rate_hz", 10.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("precision", 3)
 
@@ -57,6 +52,7 @@ class LogViewerNode(Node):
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
         self.start_time = None
+        self.source_start_time = None
         self.log_start = False
         
         # YAML parameters
@@ -79,7 +75,7 @@ class LogViewerNode(Node):
             self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
             self.csv_writer = csv.writer(self.csv_file)
 
-            header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
+            header = ["time_sec"] + ["source_time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
             header += [f"{name}_actual_torque" for name in self.joint_names]
@@ -91,19 +87,55 @@ class LogViewerNode(Node):
         else:
             self.get_logger().info("CSV logging disabled.")
             
-        # Subscribers
-        self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
-        self.create_subscription(JointState, "/joint_states", self._on_joint_state, 10)
+        # Subscribers for synchronized CSV logging
+        self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
+        self.command_sub = Subscriber(self, JointState, "/commands")
+        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub], queue_size=20)
+        self.sync.registerCallback(self._on_synced_data)
 
         # Timer (rate-limit printing)
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-    def _on_joint_ref(self, msg: JointState) -> None:
-        self.joint_ref = msg
+    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState) -> None:
+        # Keep latest synchronized pair for terminal printing
+        self.joint_current = joint_current
+        self.joint_ref = joint_ref
 
-    def _on_joint_state(self, msg: JointState) -> None:
-        self.joint_current = msg
+        if not self.is_csv_logging:
+            return
+
+        recv_time_ns = time.perf_counter_ns()
+        source_time_ns = joint_current.header.stamp.sec * 1_000_000_000 + int(joint_current.header.stamp.nanosec)
+
+        if self.start_time is None:
+            self.start_time = recv_time_ns
+        if self.source_start_time is None:
+            self.source_start_time = source_time_ns
+
+        time_sec = (recv_time_ns - self.start_time) * 1e-9
+        source_time_sec = (source_time_ns - self.source_start_time) * 1e-9
+
+        # State
+        joint_pos = np.asarray(joint_current.position, dtype=float)
+        joint_vel = np.asarray(joint_current.velocity, dtype=float)
+        joint_effort_real = np.asarray(joint_current.effort, dtype=float)
+
+        # Command from exactly the same controller cycle
+        joint_effort_ref = np.asarray(joint_ref.effort, dtype=float)
+
+        if self.log_degrees:
+            joint_pos = np.rad2deg(joint_pos)
+            joint_vel = np.rad2deg(joint_vel)
+
+        row = [time_sec]
+        row += [source_time_sec]
+        row += [float(joint_pos[i]) for i in range(self.num_joints)]
+        row += [float(joint_vel[i]) for i in range(self.num_joints)]
+        row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
+        row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
+
+        self.csv_writer.writerow(row)
 
     def _tick(self) -> None:
         # No subscription
@@ -154,28 +186,6 @@ class LogViewerNode(Node):
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
         self.get_logger().info("\n" + "\n".join(lines))
-
-        # CSV Logging start logic
-        if not self.log_start:
-            if np.any(np.abs(joint_effort_real) > 0.1):
-                self.log_start = True
-                self.start_time = self.get_clock().now().nanoseconds
-
-        # Save joint position only to CSV
-        if self.is_csv_logging and self.log_start:
-            if self.log_degrees:
-                joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
-                joint_vel_log = np.rad2deg(np.array(self.joint_current.velocity, dtype=float))
-            else:
-                joint_pos_log = np.array(self.joint_current.position, dtype=float)
-                joint_vel_log = np.array(self.joint_current.velocity, dtype=float)
-            now_sec = (self.get_clock().now().nanoseconds - self.start_time) * 1e-9
-            row  = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
-            row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
-            row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
-            row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
-
-            self.csv_writer.writerow(row)
 
 def main(args=None):
     rclpy.init(args=args)
