@@ -41,10 +41,6 @@
                 <box size="0.07 0.25 0.08"/>
             </geometry>
         </collision>
-<<<<<<< HEAD
-
-=======
->>>>>>> 65-new-floating-base-test
     </link>
 
     <link name="hip_L_Link">
@@ -192,10 +188,7 @@
         </collision>
     </link>
 
-<<<<<<< HEAD
-=======
     <!-- BFW -->
->>>>>>> 65-new-floating-base-test
     <link name="wheel_L_Link">
         <inertial>
             <origin rpy="0 0 0" xyz="0.00E-03 30.66E-03 -0.00E-03" />
@@ -203,87 +196,11 @@
             <inertia ixx="3366E-06" ixy="0.00E-06" ixz="0.00E-06" 
                     iyy="6306E-06" iyz="0.00E-06" izz="3366E-06" />
         </inertial>
-<<<<<<< HEAD
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0" />
-            <geometry>
-                <mesh filename="package://goat_description/meshes/New_wheel_L_Link.stl"/>
-            </geometry>
-            <material name="orange" />
-            <color rgba="0.69804 0.69804 0.69804 1" />
-        </visual>
-        <collision>
-            <origin rpy="1.5707963267948966 0 0" xyz="0 0.03 0" />
-            <geometry>
-                <cylinder length="0.05" radius="0.1" />
-            </geometry>
-        </collision>
-    </link>
-
-    <!-- <link name="wheel_L_Link">
-        <inertial>
-            <origin rpy="0 0 0" xyz="0.0 8.265E-03 0.0" />
-            <mass value="0.220" />
-            <inertia ixx="352.7E-06" ixy="0.0" ixz="0.0" 
-                    iyy="674E-06" iyz="0.0" izz="352.7E-06" />
-        </inertial>
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0" />
-            <geometry>
-                <mesh filename="package://goat_description/meshes/wheel_L_Link.stl"/>
-            </geometry>
-            <material name="orange" />
-            <color rgba="0.69804 0.69804 0.69804 1" />
-        </visual>
-        <collision>
-            <origin rpy="1.5707963267948966 0 0" xyz="0 7E-03 0" />
-            <geometry>
-                <cylinder length="7E-03" radius="72.75E-03" />
-            </geometry>
-        </collision>
-    </link> -->
-
-    <link name="wheel_R_Link">
-        <inertial>
-            <origin rpy="0 0 0" xyz="0.00E-03 -30.66E-03 0.00E-03" />
-            <mass value="0.985" />
-            <inertia ixx="3366E-06" ixy="0.00E-06" ixz="0.00E-06" 
-                    iyy="6306E-06" iyz="0.00E-06" izz="3366E-06" />
-        </inertial>
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0" />
-            <geometry>
-                <mesh filename="package://goat_description/meshes/New_wheel_R_Link.stl"/>
-            </geometry>
-            <material name="orange" />
-            <color rgba="0.69804 0.69804 0.69804 1" />
-        </visual>
-        <collision>
-            <origin rpy="1.5707963267948966 0 0" xyz="0 -0.03 0" />
-            <geometry>
-                <cylinder length="0.05" radius="0.1" />
-            </geometry>
-        </collision>
-    </link>
-
-    <!-- <link name="wheel_R_Link">
-        <inertial>
-            <origin rpy="0 0 0" xyz="0.0 -8.265E-03 0.0" />
-            <mass value="0.220" />
-            <inertia ixx="352.7E-06" ixy="0.0" ixz="0.0" 
-                    iyy="674E-06" iyz="0.0" izz="352.7E-06" />
-        </inertial>
-=======
->>>>>>> 65-new-floating-base-test
         <visual>
             <origin rpy="0 0 0" xyz="0 0 0" />
             <geometry>
                 <mesh filename="../meshes/BF_wheel_L_Link.stl"/>
             </geometry>
-<<<<<<< HEAD
-            <material name="orange" />
-            <color rgba="0.69804 0.69804 0.69804 1" />
-=======
             <material name="black">
                 <color rgba="0.0 0.0 0.0 1.0"/>
             </material>
@@ -360,7 +277,6 @@
             <material name="black">
                 <color rgba="0.0 0.0 0.0 1.0"/>
             </material>
->>>>>>> 65-new-floating-base-test
         </visual>
         <collision>
             <origin rpy="1.5707963267948966 0 0" xyz="0 -7E-03 0" />
@@ -370,10 +286,6 @@
         </collision>
     </link> -->
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 65-new-floating-base-test
     <link name="imu_link">
         <!-- <visual>
             <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -431,11 +343,7 @@
         <parent link="thigh_L_Link"/>
         <child link="calf_L_Link"/>
         <axis xyz="0 -1 0"/>
-<<<<<<< HEAD
-        <limit effort="4.5" lower="-0.523599" upper="2.3387" velocity="33.5"/>
-=======
         <limit effort="9.0" lower="-0.523599" upper="2.3387" velocity="33.5"/>
->>>>>>> 65-new-floating-base-test
         <dynamics damping="0.0" stiffness ="0.0"/>
         <dynamics friction="0.0" />
     </joint>
@@ -445,11 +353,7 @@
         <parent link="thigh_R_Link"/>
         <child link="calf_R_Link"/>
         <axis xyz="0 1 0"/>
-<<<<<<< HEAD
-        <limit effort="4.5" lower="-2.3387" upper="0.523599" velocity="33.5"/>
-=======
         <limit effort="9.0" lower="-2.3387" upper="0.523599" velocity="33.5"/>
->>>>>>> 65-new-floating-base-test
         <dynamics damping="0.0" stiffness ="0.0"/>
         <dynamics friction="0.0" />
     </joint>
