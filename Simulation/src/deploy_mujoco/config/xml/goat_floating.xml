@@ -34,7 +34,6 @@
     </asset>
 
     <default>
-        <joint damping="0.0" frictionloss="0.0"/>
         <geom contype="1" conaffinity="1" friction="0.6 0.1 0.1"/>
         <motor ctrllimited="true"/>
     </default>

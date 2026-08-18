@@ -187,6 +187,21 @@ class PolicyController(BaseController):
         """
         self._base_command[:] = command
 
+
+    def get_gravity_orientation(self, quaternion: np.ndarray) -> np.ndarray:
+        qw = quaternion[0]
+        qx = quaternion[1]
+        qy = quaternion[2]
+        qz = quaternion[3]
+
+        gravity_orientation = np.zeros(3)
+
+        gravity_orientation[0] = 2 * (-qz * qx + qw * qy)
+        gravity_orientation[1] = -2 * (qz * qy + qw * qx)
+        gravity_orientation[2] = 1 - 2 * (qw * qw + qz * qz)
+
+        return gravity_orientation
+
     # ------------------------------------------------------------------
     # Keyboard command interface (interpreted per subclass)
     # ------------------------------------------------------------------
@@ -227,10 +242,6 @@ class PolicyController(BaseController):
         self._decode_action(raw_action)
         if start:
             self.previous_action = raw_action 
-
-        # if self.decimation_count == 0:
-        #     self.logger.info(f"[{self.decimation_count}] observation : {observation}\r")
-        #     self.logger.info(f"[{self.decimation_count}] action : {raw_action}\r")
 
     def compute(self,
                 joint_state: JointState,
