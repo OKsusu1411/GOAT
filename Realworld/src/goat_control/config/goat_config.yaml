@@ -66,7 +66,11 @@ motor_direction:
 - 1
 - 1
 - 1
+
 wheel_radius: 0.095
+num_traj_points: 500
+
+# ========================= Nominal Controller ========================== #
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
 - 30.0
@@ -86,21 +90,30 @@ nsc_leg_derivative_gain:
 - 5.0
 - 0.0
 - 0.0
-nsc_num_traj_points: 1000
+
 nsc_wheel_outer_proportional_gain: 0.03
 nsc_wheel_outer_derivative_gain: 0.03
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
+
+# ========================= Policy Controller ========================== #
 policy_mode: movable
 policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
+
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
+policy_command_height_lower_limit: 0.4
+policy_command_height_upper_limit: 0.56
+
 policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
-policy_command_joint_step: 30.0
+policy_command_height_step: 0.02
+policy_command_joint_step: 10.0
+
 policy_decimation: 2.0
+
 policy_fixed:
   observation_info:
     joint_pos: 6
@@ -123,6 +136,7 @@ policy_fixed:
   - 0.0
   - 0.0
   - 0.0
+
 policy_movable:
   observation_info:
     base_ang_vel: 3
@@ -166,6 +180,8 @@ policy_leg_derivative_gain:
 policy_wheel_proportional_gain:
 - 0.05
 - 0.05
+
+# ========================= Safety Limiter ========================== #
 max_torque_per_joint:
 - 4.5
 - 4.5
@@ -192,9 +208,12 @@ joint_pos_limit:
 - .inf
 - -.inf
 - .inf
+
 joint_pos_soft_limit_coeff: 0.95
 joint_vel_estop_threshold: 4.0
 joint_vel_estop_sample_num: 10
+
+# =============== Low-Level Parameters ================ #
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1

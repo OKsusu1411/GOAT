@@ -287,14 +287,14 @@ class SimControllerNode(Node):
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
                                                                               imu_msg,
-                                                                              dt_sec, True)
+                                                                              dt_sec)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
                                                                      imu_msg, 
-                                                                     dt_sec, True)
+                                                                     dt_sec)
             v_ref[-2:] = 0.0
 
         else:

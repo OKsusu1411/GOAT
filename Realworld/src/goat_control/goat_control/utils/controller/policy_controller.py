@@ -21,18 +21,6 @@ class PolicyController(BaseController):
 
         - fixed-base  (jig)   : legs only, no base/wheel observation.
         - movable-base(normal): base observation + wheels.
-
-    Everything else (ONNX session, PD+P torque law, decimation, gains) is
-    shared here. Use :func:`make_policy_controller` to instantiate the right
-    subclass from ``cfg["policy_mode"]``.
-
-    YAML keys consumed:
-        joint_names, joint_indices, wheel_indices, natural_joint_position,
-        motor_gear_ratio,
-        policy_leg_proportional_gain, policy_leg_derivative_gain,
-        policy_wheel_proportional_gain,
-        policy_device, policy_checkpoint_path, policy_decimation,
-        policy_<mode>.observation_info, policy_<mode>.action_scale_factor
     """
 
     #: Mode key (set by subclass). Selects the ``policy_<MODE>`` config block.
@@ -68,9 +56,11 @@ class PolicyController(BaseController):
         self._natural_pos = np.asarray(mode_cfg["natural_joint_position"], dtype=float).flatten()
 
         # --- Common policy-related information ---
+        self.num_traj_points = cfg["num_traj_points"]
         self.providers = self._resolve_providers(str(cfg["policy_device"]))
         self.checkpoint_path = cfg["policy_checkpoint_path"]
         self.decimation = int(cfg["policy_decimation"])
+        self.q_ref_traj = None
 
         # --- ONNX Runtime I/O names (populated by _load_agent) ---
         self._input_name: str | None = None
@@ -87,9 +77,7 @@ class PolicyController(BaseController):
         self.agent = self._load_agent(self.checkpoint_path, self.providers)
 
         # --- Validate lengths ---
-        for name, arr in [
-            ("natural_joint_position", self._natural_pos),
-        ]:
+        for name, arr in [("natural_joint_position", self._natural_pos)]:
             if arr.size != self.num_joints:
                 raise ValueError(f"{name} length must equal num_joints ({self.num_joints}).")
 
@@ -98,10 +86,11 @@ class PolicyController(BaseController):
         self._action_dim = int(self.policy_action_scale_factor.size)
         self._delta_pos = np.zeros(self.num_leg_joints, dtype=float)
         self._wheel_speed_ref = np.zeros(self.num_wheel_joints, dtype=float)
-        self._base_command = np.zeros(3, dtype=float)  # [v_x, v_y, w_z]
+        self._base_command = np.zeros(4, dtype=float)  # [v_x, v_y, w_z, h]
         self._joint_command = np.zeros(self.num_leg_joints, dtype=float) # [L_hip, R_hip, L_thigh, R_thigh, L_knee, R_knee]
 
         # --- Count for decimation processing ---
+        self._start = False
         self.count = 0
 
         # --- History information ---
@@ -178,15 +167,6 @@ class PolicyController(BaseController):
         self.previous_action[:] = 0.0
         self.count = 0
 
-    def set_command(self, command: np.ndarray) -> None:
-        """Update base_command for next policy inference.
-
-        Args:
-            command: [v_x, v_y, w_z] shape (3,). v_y should be 0 (non-holonomic).
-        """
-        self._base_command[:] = command
-
-
     def get_gravity_orientation(self, quaternion: np.ndarray) -> np.ndarray:
         qw = quaternion[0]
         qx = quaternion[1]
@@ -225,8 +205,7 @@ class PolicyController(BaseController):
                     base_ang_vel: np.ndarray,
                     base_quat: np.ndarray,
                     joint_pos: np.ndarray,
-                    joint_vel: np.ndarray, 
-                    start: bool) -> None:
+                    joint_vel: np.ndarray) -> None:
         """Run policy inference and update action targets before compute().
 
         Args:
@@ -239,14 +218,12 @@ class PolicyController(BaseController):
         observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
         raw_action = self.agent.run([self._output_name], {self._input_name: observation})[0].reshape(-1)
         self._decode_action(raw_action)
-        if start:
-            self.previous_action = raw_action 
+        self.previous_action = raw_action 
 
     def compute(self,
                 joint_state: JointState,
                 base_state: ImuState,
-                dt_sec: float,
-                start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute raw torque: PD on legs + P on wheels (wheels only if HAS_WHEELS)."""
         # Data processing
         base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
@@ -265,11 +242,18 @@ class PolicyController(BaseController):
         target_pos = np.zeros(self.num_joints, dtype=float)
 
         # --- Reference Generation (decimation) ---
-        if self.count % self.decimation == 0:
-            self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel, start)
-
+        if self._start:
+            if self.count % self.decimation == 0:
+                self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
+            target_leg_pos = default_leg_pos + self._delta_pos
+        else:
+            if self.q_ref_traj is None:
+                self.q_ref_traj = np.zeros((self.num_traj_points, self.num_leg_joints), dtype=float)
+                for i in range(self.num_leg_joints):
+                    self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i], self.num_traj_points)
+            target_leg_pos = self.q_ref_traj[min(self.num_traj_points-1, self.count), :]
+        
         # --- Error Calculation (Joint Space) ---
-        target_leg_pos = default_leg_pos + self._delta_pos
         leg_pos_err = target_leg_pos - joint_leg_pos
         leg_vel_err = -joint_leg_vel
 
@@ -288,8 +272,5 @@ class PolicyController(BaseController):
 
         # Update decimation step
         self.count += 1
-
-        # values = ", ".join(f"{value:.3f}" for value in joint_cmd.flatten())
-        # self.logger.info(f"[{values}]\r")
 
         return joint_cmd, target_pos, self._wheel_speed_ref.copy()

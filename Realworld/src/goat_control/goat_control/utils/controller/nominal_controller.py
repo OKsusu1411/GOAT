@@ -122,6 +122,7 @@ class NominalController(BaseController):
 
         # Config parameters
         self.wheel_radius = self.cfg.get("wheel_radius")
+        self.num_traj_points = self.cfg.get("num_traj_points")
         self.leg_Kp = np.diag(np.asarray(self.cfg.get("nsc_leg_proportional_gain"), dtype=float)[self.ros_to_pin_ids])
         self.leg_Kd = np.diag(np.asarray(self.cfg.get("nsc_leg_derivative_gain"), dtype=float)[self.ros_to_pin_ids])
         self.wheel_outer_Kp = self.cfg.get("nsc_wheel_outer_proportional_gain")  
@@ -129,7 +130,6 @@ class NominalController(BaseController):
         self.wheel_inner_Kp = self.cfg.get("nsc_wheel_inner_proportional_gain")  
         self.wheel_inner_Kd = self.cfg.get("nsc_wheel_inner_derivative_gain")
         self.theta_cmd_limit = math.radians(self.cfg.get("nsc_theta_cmd_limit"))  
-        self.num_traj_points = self.cfg.get("nsc_num_traj_points")
         self.q_target = np.asarray([0.0, 0.0, 0.738, -0.738, 1.462, -1.462, 0.0, 0.0])[self.ros_to_pin_ids]  # Final target joint position
 
         # State variables
@@ -183,8 +183,7 @@ class NominalController(BaseController):
     def compute(self, 
                 joint_state: JointState, 
                 imu_state: ImuState, 
-                dt_sec: float,
-                start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+                dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         # Data processing
         self.joint_q_curr = np.asarray(joint_state.position)[self.ros_to_pin_ids]
         self.joint_v_curr = np.asarray(joint_state.velocity)[self.ros_to_pin_ids]

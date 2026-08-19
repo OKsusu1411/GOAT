@@ -165,8 +165,7 @@ class ControllerNode(Node):
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
         self.logger.info("'p': Policy Control Mode")
-        self.logger.info("'n': Nominal Control Mode")
-        self.logger.info("'s': Start the control loop (torque publishing)")
+        self.logger.info("'n': Nominal Control Mode [Deprecated]")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")
@@ -216,18 +215,12 @@ class ControllerNode(Node):
                     continue
                 self.publish_mode = 'nominal'
                 self.logger.info("Mode changed: [Nominal]\r")
+                self.logger.info("Current deprecated.")
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
                 rclpy.shutdown()
                 break
-
-            elif key == "s":
-                if self._start:
-                    self.logger.info("Already started. \r")
-                    continue
-                self._start = True
-                self.logger.info("Start the control loop. \r")
 
             elif key == 'r':
                 self.reset()
@@ -379,22 +372,20 @@ class ControllerNode(Node):
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                               imu_msg,
-                                                                              dt_sec,
-                                                                              self._start)
+                                                                              dt_sec)
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:
                 v_ref[wheel_indices] = wheel_v_ref
 
-        elif self.publish_mode == 'nominal':
-            joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
-                                                                     imu_msg,
-                                                                     dt_sec,
-                                                                     self._start)
-            # Same wheel-slot guard as the policy branch.
-            wheel_indices = self.cfg["wheel_indices"]
-            if len(wheel_indices) > 0:
-                v_ref[wheel_indices] = 0.0
+        # elif self.publish_mode == 'nominal':
+        #     joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
+        #                                                              imu_msg,
+        #                                                              dt_sec)
+        #     # Same wheel-slot guard as the policy branch.
+        #     wheel_indices = self.cfg["wheel_indices"]
+        #     if len(wheel_indices) > 0:
+        #         v_ref[wheel_indices] = 0.0
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
@@ -415,8 +406,7 @@ class ControllerNode(Node):
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Publish torque command (only start mode)
-        if self._start:
-            tau[:] = safe_torque
+        tau[:] = safe_torque
 
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
         q_current = self.motor_io.read_write_motor(tau)                                     
