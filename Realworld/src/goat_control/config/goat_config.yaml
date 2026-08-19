@@ -46,8 +46,8 @@ motor_torque_constant_nm_per_amp:
 - 0.26182
 - 0.26182
 - 0.26182
-- 0.6
-- 0.6
+- 0.24691
+- 0.24691
 motor_gear_ratio:
 - 1
 - 1
@@ -92,14 +92,14 @@ nsc_wheel_outer_derivative_gain: 0.03
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
-policy_mode: fixed
-policy_checkpoint_path: src/goat_control/checkpoint/fixed.onnx
+policy_mode: movable
+policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
 policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
-policy_command_joint_step: 10.0
+policy_command_joint_step: 30.0
 policy_decimation: 2.0
 policy_fixed:
   observation_info:
@@ -143,10 +143,10 @@ policy_movable:
   natural_joint_position:
   - 0.0
   - 0.0
-  - 1.1023
-  - -1.1023
-  - 2.0595
-  - -2.0595
+  - 0.9756
+  - -0.9756
+  - 2.0944
+  - -2.0944
   - 0.0
   - 0.0
 policy_leg_proportional_gain:
@@ -201,14 +201,14 @@ speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
 joint_offsets:
-- -2.08982233975297
-- -2.0426111834865237
-- -4.140636570723869
-- 4.17948759987326
-- -0.9804910671853747
-- -0.4266195557112339
-- 270.1770205685998
-- -1.5930667280503448
+- -4.181581994975654
+- -2.0433616750648804
+- -4.189697775997429
+- 4.1993145401759175
+- -1.1281633751966142
+- 0.06640105139212427
+- -2.877227631790212
+- 5.026426072696028
 imu_offsets:
 - 1.0
 - 0.0
