@@ -141,7 +141,7 @@ policy_movable:
   observation_info:
     base_ang_vel: 3
     gravity_vector: 3
-    base_command: 3
+    base_command: 4
     joint_pos: 6
     joint_vel: 8
     previous_action: 8
