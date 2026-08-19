@@ -102,7 +102,7 @@ class PolicyController(BaseController):
         self._joint_command = np.zeros(self.num_leg_joints, dtype=float) # [L_hip, R_hip, L_thigh, R_thigh, L_knee, R_knee]
 
         # --- Count for decimation processing ---
-        self.decimation_count = 0
+        self.count = 0
 
         # --- History information ---
         self.previous_action = np.zeros(self._action_dim, dtype=float)
@@ -122,7 +122,7 @@ class PolicyController(BaseController):
     def _load_agent(self, checkpoint_path: str, providers: list[str]):
         if not checkpoint_path:
             self.logger.info(f"[Policy Controller] No policy checkpoint provided; publishing zero actions.\r")
-            return None
+            raise RuntimeError(f"Checkpoint is None.")
 
         try:
             path = os.path.abspath(checkpoint_path)
@@ -145,8 +145,7 @@ class PolicyController(BaseController):
             self.logger.info(f"[Policy Controller] Random test result : {test_act}\r")
             return session
         except Exception as exc:
-            self.logger.info(f"[Policy Controller] Failed to load ONNX policy '{checkpoint_path}': {exc}\r")
-            return None
+            raise RuntimeError(f"[Policy Controller] Failed to load ONNX policy '{checkpoint_path}': {exc}\r")
 
     # ------------------------------------------------------------------
     # Mode-specific hooks (implemented by subclasses)
@@ -177,7 +176,7 @@ class PolicyController(BaseController):
         self._base_command[:] = 0.0
         self._joint_command[:] = 0.0
         self.previous_action[:] = 0.0
-        self.decimation_count = 0
+        self.count = 0
 
     def set_command(self, command: np.ndarray) -> None:
         """Update base_command for next policy inference.
@@ -265,11 +264,8 @@ class PolicyController(BaseController):
         joint_cmd = np.zeros(self.num_joints, dtype=float)
         target_pos = np.zeros(self.num_joints, dtype=float)
 
-        if self.agent is None:
-            return joint_cmd, self._natural_pos.copy(), np.zeros(len(self._wheel_indices))
-
         # --- Reference Generation (decimation) ---
-        if self.decimation_count % self.decimation == 0:
+        if self.count % self.decimation == 0:
             self.set_targets(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel, start)
 
         # --- Error Calculation (Joint Space) ---
@@ -291,7 +287,7 @@ class PolicyController(BaseController):
         target_pos[self._joint_indices] = target_leg_pos
 
         # Update decimation step
-        self.decimation_count += 1
+        self.count += 1
 
         # values = ", ".join(f"{value:.3f}" for value in joint_cmd.flatten())
         # self.logger.info(f"[{values}]\r")
