@@ -66,7 +66,7 @@ motor_direction:
 - 1
 - 1
 - 1
-wheel_radius: 0.07275
+wheel_radius: 0.095
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
 - 30.0
@@ -78,17 +78,17 @@ nsc_leg_proportional_gain:
 - 0.0
 - 0.0
 nsc_leg_derivative_gain:
-- 6.0
-- 6.0
-- 6.0
-- 6.0
-- 6.0
-- 6.0
+- 5.0
+- 5.0
+- 5.0
+- 5.0
+- 5.0
+- 5.0
 - 0.0
 - 0.0
 nsc_num_traj_points: 1000
-nsc_wheel_outer_proportional_gain: 0.02
-nsc_wheel_outer_derivative_gain: 0.02
+nsc_wheel_outer_proportional_gain: 0.03
+nsc_wheel_outer_derivative_gain: 0.03
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
@@ -99,7 +99,7 @@ policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
 policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
-policy_command_joint_step: 10.0
+policy_command_joint_step: 30.0
 policy_decimation: 2.0
 policy_fixed:
   observation_info:
@@ -143,10 +143,10 @@ policy_movable:
   natural_joint_position:
   - 0.0
   - 0.0
-  - 0.738
-  - -0.738
-  - 1.462
-  - -1.462
+  - 0.9756
+  - -0.9756
+  - 2.0944
+  - -2.0944
   - 0.0
   - 0.0
 policy_leg_proportional_gain:
@@ -194,20 +194,21 @@ joint_pos_limit:
 - .inf
 joint_pos_soft_limit_coeff: 0.95
 joint_vel_estop_threshold: 4.0
+joint_vel_estop_sample_num: 10
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
 joint_offsets:
-- -2.0946918083660355
-- 0.08684758357923787
-- -4.168910904606177
-- 4.215581008804505
-- -0.6630680361251658
-- -0.6134570521372267
-- 2.9874451740536543
-- -3.0899832676083197
+- -4.181581994975654
+- -2.0433616750648804
+- -4.189697775997429
+- 4.1993145401759175
+- -1.1281633751966142
+- 0.06640105139212427
+- -2.877227631790212
+- 5.026426072696028
 imu_offsets:
 - 1.0
 - 0.0

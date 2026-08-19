@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from typing import List, Optional, Tuple, Any
 
 import numpy as np
@@ -14,7 +15,9 @@ class SafetyLimiter:
     Block conditions (latching kill switch):
         Once triggered, is_blocked latches to True permanently until the process restarts.
         1. Any joint position is outside its soft limit (with margin).
-        2. Any estop joint velocity exceeds the threshold.
+        2. Any estop joint's windowed mean *speed* exceeds the threshold. The window
+           spans joint_vel_estop_sample_num ticks and averages |v|, so a single noisy
+           sample cannot latch the switch while a sign-flipping oscillation still does.
 
     Torque filtering (always applied, regardless of is_blocked):
         LPF:      filtered = alpha * raw + (1 - alpha) * prev
@@ -27,10 +30,11 @@ class SafetyLimiter:
         joint_pos_limit_margin       : float [rad]
         joint_indices                : list[int], used as estop velocity check targets
         joint_vel_estop_threshold    : float [rad/s]
+        joint_vel_estop_sample_num   : int, estop averaging window length [ticks]
     """
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
-        joint_indices: List[int] = list(cfg["joint_indices"])
+        self.joint_indices: List[int] = list(cfg["joint_indices"])
         self.num_joints: int = len(cfg["joint_names"])
 
         self.logger = logger
@@ -48,8 +52,10 @@ class SafetyLimiter:
         self.logger.info(f"pos_upper : {self._pos_upper.tolist()}\r")
 
         # --- Velocity estop ---
-        self._estop_indices = np.asarray(joint_indices, dtype=int)
+        self._estop_indices = np.asarray(self.joint_indices, dtype=int)
         self._estop_threshold = float(cfg["joint_vel_estop_threshold"])
+        self._estop_sample_num = int(cfg.get("joint_vel_estop_sample_num", 1))
+        self._vel_buffer: deque[np.ndarray] = deque(np.zeros((self._estop_sample_num, len(self.joint_indices))), maxlen=self._estop_sample_num)
 
         # --- LPF state ---
         self._prev_torque = np.zeros(self.num_joints, dtype=float)
@@ -67,11 +73,17 @@ class SafetyLimiter:
     # ------------------------------------------------------------------
 
     def reset(self) -> None:
-        """Reset LPF state and kill switch. Call on mode switches or controller resets.
+        """Reset LPF state, kill switch, and the estop velocity window.
+        Call on mode switches or controller resets.
         NOTE: Reset the kill switch (_is_blocked) too.
+
+        Clearing the window here is what keeps a mode switch from judging the new
+        controller with the previous one's velocity samples.
         """
         self._prev_torque[:] = 0.0
         self._is_blocked = False
+        self._vel_buffer.clear()
+        self._vel_buffer: deque[np.ndarray] = deque(np.zeros((self._estop_sample_num, len(self.joint_indices))) ,maxlen=self._estop_sample_num)
 
     def apply(self,
               raw_torque: np.ndarray,
@@ -83,6 +95,7 @@ class SafetyLimiter:
             raw_torque: Computed torque from the active controller (num_joints,).
             joint_pos:  Pre-extracted joint positions from callback [rad] (num_joints,).
             joint_vel:  Pre-extracted joint velocities from callback [rad/s] (num_joints,).
+                        Buffered internally over joint_vel_estop_sample_num ticks.
 
         Returns:
             out_torque:  Filtered torque, or zeros if blocked (num_joints,).
@@ -91,7 +104,7 @@ class SafetyLimiter:
         # Latching kill switch: once triggered, stays blocked forever
         if not self._is_blocked:
             self._is_blocked = (self._check_joint_pos(joint_pos) or self._check_joint_vel_estop(joint_vel))
-            # self._is_blocked = self._check_joint_vel_estop(joint_vel)
+            # self._is_blocked = self._check_joint_vel_estop()
 
         if self._is_blocked:
             self._prev_torque[:] = 0.0
@@ -115,11 +128,17 @@ class SafetyLimiter:
         return result
 
     def _check_joint_vel_estop(self, vel: np.ndarray) -> bool:
-        """Return True if any estop joint exceeds the velocity threshold."""
-        joint_vel = vel
-        result = bool(np.any(np.abs(joint_vel[self._estop_indices]) > self._estop_threshold))
+        """Return True if any estop joint's windowed speed exceeds the threshold."""
+        joint_vel = np.asarray(vel, dtype=float).flatten()
+        self._vel_buffer.append(joint_vel[self.joint_indices])
+        vel_buffer_np = np.asarray(self._vel_buffer, dtype=float)   # (sample_num, num_joints)
+        vel_mean = np.mean(np.abs(vel_buffer_np), axis=0)         # [rad/s]
+        over_threshold = vel_mean[self._estop_indices] > self._estop_threshold
+
+        result = bool(np.any(over_threshold))
         if result:
             self.logger.info("[SafetyLimiter] Velocity limiter activation.\r")
-            self.logger.info(f"Limiter Results: {np.abs(joint_vel[self._estop_indices]) > self._estop_threshold}.\r")
-            self.logger.info(f"Joint vel: {joint_vel[self._estop_indices].tolist()}.\r")
+            self.logger.info(f"Limiter Results: {over_threshold.tolist()}.\r")
+            self.logger.info(f"Joint vel (windowed mean speed): "
+                             f"{vel_mean[self._estop_indices].tolist()}.\r")
         return result

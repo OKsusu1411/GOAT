@@ -16,7 +16,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from motor_interfaces.msg import ImuState
-from message_filters import Subscriber, ApproximateTimeSynchronizer
+from message_filters import Subscriber
 
 from goat_control.utils.controller.nominal_controller import NominalController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
@@ -67,9 +67,9 @@ class ControllerNode(Node):
             self.cfg = yaml.safe_load(file_handle)
         if not isinstance(self.cfg, dict):
             raise ValueError("YAML root must be a mapping/dict.")
-        self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path) # URDF path should be assigned in runtime
+        self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
-        # Checkpoint path
+        # Policy checkpoint path
         self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
 
         # Logger
@@ -219,7 +219,6 @@ class ControllerNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
 
@@ -420,11 +419,12 @@ class ControllerNode(Node):
             tau[:] = safe_torque
 
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
-        self.motor_io.read_write_motor(tau)                                     
+        q_current = self.motor_io.read_write_motor(tau)                                     
         can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
-        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)
+        q_current.header.stamp = self.get_clock().now().to_msg()
+        self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg)
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
@@ -446,7 +446,7 @@ class ControllerNode(Node):
             return
         # Update joint state message for logging
         msg_joint = JointState()
-        msg_joint.header.stamp = self.now_stamp
+        msg_joint.header.stamp = joint_state_msg.header.stamp
         msg_joint.header.frame_id = "base_link"
         msg_joint.name = joint_state_msg.name
         msg_joint.position = joint_state_msg.position
@@ -454,7 +454,7 @@ class ControllerNode(Node):
         msg_joint.effort = joint_state_msg.effort
         # Update IMU message for logging 
         msg_imu = ImuState()
-        msg_imu.header.stamp = self.now_stamp
+        msg_imu.header.stamp = joint_state_msg.header.stamp
         msg_imu.quat = imu_msg.quat
         msg_imu.gyro = imu_msg.gyro
         msg_imu.vel = imu_msg.vel
@@ -463,7 +463,7 @@ class ControllerNode(Node):
 
         # Update joint command message
         msg_command = JointState()
-        msg_command.header.stamp = self.now_stamp
+        msg_command.header.stamp = joint_state_msg.header.stamp
         # Use configured joint names so /commands stays consistent with the
         # actual num_joints (8 in normal setup, 6 in wheel-less bring-up).
         msg_command.name = list(self.cfg["joint_names"])
@@ -491,6 +491,9 @@ def main(args=None):
                 termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
                 node.tty.close()
         finally:
+            for _ in range(10):
+                node.motor_io.read_write_motor(np.zeros(node.num_joints, dtype=np.float32))
+                time.sleep(0.1)
             if hasattr(node, "motor_io"):
                 node.motor_io.close()
             if hasattr(node, "imu_io"):
