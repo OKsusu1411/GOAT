@@ -16,7 +16,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from motor_interfaces.msg import ImuState
-from message_filters import Subscriber, ApproximateTimeSynchronizer
+from message_filters import Subscriber
 
 from goat_control.utils.controller.nominal_controller import NominalController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
@@ -67,9 +67,9 @@ class ControllerNode(Node):
             self.cfg = yaml.safe_load(file_handle)
         if not isinstance(self.cfg, dict):
             raise ValueError("YAML root must be a mapping/dict.")
-        self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path) # URDF path should be assigned in runtime
+        self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
-        # Checkpoint path
+        # Policy checkpoint path
         self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
 
         # Logger

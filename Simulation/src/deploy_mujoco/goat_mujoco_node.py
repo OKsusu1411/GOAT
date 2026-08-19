@@ -1,19 +1,3 @@
-"""MuJoCo simulator node with physics on its own thread, ROS I/O on others.
-
-Physics no longer runs inside a subscription callback. ``SimWorker`` owns a
-dedicated sim thread that ticks at the control period; the ROS side only ever
-touches two lock-guarded mailboxes:
-
-    /commands  --> _on_cmd ----(cmd lock)---->  [latest ctrl]  --> sim thread
-    sim thread --(data lock: set_ctrl/step/snapshot/sync)--> [latest snapshot]
-                                --(snap lock)--> _on_publish --> /sim_*, /clock
-
-So a slow DDS publish can no longer stall the integrator, a burst of commands
-can no longer pile up a backlog of steps, and MjData is touched by exactly one
-thread at a time. Locks are held only for a reference swap; nothing that can
-block (publishing, sleeping, rendering) happens inside one. See solution.md for
-the full lock ordering and the invariants each critical section keeps.
-"""
 from __future__ import annotations
 
 import threading
