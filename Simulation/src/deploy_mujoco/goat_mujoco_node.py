@@ -1,39 +1,33 @@
 from __future__ import annotations
 
-import threading
 import time
 
 import rclpy
 from rcl_interfaces.msg import ParameterDescriptor
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu, JointState
 from nav_msgs.msg import Odometry
 
-from utils import ros_bridge
-from utils.mujoco_sim import MujocoSim, SimConfig
-from utils.sim_worker import SimWorker
+from .utils import ros_bridge
+from .utils.mujoco_sim import MujocoSim, SimConfig
 
 
 class GoatMujocoNode(Node):
     def __init__(self) -> None:
         super().__init__('goat_mujoco_node')
 
-        # Route mujoco_sim/sim_worker/ros_bridge stdlib logging into rosout so
-        # the load-time model inspection, the resolver warnings and any sim
-        # thread traceback are visible under ros2 launch.
+        # Route mujoco_sim/ros_bridge stdlib logging into rosout so the load-time
+        # model inspection and resolver warnings are visible under ros2 launch.
         ros_bridge.install_ros_logging_bridge(self)
 
         self.declare_parameter('model_path', '')
         self.declare_parameter('timestep', 0.0)
         self.declare_parameter('steps_per_cmd', 1)
         self.declare_parameter('use_viewer', True)
-        self.declare_parameter('realtime', True)
-        self.declare_parameter('publish_rate_hz', 0.0)
-        self.declare_parameter('cmd_timeout', 0.5)
+        self.declare_parameter('render_sleep', True)
         self.declare_parameter('home_keyframe', '')
         self.declare_parameter('joint_order', [], ParameterDescriptor(dynamic_typing=True))
 
@@ -44,17 +38,13 @@ class GoatMujocoNode(Node):
         timestep = float(self.get_parameter('timestep').value)
         if timestep <= 0.0:
             raise RuntimeError('Parameter "timestep" must be set (> 0) from yaml/launch.')
-        steps_per_cmd = max(1, int(self.get_parameter('steps_per_cmd').value))
+        self._steps_per_cmd = max(1, int(self.get_parameter('steps_per_cmd').value))
         self._use_viewer = bool(self.get_parameter('use_viewer').value)
-        realtime = bool(self.get_parameter('realtime').value)
-        publish_rate_hz = float(self.get_parameter('publish_rate_hz').value)
-        cmd_timeout = float(self.get_parameter('cmd_timeout').value)
+        self._render_sleep = bool(self.get_parameter('render_sleep').value)
         home_keyframe = self.get_parameter('home_keyframe').value or None
         joint_order = list(self.get_parameter('joint_order').value) or None
 
-        # MuJoCo instance. Loaded here (so a bad model fails at construction,
-        # on this thread), but from now on MjData belongs to the sim thread and
-        # is reachable only through the worker's lock.
+        # MuJoCo instance
         self.sim = MujocoSim(SimConfig(
             model_path=model_path,
             use_viewer=self._use_viewer,
@@ -63,30 +53,16 @@ class GoatMujocoNode(Node):
             joint_order=joint_order,
         ))
         self.sim.reset()  # MujocoSim logs the model summary at load time
+        if self._use_viewer:
+            self.sim.open_viewer()
 
-        self.worker = SimWorker(
-            self.sim,
-            steps_per_cmd=steps_per_cmd,
-            use_viewer=self._use_viewer,
-            realtime=realtime,
-            cmd_timeout=cmd_timeout,
-        )
+        # Wall-clock target for optional render pacing.
+        self._control_period = self._steps_per_cmd * self.sim.timestep
         self._shutting_down = False
-        self._last_pub_seq = -1
-
-        # Separate callback groups so the command callback and the publish
-        # timer can run at the same time on the MultiThreadedExecutor: a
-        # publish in flight must not delay accepting the next command.
-        self._cmd_group = MutuallyExclusiveCallbackGroup()
-        self._pub_group = MutuallyExclusiveCallbackGroup()
-        self._housekeep_group = MutuallyExclusiveCallbackGroup()
 
         # Subscriber
         cmd_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
-        self.cmd_sub = self.create_subscription(
-            JointState, 'commands', self._on_cmd, cmd_qos,
-            callback_group=self._cmd_group,
-        )
+        self.cmd_sub = self.create_subscription(JointState, 'commands', self._on_cmd, cmd_qos)
 
         # Publisher
         state_qos = QoSProfile(
@@ -99,105 +75,95 @@ class GoatMujocoNode(Node):
         self.odom_pub = self.create_publisher(Odometry, 'sim_odom', state_qos)
         self.clock_pub = self.create_publisher(Clock, 'clock', state_qos)
 
-        # Start physics, then wait for the seed snapshot so the first publish
-        # never races the model load / viewer open.
-        self.worker.start()
-        if not self.worker.wait_ready(timeout=10.0):
-            err = self.worker.error
-            raise RuntimeError(f'sim thread failed to start: {err!r}'
-                               if err else 'sim thread failed to start')
+        # Initial publish
+        self._publish_state()
 
-        # Publish timer: reads the latest snapshot, never MjData.
-        publish_period = (1.0 / publish_rate_hz if publish_rate_hz > 0.0
-                          else self.worker.control_period)
-        self._publish_timer = self.create_timer(
-            publish_period, self._on_publish, callback_group=self._pub_group)
-
-        # Housekeeping: watch the sim thread, log throughput. Never steps.
-        self._housekeep_timer = self.create_timer(
-            0.5, self._on_housekeep, callback_group=self._housekeep_group)
-        self._last_stats_ticks = 0
+        # Housekeeping only: watch quit/viewer-close. Never advances the sim.
+        self._housekeep_timer = self.create_timer(0.1, self._on_housekeep)
 
         self.get_logger().info(
             f'goat_mujoco_node up: model={model_path}, '
-            f'steps_per_cmd={steps_per_cmd}, '
-            f'control_dt={self.worker.control_period:.4f}s, '
-            f'publish_dt={publish_period:.4f}s, use_viewer={self._use_viewer}, '
-            f'realtime={realtime}, cmd_timeout={cmd_timeout}s'
+            f'steps_per_cmd={self._steps_per_cmd}, use_viewer={self._use_viewer}'
         )
 
     # ------------------------------------------------------------------ #
-    # ROS thread: command in
+    # Main loop: one /cmd == one control step
     # ------------------------------------------------------------------ #
     def _on_cmd(self, msg: JointState) -> None:
-        """Convert and hand the command to the sim thread. Never steps.
-
-        ``cmd_to_ctrl`` reads MjModel only (immutable after load), so the
-        conversion happens with no lock held; only the resulting vector goes
-        into the command mailbox. Newest command wins -- see SimWorker.
-        """
-        if self._shutting_down:
-            return
-        try:
-            ctrl = ros_bridge.cmd_to_ctrl(msg, self.sim)
-        except (ValueError, IndexError) as exc:
-            self.get_logger().warn(f'ignoring malformed command: {exc}')
-            return
-        self.worker.submit_ctrl(ctrl)
-
-    # ------------------------------------------------------------------ #
-    # ROS thread: state out
-    # ------------------------------------------------------------------ #
-    def _on_publish(self) -> None:
-        """Publish the latest completed tick, at most once per tick.
-
-        Skipping when ``seq`` is unchanged keeps a publish timer that runs
-        faster than physics from re-sending the same state (and re-stamping
-        it with the same sim time).
-        """
-        seq, snap = self.worker.latest_snapshot()
-        if snap is None or seq == self._last_pub_seq:
-            return
-        self._last_pub_seq = seq
-
-        stamp = ros_bridge.sim_time_to_msg(snap.time)
-        self.clock_pub.publish(Clock(clock=stamp))
-        self.joint_pub.publish(ros_bridge.joint_state_msg(snap, stamp))
-        self.imu_pub.publish(ros_bridge.imu_msg(snap, stamp))
-        self.odom_pub.publish(ros_bridge.odom_msg(snap, stamp))
-
-    # ------------------------------------------------------------------ #
-    # Housekeeping: sim thread health (no stepping, no MjData access)
-    # ------------------------------------------------------------------ #
-    def _on_housekeep(self) -> None:
-        if self.worker.finished:
-            err = self.worker.error
-            if err is not None:
-                self.get_logger().error(f'sim thread died: {err!r}')
-            else:
-                self.get_logger().info(f'sim thread stopped: {self.worker.exit_reason}')
+        if self.sim.is_quit_requested:
             self._shutdown()
             return
 
-        stats = self.worker.stats
-        ticks = stats['ticks']
-        if ticks == self._last_stats_ticks:
-            self.get_logger().warn('sim thread produced no tick in the last 0.5s')
-        self._last_stats_ticks = ticks
-        self.get_logger().debug(
-            f"ticks={ticks} cmd_received={stats['cmd_received']} "
-            f"cmd_used={stats['cmd_used']} stale_ticks={stats['stale_ticks']}"
-        )
+        if self.sim.consume_reset_request():
+            self.sim.reset()
+
+        self.sim.set_ctrl(ros_bridge.cmd_to_ctrl(msg, self.sim))
+
+        wall_start = time.monotonic()
+        if not self.sim.is_paused:
+            self.sim.step(self._steps_per_cmd)
+
+        self._publish_state()
+
+        if self._use_viewer:
+            if not self.sim.is_viewer_running:
+                self._shutdown()
+                return
+            self.sim.sync()
+
+        if self._render_sleep and self._use_viewer:
+            remaining = self._control_period - (time.monotonic() - wall_start)
+            if remaining > 0:
+                time.sleep(remaining)
+
+    def _publish_state(self) -> None:
+        """Publish clock + joint/imu state for the current MjData.
+
+        Called both after the initial reset (the loop seed) and after every
+        control step, so the wire format is identical in both cases.
+        """
+        stamp = ros_bridge.sim_time_to_msg(self.sim.sim_time)
+        self.clock_pub.publish(Clock(clock=stamp))
+        self.joint_pub.publish(ros_bridge.joint_state_msg(self.sim, stamp))
+        self.imu_pub.publish(ros_bridge.imu_msg(self.sim, stamp))
+        self.odom_pub.publish(ros_bridge.odom_msg(self.sim, stamp))
+
+    # ------------------------------------------------------------------ #
+    # Housekeeping: quit / viewer close (no stepping)
+    # ------------------------------------------------------------------ #
+    def _on_housekeep(self) -> None:
+        """Keep the viewer usable while NO commands flow -- never steps.
+
+        Lockstep means /commands is the only trigger that advances physics, but
+        quit / reset / viewer refresh must still respond when the controller is
+        idle (otherwise ``r`` and the rendered state look dead until the next
+        command). This consumes quit and reset (reset + republish, no step) and
+        re-syncs the viewer. It never calls ``sim.step()``, so sim-time and
+        determinism are unchanged.
+        """
+        if self.sim.is_quit_requested:
+            self._shutdown()
+            return
+        if self._use_viewer and not self.sim.is_viewer_running:
+            self._shutdown()
+            return
+
+        if self.sim.consume_reset_request():
+            self.sim.reset()
+
+        if self._use_viewer:
+            self.sim.sync()
+
+        self._publish_state()
 
     @property
     def shutdown_requested(self) -> bool:
         return self._shutting_down
 
     def _shutdown(self) -> None:
-        """Request shutdown: stop the sim thread and flag the spin loop.
+        """Request shutdown: close the viewer and flag the spin loop to exit.
 
-        This only flips state and signals the worker (whose thread closes the
-        viewer it opened). The context teardown (destroy_node then
+        This only flips state. The actual context teardown (destroy_node then
         rclpy.shutdown, in that order) is owned by main(), so we never tear the
         context down from inside a callback the context is still driving.
         """
@@ -205,40 +171,25 @@ class GoatMujocoNode(Node):
             return
         self._shutting_down = True
         self.get_logger().info('shutting down goat_mujoco_node')
-        self.worker.stop('node shutdown')
+        self.sim.close_viewer()
 
     def destroy_node(self) -> bool:
-        self.worker.stop('node destroyed')
-        self.worker.join(timeout=2.0)
+        self.sim.close_viewer()
         return super().destroy_node()
 
 
 def main(args=None) -> None:
     rclpy.init(args=args)
+    node = GoatMujocoNode()
     try:
-        node = GoatMujocoNode()
-    except BaseException:
-        rclpy.shutdown()
-        raise
-
-    # Multi-threaded so the command callback, the publish timer and
-    # housekeeping can overlap. spin() (not spin_once) is what actually hands
-    # callbacks to the pool, so it runs on its own thread while the main
-    # thread waits for the shutdown flag -- teardown then happens here, never
-    # inside a callback the executor is still driving.
-    executor = MultiThreadedExecutor(num_threads=3)
-    executor.add_node(node)
-    spin_thread = threading.Thread(target=executor.spin, name='ros_spin', daemon=True)
-    spin_thread.start()
-    try:
+        # Manual spin so a viewer-close / quit (which only sets a flag) breaks
+        # the loop; teardown below then runs in the correct order.
         while rclpy.ok() and not node.shutdown_requested:
-            time.sleep(0.05)
+            rclpy.spin_once(node, timeout_sec=0.1)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        executor.shutdown(timeout_sec=2.0)
-        spin_thread.join(timeout=2.0)
-        node.destroy_node()          # stops and joins the sim thread
+        node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 
