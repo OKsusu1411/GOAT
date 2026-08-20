@@ -299,7 +299,7 @@
     <!-- ****************************************** Joint ******************************************************** -->
     
     <joint name="hip_L_Joint" type="revolute">
-        <origin xyz="49.579E-03 96.336E-03 -87.088E-03" rpy="0 0 0"/>
+        <origin xyz="51.079E-03 96.336E-03 -87.088E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
         <axis xyz="-1 0 0"/>
@@ -309,7 +309,7 @@
     </joint>
     
     <joint name="hip_R_Joint" type="revolute">
-        <origin xyz="49.579E-03 -96.336E-03 -87.088E-03" rpy="0 0 0"/>
+        <origin xyz="51.079E-03 -96.336E-03 -87.088E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>
         <axis xyz="-1 0 0"/>

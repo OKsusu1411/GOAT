@@ -20,10 +20,6 @@
     </worldbody>
 
     <asset>
-        <!-- The URDF references base_Link.stl, but that mesh has 645184 faces and
-             MuJoCo's STL decoder caps at 200000. base_Link_simple.stl is the same
-             geometry decimated and translated by (+0.112941 +0.000176 -0.084350);
-             the geom pos below cancels that so it lands where the URDF puts it. -->
         <mesh name="base_Link" file="base_Link_simple.stl"/>
         <mesh name="hip_L_Link" file="hip_L_Link.stl"/>
         <mesh name="hip_R_Link" file="hip_R_Link.stl"/>
@@ -58,7 +54,7 @@
 
             <body name="hip_L_Link" pos="0.049579 0.096336 -0.087088">
                 <joint name="hip_L_Joint" type="hinge" axis="-1 0 0" range="-1.7453 1.0123" damping="0.0" frictionloss="0.0" armature="0.001"/>
-                <inertial pos="-0.043122 -0.038397 0.000190" mass="0.319" fullinertia="0.000146600 0.000204200 0.000181800 -0.000011403300 -0.000006278833 -0.000000904927"/>
+                <inertial pos="-0.0475 -0.038265 0.000247" mass="0.326" fullinertia="0.000153800 0.000232600 0.000209300 -0.00001384168 -0.000007365016 -0.000000923815"/>
                 <geom type="mesh" mesh="hip_L_Link" material="black" contype="0" conaffinity="0" group="1"/>
                 <geom type="cylinder" size="0.042 0.0675" pos="-0.0535 0 0" euler="1.57 0 0" group="3"/>
 
@@ -74,6 +70,7 @@
                         <geom type="mesh" mesh="calf_L_Link" material="black" contype="0" conaffinity="0" group="1"/>
                         <geom type="cylinder" size="0.0325 0.1165" pos="0 0 -0.116" group="3"/>
 
+                        <!--BFW-->
                         <body name="wheel_L_Link" pos="0 0.016555 -0.200">
                             <joint name="wheel_L_Joint" type="hinge" axis="0 1 0" damping="0.0" frictionloss="0.0" armature="0.001"/>
                             <inertial pos="0 0.030660 0" mass="0.985" fullinertia="0.003366000 0.006306000 0.003366000 0 0 0"/>
@@ -86,7 +83,7 @@
 
             <body name="hip_R_Link" pos="0.049579 -0.096336 -0.087088">
                 <joint name="hip_R_Joint" type="hinge" axis="-1 0 0" range="-1.0123 1.7453" damping="0.0" frictionloss="0.0" armature="0.001"/>
-                <inertial pos="-0.043122 0.038397 0.000190" mass="0.319" fullinertia="0.000146600 0.000204200 0.000181800 0.000011403300 -0.000006278833 0.000000904927"/>
+                <inertial pos="-0.0475 0.038265 0.000247" mass="0.326" fullinertia="0.000153800 0.000232600 0.000209300 0.00001384168 -0.000007365016 0.000000923815"/>
                 <geom type="mesh" mesh="hip_R_Link" material="black" contype="0" conaffinity="0" group="1"/>
                 <geom type="cylinder" size="0.042 0.0675" pos="-0.0535 0 0" euler="1.57 0 0" group="3"/>
 
@@ -102,6 +99,7 @@
                         <geom type="mesh" mesh="calf_R_Link" material="black" contype="0" conaffinity="0" group="1"/>
                         <geom type="cylinder" size="0.0325 0.1165" pos="0 0 -0.116" group="3"/>
 
+                        <!--BFW-->
                         <body name="wheel_R_Link" pos="0 -0.016555 -0.200">
                             <joint name="wheel_R_Joint" type="hinge" axis="0 -1 0" damping="0.0" frictionloss="0.0" armature="0.001"/>
                             <inertial pos="0 -0.030660 0" mass="0.985" fullinertia="0.003366000 0.006306000 0.003366000 0 0 0"/>
@@ -147,25 +145,6 @@
         <exclude body1="calf_R_Link"  body2="wheel_L_Link"/>
         <exclude body1="wheel_L_Link" body2="wheel_R_Link"/>
     </contact>
-
-    <contact>
-        <pair name="floor_wheel_L"
-            geom1="floor"
-            geom2="wheel_L_collision"
-            condim="3"
-            friction="1.0 1.0 0.0 0.0 0.0"
-            solref="0.02 1.0"
-            solimp="0.9 0.95 0.001 0.5 2"/>
-
-        <pair name="floor_wheel_R"
-            geom1="floor"
-            geom2="wheel_R_collision"
-            condim="3"
-            friction="1.0 1.0 0.0 0.0 0.0"
-            solref="0.02 1.0"
-            solimp="0.9 0.95 0.001 0.5 2"/>
-    </contact>
-
 
     <!-- Torque actuators. ctrl is a joint torque [Nm]; all joint-level PD lives
          in the controller (PolicyController / NominalController), matching the
