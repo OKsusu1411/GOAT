@@ -55,7 +55,6 @@ class LogViewerNode(Node):
         self.start_time = None
         self.source_start_time = None
         self.log_start = False
-        obs_max_length = 31                     # NOTE: Observation max length (Movable policy's obs)
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -81,7 +80,7 @@ class LogViewerNode(Node):
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
             header += [f"{name}_actual_torque" for name in self.joint_names]
-            header += [f'obs_{i}' for i in range(obs_max_length)]                       # NOTE: Observation logging
+            header += [f'obs_{i}' for i in range(32)]                       # NOTE: Observation logging
 
             self.csv_writer.writerow(header)
             self.csv_file.flush()
@@ -139,10 +138,7 @@ class LogViewerNode(Node):
         row += [float(joint_vel[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
-
-        # NOTE: Observation
-        if obs.data:
-            row += [float(val) for val in obs.data]
+        row += [float(val) for val in obs.data] # NOTE: Observation
 
         self.csv_writer.writerow(row)
 

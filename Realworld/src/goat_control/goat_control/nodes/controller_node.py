@@ -340,35 +340,36 @@ class ControllerNode(Node):
         # IMU state
         t_imu_start = time.perf_counter()    
         imu_msg = self.imu_io.read_imu()
-        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3
+        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3    
 
-        # NOTE: Observation
-        obs_msg = Float32MultiArray()                 
+        # NOTE: Obs message
+        obs_msg = States()
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
+        obs   = np.zeros(self.policy_controller.policy_observation_dim, dtype=np.float32)      
 
         #r =================== Proactive Condition Check ====================
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
             self.motor_io.read_write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
             self.motor_io.read_write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         
         # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
         if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
             self.motor_io.read_write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         # ==================================================================
 
@@ -384,7 +385,7 @@ class ControllerNode(Node):
                                                                               dt_sec)
 
             # NOTE: Observation msg
-            obs_msg = copy.deepcopy(self.policy_controller.observation).tolist()
+            obs = copy.deepcopy(self.policy_controller.observation)
 
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
@@ -402,7 +403,7 @@ class ControllerNode(Node):
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             self.motor_io.read_write_motor(tau)
             return
 
@@ -427,7 +428,9 @@ class ControllerNode(Node):
 
         # Publish for logging
         q_current.header.stamp = self.get_clock().now().to_msg()
+        obs_msg.data = self.policy_controller.observation.tolist()
         self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg, obs_msg)           # NOTE: Publish observaion too
+
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
@@ -480,9 +483,11 @@ class ControllerNode(Node):
         self.torque_command_pub.publish(msg_command)
 
         # NOTE: Observation publishing
-        if obs_msg.data:
-            obs_msg.header.stamp = joint_state_msg.header.stamp
-            self.observation_pub.publish(obs_msg)
+        if not obs_msg.data:
+            obs_msg.data = [0] * self.policy_controller.policy_observation_dim
+        obs_msg.header.stamp = joint_state_msg.header.stamp
+        self.observation_pub.publish(obs_msg)
+        
 
 
 def main(args=None):
