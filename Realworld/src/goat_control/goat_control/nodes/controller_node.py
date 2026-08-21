@@ -384,9 +384,6 @@ class ControllerNode(Node):
                                                                               imu_msg,
                                                                               dt_sec)
 
-            # NOTE: Observation msg
-            obs = copy.deepcopy(self.policy_controller.observation)
-
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:
