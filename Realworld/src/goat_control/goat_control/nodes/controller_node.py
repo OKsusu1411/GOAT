@@ -434,10 +434,15 @@ class ControllerNode(Node):
         tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
 
         # Time logging
+        actual_period_ms = dt_sec * 1e3
+        actual_hz = 1.0 / max(dt_sec, 1e-9)
         self.logger.info(
-            f"[timing] total: {total_ms:6.2f} ms | {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
-            f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
-            f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms \r",
+            f"[timing] loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
+            f"| exec: {total_ms:6.2f} ms "
+            f"| can: {can_io_ms:6.2f} ms "
+            f"(tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
+            f"| imu: {imu_read_ms:5.2f} ms "
+            f"| ctrl: {ctrl_compute_ms:5.2f} ms \r",
             throttle_duration_sec=5.0,
         )
 
