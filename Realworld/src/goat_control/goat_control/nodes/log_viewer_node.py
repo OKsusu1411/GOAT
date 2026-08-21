@@ -55,6 +55,7 @@ class LogViewerNode(Node):
         self.start_time = None
         self.source_start_time = None
         self.log_start = False
+        obs_max_length = 31                     # NOTE: Observation max length (Movable policy's obs)
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -80,6 +81,7 @@ class LogViewerNode(Node):
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
             header += [f"{name}_actual_torque" for name in self.joint_names]
+            header += [f'obs_{i}' for i in range(obs_max_length)]                       # NOTE: Observation logging
 
             self.csv_writer.writerow(header)
             self.csv_file.flush()
@@ -90,19 +92,20 @@ class LogViewerNode(Node):
             
         # Subscribers for synchronized CSV logging
         self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
-        self.observation_sub = Subscriber(self, Float32MultiArray,"/obs")              # NOTE: Debugging 
         self.command_sub = Subscriber(self, JointState, "/commands")
-        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub], queue_size=20)
+        self.observation_sub = Subscriber(self, Float32MultiArray, "/obs")              # NOTE: Debugging 
+        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub, self.observation_sub], queue_size=20)     # NOTE: Observation
         self.sync.registerCallback(self._on_synced_data)
 
         # Timer (rate-limit printing)
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState) -> None:
+    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState, obs: Float32MultiArray) -> None:
         # Keep latest synchronized pair for terminal printing
         self.joint_current = joint_current
         self.joint_ref = joint_ref
+        self.obs = obs              # NOTE: Observation
 
         if not self.is_csv_logging:
             return
@@ -136,6 +139,10 @@ class LogViewerNode(Node):
         row += [float(joint_vel[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
+
+        # NOTE: Observation
+        if obs.data:
+            row += [float(val) for val in obs.data]
 
         self.csv_writer.writerow(row)
 
