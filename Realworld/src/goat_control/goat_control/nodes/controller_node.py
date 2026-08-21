@@ -15,6 +15,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32MultiArray
 from motor_interfaces.msg import ImuState
 from message_filters import Subscriber
 
@@ -125,6 +126,11 @@ class ControllerNode(Node):
         self.torque_command_pub = self.create_publisher(JointState, 
                                                         "/commands", 
                                                         qos_profile=qos_profile)
+
+        # NOTE: Observation publisher for debbugging
+        self.observation_pub = self.create_publisher(Float32MultiArray,
+                                                     "/obs",
+                                                     qos_profile=qos_profile)
 
         # Messages
         self.now_stamp = self.get_clock().now().to_msg()
@@ -334,7 +340,10 @@ class ControllerNode(Node):
         # IMU state
         t_imu_start = time.perf_counter()    
         imu_msg = self.imu_io.read_imu()
-        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                 
+        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3
+
+        # NOTE: Observation
+        obs_msg = Float32MultiArray()                 
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -373,6 +382,10 @@ class ControllerNode(Node):
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                               imu_msg,
                                                                               dt_sec)
+
+            # NOTE: Observation msg
+            obs_msg = copy.deepcopy(self.policy_controller.observation).tolist()
+
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:
@@ -414,7 +427,7 @@ class ControllerNode(Node):
 
         # Publish for logging
         q_current.header.stamp = self.get_clock().now().to_msg()
-        self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg)
+        self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg, obs_msg)           # NOTE: Publish observaion too
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
@@ -429,7 +442,7 @@ class ControllerNode(Node):
             throttle_duration_sec=5.0,
         )
 
-    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
+    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
         # Interrupting handling
         if not rclpy.ok():
@@ -465,6 +478,10 @@ class ControllerNode(Node):
         self.joint_state_pub.publish(msg_joint)
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
+
+        # NOTE: Observation publishing
+        if obs_msg.data:
+            self.observation_pub.publish(obs_msg)
 
 
 def main(args=None):
