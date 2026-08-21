@@ -13,7 +13,7 @@ from pathlib import Path
 from rclpy.node import Node
 from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float32MultiArray
+from motor_interfaces.msg import States
 
 class LogViewerNode(Node):
     """
@@ -93,7 +93,7 @@ class LogViewerNode(Node):
         # Subscribers for synchronized CSV logging
         self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
         self.command_sub = Subscriber(self, JointState, "/commands")
-        self.observation_sub = Subscriber(self, Float32MultiArray, "/obs")              # NOTE: Debugging 
+        self.observation_sub = Subscriber(self, States, "/obs")              # NOTE: Debugging 
         self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub, self.observation_sub], queue_size=20)     # NOTE: Observation
         self.sync.registerCallback(self._on_synced_data)
 
@@ -101,7 +101,7 @@ class LogViewerNode(Node):
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState, obs: Float32MultiArray) -> None:
+    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState, obs: States) -> None:
         # Keep latest synchronized pair for terminal printing
         self.joint_current = joint_current
         self.joint_ref = joint_ref

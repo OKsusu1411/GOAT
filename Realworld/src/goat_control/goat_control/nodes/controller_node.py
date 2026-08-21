@@ -15,7 +15,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float32MultiArray
+from motor_interfaces.msg import States
 from motor_interfaces.msg import ImuState
 from message_filters import Subscriber
 
@@ -128,7 +128,7 @@ class ControllerNode(Node):
                                                         qos_profile=qos_profile)
 
         # NOTE: Observation publisher for debbugging
-        self.observation_pub = self.create_publisher(Float32MultiArray,
+        self.observation_pub = self.create_publisher(States,
                                                      "/obs",
                                                      qos_profile=qos_profile)
 
@@ -481,6 +481,7 @@ class ControllerNode(Node):
 
         # NOTE: Observation publishing
         if obs_msg.data:
+            obs_msg.header.stamp = joint_state_msg.header.stamp
             self.observation_pub.publish(obs_msg)
 
 
