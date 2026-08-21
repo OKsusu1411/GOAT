@@ -425,7 +425,7 @@ class ControllerNode(Node):
 
         # Publish for logging
         q_current.header.stamp = self.get_clock().now().to_msg()
-        obs_msg.data = self.policy_controller.observation.tolist()
+        obs_msg.data = self.policy_controller.observation[0].tolist()
         self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg, obs_msg)           # NOTE: Publish observaion too
 
 
