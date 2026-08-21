@@ -196,22 +196,22 @@ joint_pos_limit:
 - -.inf
 - .inf
 joint_pos_soft_limit_coeff: 0.95
-joint_vel_estop_threshold: 6.0
-joint_vel_estop_sample_num: 20
+joint_vel_estop_threshold: 4.0
+joint_vel_estop_sample_num: 10
 motor_current_amp_per_lsb: 0.01611328125
 angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
 joint_offsets:
-- -4.16418106233327
-- -4.1552449765630595
-- -4.165978751462825
-- 6.289381226024164
-- 1.3715146328021843
-- -2.422743894570888
-- -2.3790932099785116
-- 0.7598290898557316
+- -4.165559872442346
+- -4.151893944399232
+- -4.183466950567807
+- 6.323537319485695
+- 1.4320164713225667
+- -2.4472657705614087
+- 1.5619126009022457
+- -1.7131104740025134
 imu_offsets:
 - 1.0
 - 0.0
