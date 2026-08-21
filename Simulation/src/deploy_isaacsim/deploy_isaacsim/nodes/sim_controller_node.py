@@ -12,6 +12,7 @@ import yaml
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
 from motor_interfaces.msg import ImuState
 from message_filters import Subscriber, TimeSynchronizer
@@ -116,6 +117,7 @@ class SimControllerNode(Node):
         # command publisher
         # ------------------------------------------------------------------
         self.joint_command_publisher = self.create_publisher(JointState, "/commands", qos_profile=sim_qos_profile)
+        self.obs_publisher = self.create_publisher(Float32MultiArray, "/obs", sim_qos_profile=sim_qos_profile)
 
         # ------------------------------------------------------------------
         # Mode switch
@@ -267,12 +269,13 @@ class SimControllerNode(Node):
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau = np.zeros(self.num_joints, dtype=np.float32)
+        obs = np.zeros(self.policy_controller.policy_observation_dim, dtype=np.float32)
 
         # --------------------------------------------------------------
         # Proactive condition check
         # --------------------------------------------------------------
         if self.publish_mode is None:
-            self._publish_joint_command(q_ref, v_ref, tau, joint_msg.header.stamp)
+            self._publish_joint_command(q_ref, v_ref, tau, obs, joint_msg.header.stamp)
             return
         
         # --------------------------------------------------------------
@@ -318,9 +321,10 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
-        self._publish_joint_command(q_ref, v_ref, tau, joint_msg.header.stamp)
+        obs[:] = self.policy_controller.observations[0]
+        self._publish_joint_command(q_ref, v_ref, tau, obs, joint_msg.header.stamp)
 
-    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray, stamp) -> None:
+    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray, obs: np.ndarray,  stamp) -> None:
         """Publish command to /joint_command.
 
         Message semantic:
@@ -346,7 +350,12 @@ class SimControllerNode(Node):
         msg.velocity = velocity.tolist()
         msg.effort = torque.tolist()
 
+        obs_msg = Float32MultiArray()
+        obs_msg.header.stamp = stamp
+        obs_msg.data = obs.tolist()
+
         self.joint_command_publisher.publish(msg)
+        self.obs_publisher.publish(obs_msg)
 
 
 def main(args=None):
