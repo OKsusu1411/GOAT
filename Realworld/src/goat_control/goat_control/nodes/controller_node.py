@@ -349,7 +349,6 @@ class ControllerNode(Node):
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
-        obs   = np.zeros(self.policy_controller.policy_observation_dim, dtype=np.float32)      
 
         #r =================== Proactive Condition Check ====================
         # Kill latch: do not auto-recover.
@@ -417,7 +416,7 @@ class ControllerNode(Node):
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Publish torque command (only start mode)
-        tau[:] = safe_torque
+        tau[:] = 0
 
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
         q_current = self.motor_io.read_write_motor(tau)                                     
