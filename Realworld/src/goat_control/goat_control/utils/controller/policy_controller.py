@@ -83,7 +83,7 @@ class PolicyController(BaseController):
 
         # --- Internal state ---
         # Raw action dim is defined by the (mode-specific) scale factor length.
-        self.observation = np.zeros((1, self.policy_observation_dim), dtype=float)
+        self.observation = np.zeros((1, self.policy_observation_dim), dtype=np.float32)
         self._action_dim = int(self.policy_action_scale_factor.size)
         self._delta_pos = np.zeros(self.num_leg_joints, dtype=float)
         self._wheel_speed_ref = np.zeros(self.num_wheel_joints, dtype=float)
