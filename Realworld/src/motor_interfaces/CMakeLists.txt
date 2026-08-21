@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorStates.msg"
   "msg/BaseStates.msg"
   "msg/ImuState.msg"
+  "msg/State.msg"
   DEPENDENCIES std_msgs
   DEPENDENCIES std_msgs geometry_msgs  
 )
