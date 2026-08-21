@@ -417,7 +417,7 @@ class ControllerNode(Node):
         ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Publish torque command (only start mode)
-        tau[:] = safe_torque
+        tau[:] = 0
 
         t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
         q_current = self.motor_io.read_write_motor(tau)                                     
