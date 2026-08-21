@@ -12,9 +12,8 @@ import yaml
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import ImuState
+from motor_interfaces.msg import ImuState, States
 from message_filters import Subscriber, TimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
@@ -117,7 +116,7 @@ class SimControllerNode(Node):
         # command publisher
         # ------------------------------------------------------------------
         self.joint_command_publisher = self.create_publisher(JointState, "/commands", qos_profile=sim_qos_profile)
-        self.obs_publisher = self.create_publisher(Float32MultiArray, "/obs", sim_qos_profile=sim_qos_profile)
+        self.obs_publisher = self.create_publisher(States, "/obs", qos_profile=sim_qos_profile)
 
         # ------------------------------------------------------------------
         # Mode switch
@@ -321,7 +320,7 @@ class SimControllerNode(Node):
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
-        obs[:] = self.policy_controller.observations[0]
+        obs[:] = self.policy_controller.observation[0]
         self._publish_joint_command(q_ref, v_ref, tau, obs, joint_msg.header.stamp)
 
     def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray, obs: np.ndarray,  stamp) -> None:
@@ -350,7 +349,7 @@ class SimControllerNode(Node):
         msg.velocity = velocity.tolist()
         msg.effort = torque.tolist()
 
-        obs_msg = Float32MultiArray()
+        obs_msg = States()
         obs_msg.header.stamp = stamp
         obs_msg.data = obs.tolist()
 

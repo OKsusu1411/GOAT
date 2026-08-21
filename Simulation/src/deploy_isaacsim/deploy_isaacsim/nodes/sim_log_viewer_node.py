@@ -13,6 +13,7 @@ from pathlib import Path
 from rclpy.node import Node
 from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
+from motor_interfaces.msg import States
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -23,7 +24,7 @@ class LatestLog:
 
 class SimLogViewerNode(Node):
     """
-    Subscribe:  goat/torque_log (Float32MultiArray)
+    Subscribe:  goat/torque_log (States)
       - data (supported layouts):
           (B) [q(rad) xN, dq(rad/s) xN, u(cmd) xN, ref xN]               => length = 4 * N
 
@@ -72,6 +73,7 @@ class SimLogViewerNode(Node):
 
         self.joint_current: Optional[JointState] = None
         self.joint_ref: Optional[JointState] = None
+        self.obs: Optional[States] = None
         self.command_unit = "Nm"
 
         # CSV logging
@@ -86,6 +88,7 @@ class SimLogViewerNode(Node):
             header = ["time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
+            header += [f"observation_{i}" for i in range(32)]
 
             self.csv_writer.writerow(header)
             self.csv_file.flush()
@@ -100,11 +103,12 @@ class SimLogViewerNode(Node):
         # Subscribers
         self._joint_states_sub = Subscriber(self, JointState, "/joint_states", qos_profile=sim_qos_profile)
         self._joint_command_sub = Subscriber(self, JointState, "/commands", qos_profile=sim_qos_profile)
-        self.sync = TimeSynchronizer([self._joint_states_sub, self._joint_command_sub], 10)
+        self._obs_sub = Subscriber(self, States, "/obs", qos_profile=sim_qos_profile)
+        self.sync = TimeSynchronizer([self._joint_states_sub, self._joint_command_sub, self._obs_sub], 10)
         self.sync.registerCallback(self._tick)
 
 
-    def _write_csv(self, joint_state_msg: JointState, joint_command_msg: JointState) -> None:
+    def _write_csv(self, joint_state_msg: JointState, joint_command_msg: JointState, obs_msg: States) -> None:
         if self.log_degrees:
             joint_pos_log = np.rad2deg(np.asarray(joint_state_msg.position, dtype=float))
             joint_vel_log = np.rad2deg(np.asarray(joint_state_msg.velocity, dtype=float))
@@ -113,6 +117,8 @@ class SimLogViewerNode(Node):
             joint_vel_log = np.asarray(joint_state_msg.velocity, dtype=float)
 
         joint_effort_ref = np.asarray(joint_command_msg.effort, dtype=float)
+
+        obs = obs_msg.data
 
         stamp_ns = (joint_state_msg.header.stamp.sec * 1_000_000_000 + joint_state_msg.header.stamp.nanosec)
 
@@ -129,13 +135,15 @@ class SimLogViewerNode(Node):
         row += [float(joint_pos_log[i]) for i in range(self.num_joints)]
         row += [float(joint_vel_log[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
+        row += [float(obs[i]) for i in range(32)]
 
         self.csv_writer.writerow(row)
 
 
-    def _tick(self, joint_state_msg: JointState, joint_command_msg: JointState) -> None:
+    def _tick(self, joint_state_msg: JointState, joint_command_msg: JointState, obs_msg: States) -> None:
         self.joint_current = joint_state_msg
         self.joint_ref = joint_command_msg
+        self.obs = obs_msg
 
         # Decode torque msg
         joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
@@ -180,7 +188,7 @@ class SimLogViewerNode(Node):
         self.get_logger().info("\n" + "\n".join(lines))
 
         if self.is_csv_logging and (self._print_count % self.log_interval == 0):
-            self._write_csv(joint_state_msg, joint_command_msg)
+            self._write_csv(joint_state_msg, joint_command_msg, obs_msg)
 
         self._print_count += 1
 
