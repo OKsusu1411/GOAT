@@ -215,8 +215,8 @@ class PolicyController(BaseController):
             joint_pos:     Joint angle (all joints)         [rad], shape (J,).
             joint_vel:     Joint velocity                   [rad/s], shape (J,).
         """
-        observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
-        raw_action = self.agent.run([self._output_name], {self._input_name: observation})[0].reshape(-1)
+        self.observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
+        raw_action = self.agent.run([self._output_name], {self._input_name: self.observation})[0].reshape(-1)
         self._decode_action(raw_action)
         self.previous_action = raw_action 
 

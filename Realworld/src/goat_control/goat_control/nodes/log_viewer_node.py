@@ -13,6 +13,7 @@ from pathlib import Path
 from rclpy.node import Node
 from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32MultiArray
 
 class LogViewerNode(Node):
     """
@@ -89,6 +90,7 @@ class LogViewerNode(Node):
             
         # Subscribers for synchronized CSV logging
         self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
+        self.observation_sub = Subscriber(self, Float32MultiArray,"/obs")              # NOTE: Debugging 
         self.command_sub = Subscriber(self, JointState, "/commands")
         self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub], queue_size=20)
         self.sync.registerCallback(self._on_synced_data)
