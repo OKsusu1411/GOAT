@@ -484,7 +484,7 @@ class ControllerNode(Node):
 
         # NOTE: Observation publishing
         if not obs_msg.data:
-            obs_msg.data = [0] * self.policy_controller.policy_observation_dim
+            obs_msg.data = [0.0] * self.policy_controller.policy_observation_dim
         obs_msg.header.stamp = joint_state_msg.header.stamp
         self.observation_pub.publish(obs_msg)
         
