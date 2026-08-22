@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+import sys
 import yaml
 import time
 import copy
@@ -75,6 +76,11 @@ class ControllerNode(Node):
 
         # Logger
         self.logger = self.get_logger()
+
+        self.logger.info(
+            f"Python thread switch interval: "
+            f"{sys.getswitchinterval() * 1e3:.3f} ms"
+        )
 
         # Controller
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
@@ -325,25 +331,17 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        self.now_stamp = self.get_clock().now().to_msg()
         now_time = time.perf_counter()
 
         # Time - Time → Duration; convert to seconds via nanoseconds.
         dt_sec = (now_time - self.last_tick_time)
-        if dt_sec <= 0.0:
-            dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
+        if dt_sec <= 0.0: dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
-        # Joint state
+        # Messages
         joint_state_msg = self.motor_io.latest_joint_state
-
-        # IMU state
-        t_imu_start = time.perf_counter()    
-        imu_msg = self.imu_io.read_imu()
-        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3    
-
-        # NOTE: Obs message
-        obs_msg = States()
+        imu_msg = self.imu_io.read_imu() 
+        obs_msg = States()  # NOTE: Obs message
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -375,8 +373,7 @@ class ControllerNode(Node):
         # Mode switch detection
         self._switch_mode(self.publish_mode)
 
-        # Active controller execution
-        t_ctrl_start = time.perf_counter()                                    
+        # Active controller execution                                 
         if self.publish_mode == 'policy':
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
@@ -413,38 +410,26 @@ class ControllerNode(Node):
             self._trigger_kill_switch("SafetyLimiter blocked command")
             self.motor_io.read_write_motor(tau)
             return
-        ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Publish torque command (only start mode)
         tau[:] = 0
-
-        t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
         q_current = self.motor_io.read_write_motor(tau)                                     
-        can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
 
         # Publish for logging
         q_current.header.stamp = self.get_clock().now().to_msg()
         obs_msg.data = self.policy_controller.observation[0].tolist()
         self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg, obs_msg)           # NOTE: Publish observaion too
 
-
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
-        tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
-        tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
+        exec_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
+        exec_hz = 1.0 / max(exec_ms, 1e-9)
 
         # Time logging
         actual_period_ms = dt_sec * 1e3
         actual_hz = 1.0 / max(dt_sec, 1e-9)
-        self.logger.info(
-            f"[timing] loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
-            f"| exec: {total_ms:6.2f} ms "
-            f"| can: {can_io_ms:6.2f} ms "
-            f"(tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
-            f"| imu: {imu_read_ms:5.2f} ms "
-            f"| ctrl: {ctrl_compute_ms:5.2f} ms \r",
-            throttle_duration_sec=5.0,
-        )
+        self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz ",
+                         f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz",
+                         throttle_duration_sec=2.0)
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
