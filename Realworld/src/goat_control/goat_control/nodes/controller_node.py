@@ -421,14 +421,15 @@ class ControllerNode(Node):
         self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg, obs_msg)           # NOTE: Publish observaion too
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        exec_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
-        exec_hz = 1.0 / max(exec_ms, 1e-9)
+        exec_dt = (time.perf_counter() - now_time) 
+        exec_ms = exec_dt * 1e3  
+        exec_hz = 1.0 / max(exec_dt, 1e-9)
 
         # Time logging
         actual_period_ms = dt_sec * 1e3
         actual_hz = 1.0 / max(dt_sec, 1e-9)
         self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
-                         f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz",
+                         f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz \r",
                          throttle_duration_sec=2.0)
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
