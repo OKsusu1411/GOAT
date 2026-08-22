@@ -427,7 +427,7 @@ class ControllerNode(Node):
         # Time logging
         actual_period_ms = dt_sec * 1e3
         actual_hz = 1.0 / max(dt_sec, 1e-9)
-        self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz ",
+        self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
                          f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz",
                          throttle_duration_sec=2.0)
 
@@ -477,6 +477,7 @@ class ControllerNode(Node):
 
 
 def main(args=None):
+    sys.setswitchinterval(0.001) # NOTE Test
     rclpy.init(args=args)
     node = ControllerNode()
 
