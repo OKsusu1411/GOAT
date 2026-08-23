@@ -413,7 +413,7 @@ class ControllerNode(Node):
             return
 
         # Publish torque command (only start mode)
-        tau[:] = safe_torque
+        tau[:] = 0
         q_current = self.motor_io.read_write_motor(tau)                                     
 
         # Publish for logging
