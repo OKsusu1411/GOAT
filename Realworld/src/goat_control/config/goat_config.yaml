@@ -67,7 +67,7 @@ motor_direction:
 - 1
 - 1
 wheel_radius: 0.095
-num_traj_points: 500
+num_traj_points: 200
 nsc_urdf_path: null
 nsc_leg_proportional_gain:
 - 30.0
