@@ -92,6 +92,7 @@ nsc_wheel_outer_derivative_gain: 0.03
 nsc_wheel_inner_proportional_gain: 6.0
 nsc_wheel_inner_derivative_gain: 0.6
 nsc_theta_cmd_limit: 5.0
+
 policy_mode: movable
 policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
@@ -126,17 +127,26 @@ policy_fixed:
   - 0.0
   - 0.0
   - 0.0
+  effective_joint_indices:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  effective_wheel_indices:
+  - 6
+  - 7
+
 policy_movable:
   observation_info:
     base_ang_vel: 3
     gravity_vector: 3
     base_command: 4
-    joint_pos: 6
-    joint_vel: 8
-    previous_action: 8
+    joint_pos: 4
+    joint_vel: 6
+    previous_action: 6
   action_scale_factor:
-  - 0.5
-  - 0.5
   - 0.5
   - 0.5
   - 0.5
@@ -152,6 +162,15 @@ policy_movable:
   - -2.0944
   - 0.0
   - 0.0
+  effective_joint_indices:
+  - 2
+  - 3
+  - 4
+  - 5
+  effective_wheel_indices:
+  - 6
+  - 7
+
 policy_leg_proportional_gain:
 - 3.0
 - 3.0
@@ -169,9 +188,10 @@ policy_leg_derivative_gain:
 policy_wheel_proportional_gain:
 - 0.05
 - 0.05
+
 max_torque_per_joint:
-- 4.5
-- 4.5
+- 0.0
+- 0.0
 - 4.5
 - 4.5
 - 9.0

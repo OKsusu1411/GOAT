@@ -1,27 +1,25 @@
 # GOAT MuJoCo standalone deployment config.
-timestep: 0.005
-control_dt: 0.005
-joint_names: [hip_L_Joint,  hip_R_Joint,
-              thigh_L_Joint, thigh_R_Joint,
+timestep: 0.01
+control_dt: 0.01
+joint_names: [thigh_L_Joint, thigh_R_Joint,
               knee_L_Joint,  knee_R_Joint,
               wheel_L_Joint, wheel_R_Joint]
-leg_indices:   [0, 1, 2, 3, 4, 5]
-wheel_indices: [6, 7]
+leg_indices:   [0, 1, 2, 3]
+wheel_indices: [4, 5]
 
 policy:
   # Resolved relative to this file when not absolute. Override with --checkpoint.
   checkpoint: ../../../../Realworld/src/goat_control/checkpoint/stand.onnx
-  # Policy runs every N control ticks (200 Hz / 2 = 100 Hz).
+  # Policy runs every N control ticks.
   decimation: 2
-  action_scale: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 5.0, 5.0]
+  action_scale: [0.5, 0.5, 0.5, 0.5, 5.0, 5.0]
 
-  natural_joint_position: [0.0,   0.0,
-                           0.738, -0.738,
-                           1.462, -1.462,
+  natural_joint_position: [0.9756, -0.9756,
+                           2.0944, -2.0944,
                            0.0,   0.0]
 gains:
-  leg_kp:   [3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
-  leg_kd:   [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  leg_kp:   [3.0, 3.0, 3.0, 3.0]
+  leg_kd:   [0.1, 0.1, 0.1, 0.1]
   wheel_kp: [0.05, 0.05]
 
 command:
@@ -29,12 +27,15 @@ command:
   wz_limit: 0.1
   vx_step:  0.01
   wz_step:  0.01
+  height_lower_limit: 0.48
+  height_upper_limit: 0.56
+  height_step: 0.02
 
 safety:
   # [lower, upper] per joint, joint_names order. inf = unlimited (wheels).
   joint_pos_limit:
-    - [-1.22173,  0.750492]   # hip_L
-    - [-0.750492, 1.22173]    # hip_R
+    # - [-1.22173,  0.750492]   # hip_L
+    # - [-0.750492, 1.22173]    # hip_R
     - [-0.261799, 2.05949]    # thigh_L
     - [-2.05949,  0.261799]   # thigh_R
     - [-0.262,    2.2253]     # knee_L
@@ -44,4 +45,4 @@ safety:
   # Latching estop, checked on leg joints only.
   joint_vel_estop: 4.0
   # Torque clip [Nm]. Matches the MJCF <motor> ctrlrange.
-  max_torque: [4.5, 4.5, 4.5, 4.5, 9.0, 9.0, 2.5, 2.5]
+  max_torque: [4.5, 4.5, 9.0, 9.0, 2.5, 2.5]

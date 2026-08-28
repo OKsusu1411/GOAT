@@ -54,6 +54,10 @@ class PolicyController(BaseController):
         self.policy_observation_info = dict(mode_cfg["observation_info"])
         self.policy_action_scale_factor = np.asarray(mode_cfg["action_scale_factor"], dtype=float).flatten()
         self._natural_pos = np.asarray(mode_cfg["natural_joint_position"], dtype=float).flatten()
+        self._effective_joint_indicies: List[int] = list(mode_cfg["effective_joint_indicies"])
+        self._effective_wheel_indicies: List[int] = list(mode_cfg["effective_wheel_indicies"])
+        self.num_effective_leg_joints = len(self._effective_joint_indicies)
+        self.num_effective_wheel_joints = len(self._effective_wheel_indicies)
 
         # --- Common policy-related information ---
         self.num_traj_points = cfg["num_traj_points"]
@@ -268,7 +272,7 @@ class PolicyController(BaseController):
             tau_wheel = self._kp_wheel * wheel_vel_err
             joint_cmd[self._wheel_indices] = tau_wheel
 
-        # --- Data inserting ---
+        # --- Data processing ---
         target_pos[self._joint_indices] = target_leg_pos
 
         # Update decimation step

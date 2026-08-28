@@ -53,14 +53,15 @@ class MovableBasePolicyController(PolicyController):
         return np.hstack([base_ang_vel,
                           gravity_vector,
                           self._base_command,
-                          joint_pos[self._joint_indices] - self._natural_pos[self._joint_indices],
-                          joint_vel,
+                          joint_pos[self._effective_joint_indicies] - self._natural_pos[self._effective_joint_indicies],
+                          joint_vel[self._effective_joint_indicies],
+                          joint_vel[self._effective_wheel_indicies],
                           self.previous_action]).reshape(1, -1).astype(np.float32)
 
     def _decode_action(self, raw_action: np.ndarray) -> None:
         policy_action = raw_action * self.policy_action_scale_factor
-        self._delta_pos = policy_action[self._joint_indices]
-        self._wheel_speed_ref = policy_action[self._wheel_indices]
+        self._delta_pos[self._effective_joint_indicies] = policy_action[:self.num_effective_leg_joints]
+        self._wheel_speed_ref = policy_action[self.num_effective_leg_joints:]
 
     # ------------------------------------------------------------------
     # Keyboard command interface (Base Velocity Tracking)

@@ -73,7 +73,7 @@ class Policy:
         self.inp = self.session.get_inputs()[0]
         self.out_name = self.session.get_outputs()[0].name
 
-        self.obs_dim = 3 + 3 + 3 + self.leg.size + self.natural.size + self.scale.size
+        self.obs_dim = 3 + 3 + 4 + self.leg.size + self.natural.size + self.scale.size
         want = self.inp.shape[-1]
         if isinstance(want, int) and want != self.obs_dim:
             raise SystemExit(f"ONNX wants obs dim {want}, config builds {self.obs_dim}")
@@ -81,7 +81,8 @@ class Policy:
         self.reset()
 
     def reset(self) -> None:
-        self.command = np.zeros(3)                       # [v_x, v_y, w_z]
+        self.command = np.zeros(4)                       # [v_x, v_y, w_z, h]
+        self.command[3] = self.limits["height_lower_limit"]
         self.previous_action = np.zeros(self.scale.size)
         self.delta_pos = np.zeros(self.leg.size)
         self.wheel_ref = np.zeros(self.wheel.size)
@@ -120,9 +121,13 @@ class Policy:
             self.command[2] = min(self.command[2] + lim["wz_step"], lim["wz_limit"])
         elif action == "wz-":
             self.command[2] = max(self.command[2] - lim["wz_step"], -lim["wz_limit"])
+        elif action == "h+":
+            self.command[3] = min(self.command[3] + lim["height_step"], lim["height_upper_limit"])
+        elif action == "h-":
+            self.command[3] = max(self.command[3] - lim["height_step"], lim["height_lower_limit"])
         elif action == "zero":
             self.command[:] = 0.0
-        return f"cmd  v_x={self.command[0]:+.2f}  w_z={self.command[2]:+.2f}"
+        return f"cmd  v_x={self.command[0]:+.2f}  w_z={self.command[2]:+.2f} h={self.command[3]:+.3f}"
 
 
 class Safety:
@@ -217,10 +222,7 @@ class Sim:
         sensor = self.data.sensordata
         quat = sensor[self.quat] if self.quat else np.array([1.0, 0.0, 0.0, 0.0])
         gyro = sensor[self.gyro] if self.gyro else np.zeros(3)
-
-        # While paused there is no controller output to guard, and the legs sag
-        # under gravity -- running the safety check then would latch the estop on
-        # a pose the policy never produced.
+        
         if self.running:
             tau = self.policy.torque(gyro, quat, pos, vel)
             self.data.ctrl[self.actuator] = self.safety(tau, pos, vel)
@@ -231,8 +233,6 @@ class Sim:
 
 
 # GLFW key code -> action, delivered by the viewer window (not the terminal).
-# Space and the arrows are what you reach for, but MuJoCo's own viewer UI binds
-# them too and may consume them first, so every action has a letter alias.
 KEYS = {
     32: "toggle", 80: "toggle",     # space / P
     82: "reset",  88: "reset",      # R     / X
@@ -241,6 +241,7 @@ KEYS = {
     264: "vx-",   83: "vx-",        # down  / S
     262: "wz+",   68: "wz+",        # right / D
     263: "wz-",   65: "wz-",        # left  / A
+    328: "h+",    325: "h-",        # Numpad 8 / 5
     48: "zero",   90: "zero",       # 0     / Z
 }
 
@@ -248,8 +249,8 @@ KEYS = {
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", type=Path, default=HERE / "configs/xml/goat_on_stand.xml")
-    p.add_argument("--config", type=Path, default=HERE / "configs/goat.yaml")
+    p.add_argument("--model", type=Path, default=HERE / "config/xml/goat_on_stand.xml")
+    p.add_argument("--config", type=Path, default=HERE / "config/goat.yaml")
     p.add_argument("--keyframe", default="home")
     p.add_argument("--duration", type=float, default=0.0, help="stop after N s of sim time")
     p.add_argument("--stopped", action="store_true", help="begin with the policy paused")

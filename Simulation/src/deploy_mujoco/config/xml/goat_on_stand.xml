@@ -1,13 +1,13 @@
 <mujoco model="GOAT_on_Stand">
     <compiler angle="radian" coordinate="local" meshdir="../meshes/"/>
-    <option timestep="0.005" gravity="0 0 -9.81"/>
+    <option timestep="0.01" gravity="0 0 -9.81"/>
 
     <!-- GOAT robot -->
-    <include file="./goat_floating.xml"/>
+    <include file="./goat_floating_no_hip.xml"/>
 
     <!-- Stand jig -->
     <asset>
-        <mesh name="jig_mesh" file="GOAT_stand7mm35cm.stl" scale="0.5 1 1"/>
+        <mesh name="jig_mesh" file="GOAT_stand7mm35cm.stl" scale="0.9 1 1"/>
         <material name="jig_material" rgba="0.8 0.8 0.8 1.0"/>
     </asset>
 
