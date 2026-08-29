@@ -298,7 +298,7 @@
 
     <!-- ****************************************** Joint ******************************************************** -->
     
-    <joint name="hip_L_Joint" type="revolute">
+    <joint name="hip_L_Joint" type="fixed">
         <origin xyz="51.079E-03 96.336E-03 -87.088E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_L_Link"/>
@@ -308,7 +308,7 @@
         <dynamics friction="0.0" />
     </joint>
     
-    <joint name="hip_R_Joint" type="revolute">
+    <joint name="hip_R_Joint" type="fixed">
         <origin xyz="51.079E-03 -96.336E-03 -87.088E-03" rpy="0 0 0"/>
         <parent link="base_Link"/>
         <child link="hip_R_Link"/>

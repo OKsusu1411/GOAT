@@ -88,32 +88,30 @@ class NominalController(BaseController):
             # wheel_R_Joint
 
         # ========== Name Index Mapping =========== #
-        self.ros_joint_names = [
-            'hip_L_Joint', 'hip_R_Joint', 'thigh_L_Joint', 'thigh_R_Joint',
-            'knee_L_Joint', 'knee_R_Joint', 'wheel_L_Joint', 'wheel_R_Joint'
-        ]
+        self.ros_joint_names = ['hip_L_Joint', 'hip_R_Joint',
+                                'thigh_L_Joint', 'thigh_R_Joint',
+                                'knee_L_Joint', 'knee_R_Joint', 
+                                'wheel_L_Joint', 'wheel_R_Joint']
 
-        self.pin_joint_names = [
-            'hip_L_Joint', 'thigh_L_Joint', 'knee_L_Joint', 'wheel_L_Joint',
-            'hip_R_Joint', 'thigh_R_Joint', 'knee_R_Joint', 'wheel_R_Joint'
-        ]
+        self.pin_joint_names = ['thigh_L_Joint', 'knee_L_Joint', 'wheel_L_Joint',
+                                'thigh_R_Joint', 'knee_R_Joint', 'wheel_R_Joint']
         self.ros_name_to_idx = {name: i for i, name in enumerate(self.ros_joint_names)}
         self.pin_name_to_idx = {name: i for i, name in enumerate(self.pin_joint_names)}
 
-        self.ros_to_pin_ids = [0, 2, 4, 6, 1, 3, 5, 7] # ROS[self.ros_to_pin_ids] = Pin Ids
-        self.pin_to_ros_ids = [0, 4, 1, 5, 2, 6, 3, 7] # Pin[self.pin_to_ros_ids] = ROS Ids
+        self.ros_to_pin_ids = [2, 4, 6, 3, 5, 7] # ROS[self.ros_to_pin_ids] = Pin Ids
+        # self.ros_to_pin_ids = [0, 2, 4, 6, 1, 3, 5, 7] # ROS[self.ros_to_pin_ids] = Pin Ids
 
         # actuator ordering
-        self.wheel_L_joint_id = self.pin_name_to_idx['wheel_L_Joint']   # 3 : Left wheel index in pinocchio-actuator-order
-        self.wheel_R_joint_id = self.pin_name_to_idx['wheel_R_Joint']   # 7 : Right wheel index in pinocchio-actuator-order
+        self.wheel_L_joint_id = self.pin_name_to_idx['wheel_L_Joint']   
+        self.wheel_R_joint_id = self.pin_name_to_idx['wheel_R_Joint']  
 
         # pinocchio model ordering
-        self.wheel_L_joint_pin_id = self.model_names.index('wheel_L_Joint') # 5 : Left wheel index in pinocchio-joint-order
-        self.wheel_R_joint_pin_id = self.model_names.index('wheel_R_Joint') # 9 : Right wheel index in pinocchio-joint-order
+        self.wheel_L_joint_pin_id = self.model_names.index('wheel_L_Joint') 
+        self.wheel_R_joint_pin_id = self.model_names.index('wheel_R_Joint') 
 
         # generalized velocity ordering inside nv=14
-        self.wheel_L_joint_nv_id = 6 + self.wheel_L_joint_id                 # 9
-        self.wheel_R_joint_nv_id = 6 + self.wheel_R_joint_id                 # 13
+        self.wheel_L_joint_nv_id = 6 + self.wheel_L_joint_id                
+        self.wheel_R_joint_nv_id = 6 + self.wheel_R_joint_id             
 
         # Robot parameters
         self.nq = self.model.nq                         # Position dim (7 + n)
@@ -125,21 +123,25 @@ class NominalController(BaseController):
         self.num_traj_points = self.cfg.get("num_traj_points")
         self.leg_Kp = np.diag(np.asarray(self.cfg.get("nsc_leg_proportional_gain"), dtype=float)[self.ros_to_pin_ids])
         self.leg_Kd = np.diag(np.asarray(self.cfg.get("nsc_leg_derivative_gain"), dtype=float)[self.ros_to_pin_ids])
-        self.wheel_outer_Kp = self.cfg.get("nsc_wheel_outer_proportional_gain")  
+        self.wheel_lqr_K = np.asarray(self.cfg.get("nsc_wheel_lqr_gain",[-24.40576650, -3.92998946, -11.18582263, -9.42047823]), dtype=float).reshape(4)
+        self.theta_eq = float(self.cfg.get("nsc_wheel_theta_equilibrium", 0.06923353258))
+        self.wheel_s_ref = float(self.cfg.get("nsc_wheel_position_reference", 0.0))
+        self.theta_anchor = 0.0
+        self.wheel_lqr_state = np.zeros(4, dtype=float)
+        self.wheel_tau = 0.0
+
         self.wheel_outer_Kd = self.cfg.get("nsc_wheel_outer_derivative_gain")  
         self.wheel_inner_Kp = self.cfg.get("nsc_wheel_inner_proportional_gain")  
         self.wheel_inner_Kd = self.cfg.get("nsc_wheel_inner_derivative_gain")
         self.theta_cmd_limit = math.radians(self.cfg.get("nsc_theta_cmd_limit"))  
-        self.q_target = np.asarray([0.0, 0.0, 0.738, -0.738, 1.462, -1.462, 0.0, 0.0])[self.ros_to_pin_ids]  # Final target joint position
+        self.q_target = np.asarray([0.0, 0.0, 0.9756, -0.9756, 2.0944, -2.0944, 0.0, 0.0])[self.ros_to_pin_ids]  # Final target joint position
 
         # State variables
-        self.S_leg = np.zeros((6, self.nv))
-        self.S_leg[0, 6]  = 1.0   # hip_L
-        self.S_leg[1, 7]  = 1.0   # thigh_L
-        self.S_leg[2, 8]  = 1.0   # knee_L
-        self.S_leg[3, 10] = 1.0   # hip_R
-        self.S_leg[4, 11] = 1.0   # thigh_R
-        self.S_leg[5, 12] = 1.0   # knee_R
+        self.S_leg = np.zeros((4, self.nv))
+        self.S_leg[0, 6]  = 1.0   # thigh_L
+        self.S_leg[1, 7]  = 1.0   # knee_L
+        self.S_leg[2, 9]  = 1.0   # thigh_R
+        self.S_leg[3, 10] = 1.0   # knee_R
 
         self.S_wheel = np.zeros((2, self.nv))
         self.S_wheel[0, self.wheel_L_joint_nv_id] = 1.0
@@ -170,6 +172,7 @@ class NominalController(BaseController):
 
         # Count tick for trajectory tracking
         self.count_tick = 0
+        self.wheel_anchor = np.zeros(2, dtype=np.float32)
 
         # Wheel torque limit for leg joint control
         self.wheel_tau_limit = self.cfg.get("max_torque_per_joint")[-1]
@@ -192,17 +195,21 @@ class NominalController(BaseController):
         self.base_ang_v_curr = np.asarray([imu_state.gyro.x, imu_state.gyro.y, imu_state.gyro.z])
         self.base_quat_curr  = np.asarray([imu_state.quat.x, imu_state.quat.y, imu_state.quat.z, imu_state.quat.w])
 
+        theta, theta_dot = self.compute_base_pitch_and_rate(self.base_quat_curr, self.base_ang_v_curr)
         # Lazy initialization
         if self.count_tick == 0:
-            
-            # NOTE: test line =====================================================
-            # self.q_target = self.joint_q_curr
-            # =====================================================================
-
+            # Anchor assign
+            self.wheel_anchor[0] = self.joint_q_curr[self.wheel_L_joint_id].copy()
+            self.wheel_anchor[1] = self.joint_q_curr[self.wheel_R_joint_id].copy()
+            self.theta_anchor = theta
             # Reference assign
             for i, (start, end) in enumerate(zip(self.joint_q_curr, self.q_target)):
                 self.q_ref_traj[:, i] = np.linspace(start, end, self.num_traj_points)
-            
+
+        # Wheel anchoring
+        self.joint_q_curr[self.wheel_L_joint_id] -= self.wheel_anchor[0]
+        self.joint_q_curr[self.wheel_R_joint_id] -= self.wheel_anchor[1]
+
         # Control Logic
         self.base_q_curr = np.concatenate((np.zeros(3), self.base_quat_curr))        
         self.base_v_curr = np.concatenate((self.base_lin_v_curr, self.base_ang_v_curr))
@@ -210,7 +217,8 @@ class NominalController(BaseController):
         self.v_curr = np.concatenate((self.base_v_curr, self.joint_v_curr)) 
 
         # Computed torque
-        tau_cmd = np.zeros(self.n_joints, dtype=np.float32)
+        pos_cmd = np.zeros(len(self.ros_joint_names), dtype=np.float32)
+        tau_cmd = np.zeros(len(self.ros_joint_names), dtype=np.float32)
 
         # Compute Dynamics matrix
         pin.computeAllTerms(self.model, self.data, self.q_curr, self.v_curr)
@@ -220,18 +228,16 @@ class NominalController(BaseController):
 
         ## ============== Wheel control ================ ##
 
-        # COM
-        theta, theta_dot, L = self.compute_com_and_theta(self.q_curr, self.v_curr)
+        self.wheel_lqr_state = self.compute_wheel_lqr_state(theta, theta_dot)
 
-        # Control logic
-        self.theta_ref = self.wheel_com_horizontal_position_control(theta, theta_dot,  self.phi_ref, L)
-        wheel_tau = self.wheel_com_pitch_position_control(theta, theta_dot, self.theta_ref)
+        wheel_tau = self.wheel_lqr_control(self.wheel_lqr_state)
+        self.wheel_tau = wheel_tau
 
         ## ============= Joint control ================ ##
 
         # Update reference
-        # self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
-        self.q_ref[7:] = self.q_target
+        self.q_ref[7:] = self.q_ref_traj[min(self.count_tick, self.num_traj_points-1), :]
+        # self.q_ref[7:] = self.q_target
 
         # Error Feedback for desired generalized acceleration
         q_err = self.q_ref[7:] - self.q_curr[7:]
@@ -253,79 +259,91 @@ class NominalController(BaseController):
         tau_constrained_full = self.S_leg.T @ tau_constrained + self.S_wheel.T @ np.array([wheel_tau, -wheel_tau])
 
         # Index Mapping (Pin -> ROS)
-        tau_cmd[:] = tau_constrained_full[6:][self.pin_to_ros_ids]
+        pos_cmd[self.ros_to_pin_ids] = self.q_ref[7:]
+        tau_cmd[self.ros_to_pin_ids] = tau_constrained_full[6:]
 
         # Update tick
         self.count_tick += 1
 
-        return tau_cmd, self.q_ref[7:][self.pin_to_ros_ids].copy(), None
+        return tau_cmd, pos_cmd, None
 
     ### =============================== Auxilary Functions (Wheel) =============================== ###
 
-    def compute_com_and_theta(self, q: np.ndarray, v: np.ndarray):
-        # COM calculation
-        pin.centerOfMass(self.model, self.data, q, v, compute_subtree_coms=True)
-        
-        # Robot property
-        M_total = self.data.mass[0]       # Total mass
-        com_total = self.data.com[0]      # Total mass position
-        vcom_total = self.data.vcom[0]    # Total mass velocity 
+    def compute_base_pitch_and_rate(self,
+                                    quat_xyzw: np.ndarray,
+                                    gyro_xyz: np.ndarray) -> tuple[float, float]:
 
-        m_wheel_L = self.data.mass[self.wheel_L_joint_pin_id]
-        com_wheel_L  = self.data.oMi[self.wheel_L_joint_pin_id].act(
-                           self.data.com[self.wheel_L_joint_pin_id])     # world frame
-        vcom_wheel_L = self.data.oMi[self.wheel_L_joint_pin_id].rotation @ \
-                           self.data.vcom[self.wheel_L_joint_pin_id]     # world frame
+        """Compute physical base pitch and pitch rate."""
 
-        m_wheel_R = self.data.mass[self.wheel_R_joint_pin_id]
-        com_wheel_R  = self.data.oMi[self.wheel_R_joint_pin_id].act(
-                           self.data.com[self.wheel_R_joint_pin_id])     # world frame
-        vcom_wheel_R = self.data.oMi[self.wheel_R_joint_pin_id].rotation @ \
-                           self.data.vcom[self.wheel_R_joint_pin_id]     # world frame
+        qx, qy, qz, qw = quat_xyzw
 
-        # Body's property exclude wheels
-        M_body = M_total - m_wheel_L - m_wheel_R
-        com_body = (M_total * com_total - m_wheel_L * com_wheel_L - m_wheel_R * com_wheel_R) / M_body
-        vcom_body = (M_total * vcom_total - m_wheel_L * vcom_wheel_L - m_wheel_R * vcom_wheel_R) / M_body
+        # ZYX Euler pitch
+        sin_theta = 2.0 * (qw * qy - qz * qx)
+        sin_theta = np.clip(sin_theta, -1.0, +1.0)
+        theta = math.asin(sin_theta)
 
-        # Center of wheels
-        com_wheel = (com_wheel_L + com_wheel_R) / 2.0
-        vcom_wheel = (vcom_wheel_L + vcom_wheel_R) / 2.0
-  
-        P_rel = com_body - com_wheel
-        V_rel = vcom_body - vcom_wheel
-        
-        # Pitch calculation
-        theta = math.atan2(P_rel[0], P_rel[2])
-        # Angular velocity calculation
-        theta_dot = (V_rel[0] * P_rel[2] - V_rel[2] * P_rel[0]) / (P_rel[0]**2 + P_rel[2]**2 + 1e-6)
-        # Pendulum length
-        L = math.hypot(P_rel[0], P_rel[2])
+        # Roll is needed for exact Euler pitch-rate conversion
+        roll = math.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
 
-        return theta, theta_dot, L
+        gyro_y = gyro_xyz[1]
+        gyro_z = gyro_xyz[2]
+
+        theta_dot = (gyro_y * math.cos(roll) - gyro_z * math.sin(roll))
+
+        return float(theta), float(theta_dot)
     
-    def wheel_com_horizontal_position_control(self, theta, theta_dot, target_phi, L):
-        # Wheel state
-        phi = (self.joint_q_curr[self.wheel_L_joint_id] - self.joint_q_curr[self.wheel_R_joint_id]) / 2.0
-        phi_dot = (self.joint_v_curr[self.wheel_L_joint_id] - self.joint_v_curr[self.wheel_R_joint_id]) / 2.0
-        ratio = L / self.wheel_radius
-        
-        # Dynamic decoupling
-        phi_comp = (phi + ratio * math.sin(theta))
-        phi_comp_dot = (phi_dot + ratio * math.cos(theta) * theta_dot)
-        phi_err = target_phi - phi_comp
-        
-        # Pitch PD controller
-        theta_cmd = self.wheel_outer_Kp * phi_err - self.wheel_outer_Kd * phi_comp_dot
-        
-        return np.clip(theta_cmd, -self.theta_cmd_limit, self.theta_cmd_limit)
-    
-    def wheel_com_pitch_position_control(self, theta, theta_dot, theta_cmd):
-        # PD controller
-        theta_err = theta - theta_cmd
-        wheel_tau = self.wheel_inner_Kp * theta_err + self.wheel_inner_Kd * theta_dot
+    def compute_wheel_lqr_state(self, theta: float, theta_dot: float) -> np.ndarray:
 
-        return np.clip(wheel_tau, -self.wheel_tau_limit, self.wheel_tau_limit)
+        """
+         WIP-LQR state.
+
+        State:
+            x = [
+                delta,
+                delta_dot,
+                s - s_ref,
+                s_dot
+            ]
+
+        where:
+            delta = theta - theta_eq
+
+        Wheel common relative angle:
+            phi = (q_L - q_R) / 2
+
+        No-slip axle position:
+            s = r * [phi + (theta - theta_anchor)]
+
+        """
+
+        # Common wheel relative rotation
+        phi = 0.5 * (self.joint_q_curr[self.wheel_L_joint_id] - self.joint_q_curr[self.wheel_R_joint_id])
+        phi_dot = 0.5 * (self.joint_v_curr[self.wheel_L_joint_id] - self.joint_v_curr[self.wheel_R_joint_id])
+
+        # Ground-relative wheel axle translation
+        s = self.wheel_radius * (phi + theta - self.theta_anchor)
+        s_dot = self.wheel_radius * (phi_dot + theta_dot)
+
+        # Pitch state relative to equilibrium
+        delta = theta - self.theta_eq
+        delta_dot = theta_dot
+
+        x_lqr = np.array([delta, delta_dot, s - self.wheel_s_ref, s_dot], dtype=float)
+
+        return x_lqr
+    
+    def wheel_lqr_control(self, x_lqr: np.ndarray) -> float:
+
+        """
+        Discrete LQR state feedback
+
+            u = -K x
+        """
+
+        wheel_tau = -float(self.wheel_lqr_K @ x_lqr)
+        wheel_tau = np.clip(wheel_tau, -self.wheel_tau_limit, self.wheel_tau_limit)
+
+        return float(wheel_tau)
 
 
     ### =============================== Auxilary Functions (Leg) =============================== ###

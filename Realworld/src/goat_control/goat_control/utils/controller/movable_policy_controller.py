@@ -54,8 +54,7 @@ class MovableBasePolicyController(PolicyController):
                           gravity_vector,
                           self._base_command,
                           joint_pos[self._effective_joint_indices] - self._natural_pos[self._effective_joint_indices],
-                          joint_vel[self._effective_joint_indices],
-                          joint_vel[self._effective_wheel_indices],
+                          joint_vel[self._effective_joint_indices], joint_vel[self._effective_wheel_indices],
                           self.previous_action]).reshape(1, -1).astype(np.float32)
 
     def _decode_action(self, raw_action: np.ndarray) -> None:

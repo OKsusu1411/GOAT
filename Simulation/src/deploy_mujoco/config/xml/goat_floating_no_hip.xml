@@ -164,7 +164,7 @@
          URDF wheel collision radius is 0.1. Recompute if either changes. -->
     <keyframe>
         <key name="home"
-             qpos="0 0 0.42676   1 0 0 0   0.9943 1.884 0   -0.9943 -1.884 0"
+             qpos="0 0 0.389   1 0 0 0   1.0297 2.0944 0   -1.0297 -2.0944 0"
              qvel="0 0 0       0 0 0      0 0 0            0 0 0"
              ctrl=" 0 0 0      0 0 0"/>
     </keyframe>
