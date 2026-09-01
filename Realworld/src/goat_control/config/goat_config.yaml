@@ -169,8 +169,8 @@ policy_movable:
   - 0.5
   - 0.5
   - 0.5
-  - 10.0
-  - 10.0
+  - 5.0
+  - 5.0
   natural_joint_position:
   - 0.0
   - 0.0

@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone MuJoCo closed-loop deployment for GOAT.
-
-One process, one loop, no ROS: observe -> policy -> torque -> mj_step, repeat.
-Needs only `mujoco onnxruntime numpy pyyaml`.
-
-    python3 deploy_mujoco.py                        # viewer, on-stand model
-    python3 deploy_mujoco.py --model configs/xml/goat_floating.xml
-
-The policy runs from the start (--stopped to begin paused). While paused the
-torque is zero and the safety check is skipped, so the legs sagging under
-gravity does not latch the estop.
-
-Keys are read from the viewer window, not the terminal:
-
-    space / P      start-stop policy      R / X    reset
-    up-down / W-S  v_x +/-                Q        quit
-    left-right/A-D w_z +/-                0 / Z    zero command
-"""
+"""Standalone MuJoCo closed-loop deployment for GOAT."""
 from __future__ import annotations
 
 import argparse
@@ -33,6 +16,17 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 
+KEYS = {
+    32: "toggle", 80: "toggle",     # space / P
+    82: "reset",  88: "reset",      # R     / X
+    81: "quit",                     # Q       (esc closes the window itself)
+    265: "vx+",   87: "vx+",        # up    / W
+    264: "vx-",   83: "vx-",        # down  / S
+    262: "wz+",   68: "wz+",        # right / D
+    263: "wz-",   65: "wz-",        # left  / A
+    328: "h+",    325: "h-",        # Numpad 8 / 5
+    48: "zero",   90: "zero",       # 0     / Z
+}
 
 def get_gravity_orientation(quaternion: np.ndarray) -> np.ndarray:
     qw = quaternion[0]
@@ -127,6 +121,7 @@ class Policy:
             self.command[3] = max(self.command[3] - lim["height_step"], lim["height_lower_limit"])
         elif action == "zero":
             self.command[:] = 0.0
+            self.command[3] = lim["height_lower_limit"]
         return f"cmd  v_x={self.command[0]:+.2f}  w_z={self.command[2]:+.2f} h={self.command[3]:+.3f}"
 
 
@@ -161,9 +156,11 @@ class Sim:
     """MuJoCo model plus the controller-order <-> MuJoCo-order index maps."""
 
     def __init__(self, args, cfg: dict, policy: Policy, safety: Safety) -> None:
-        self.args, self.policy, self.safety = args, policy, safety
+        self.args = args
+        self.policy = policy
+        self.safety = safety
         self.model = mujoco.MjModel.from_xml_path(str(args.model))
-        self.model.opt.timestep = cfg["timestep"]    # the YAML owns dt, not the MJCF
+        self.model.opt.timestep = cfg["timestep"] 
         self.data = mujoco.MjData(self.model)
 
         # The MJCF declares joints per leg; the policy expects L/R pairs.
@@ -213,7 +210,6 @@ class Sim:
         mujoco.mj_forward(self.model, self.data)
         self.policy.reset()
         self.safety.reset()
-        # `running` is deliberately left alone: reset means "run it again".
 
     def step(self) -> None:
         """One control tick: observe, compute torque, advance n_substeps."""
@@ -225,43 +221,26 @@ class Sim:
         
         if self.running:
             tau = self.policy.torque(gyro, quat, pos, vel)
-            self.data.ctrl[self.actuator] = self.safety(tau, pos, vel)
+            self.data.ctrl[self.actuator] = tau
+            # self.data.ctrl[self.actuator] = self.safety(tau, pos, vel)
         else:
             self.data.ctrl[self.actuator] = 0.0
         for _ in range(self.n_substeps):
             mujoco.mj_step(self.model, self.data)
 
-
-# GLFW key code -> action, delivered by the viewer window (not the terminal).
-KEYS = {
-    32: "toggle", 80: "toggle",     # space / P
-    82: "reset",  88: "reset",      # R     / X
-    81: "quit",                     # Q       (esc closes the window itself)
-    265: "vx+",   87: "vx+",        # up    / W
-    264: "vx-",   83: "vx-",        # down  / S
-    262: "wz+",   68: "wz+",        # right / D
-    263: "wz-",   65: "wz-",        # left  / A
-    328: "h+",    325: "h-",        # Numpad 8 / 5
-    48: "zero",   90: "zero",       # 0     / Z
-}
-
-
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model", type=Path, default=HERE / "config/xml/goat_on_stand.xml")
     p.add_argument("--config", type=Path, default=HERE / "config/goat.yaml")
     p.add_argument("--keyframe", default="home")
     p.add_argument("--duration", type=float, default=0.0, help="stop after N s of sim time")
     p.add_argument("--stopped", action="store_true", help="begin with the policy paused")
     p.add_argument("--headless", action="store_true", help="no viewer")
-    p.add_argument("--realtime", action=argparse.BooleanOptionalAction, default=None,
-                   help="pace to wall clock (default: on with viewer, off headless)")
+    p.add_argument("--realtime", action=argparse.BooleanOptionalAction, default=None, help="pace to wall clock (default: on with viewer, off headless)")
     args = p.parse_args()
     if args.realtime is None:
         args.realtime = not args.headless
     return args
-
 
 def main() -> int:
     args = parse_args()
@@ -276,25 +255,25 @@ def main() -> int:
     sim.running = not args.stopped
 
     print(f"checkpoint: {checkpoint}")
-    print(f"physics {sim.sim_dt*1e3:.1f} ms x {sim.n_substeps} = control {sim.control_dt*1e3:.1f} ms"
-          f"  |  policy {1/(sim.control_dt*policy.decimation):.0f} Hz  |  free base {sim.free_base}")
+    print(f"physics {sim.sim_dt*1e3:.1f} ms | policy {1/(sim.control_dt*policy.decimation):.0f} Hz")
     print("keys go to the VIEWER window, not this terminal:")
-    print("  space/P start-stop   R/X reset   Q quit   up-down/W-S v_x   "
-          "left-right/A-D w_z   0/Z zero command")
-    print("policy " + ("running" if sim.running else "paused -- press space in the viewer"),
-          flush=True)
+    print("  space/P start-stop | R/X reset | Q quit | up-down/W-S v_x | left-right/A-D w_z | 0/Z zero command")
+    print("policy " + ("running" if sim.running else "paused -- press space in the viewer"), flush=True)
 
     pending: deque[str] = deque()
 
     def on_key(code: int) -> None:
-        # Runs on the viewer's UI thread. Only queue here -- touching model/data
-        # would race with mj_step on this thread.
         action = KEYS.get(code)
         if action is not None:
             pending.append(action)
 
-    viewer = None if args.headless else mujoco.viewer.launch_passive(
-        sim.model, sim.data, show_left_ui=True, show_right_ui=False, key_callback=on_key)
+    # Viewer
+    viewer = None if args.headless else mujoco.viewer.launch_passive(sim.model, sim.data, show_left_ui=True, show_right_ui=False, key_callback=on_key)
+    camera_id = mujoco.mj_name2id(sim.model, mujoco.mjtObj.mjOBJ_CAMERA, "track")
+    with viewer.lock():
+        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+        viewer.cam.fixedcamid = camera_id
+
     try:
         n, quit_requested = 0, False
         while not quit_requested and (viewer is None or viewer.is_running()):

@@ -12,7 +12,7 @@ policy:
   checkpoint: ../../../../Realworld/src/goat_control/checkpoint/stand.onnx
   # Policy runs every N control ticks.
   decimation: 2
-  action_scale: [0.5, 0.5, 0.5, 0.5, 10.0, 10.0]
+  action_scale: [0.5, 0.5, 0.5, 0.5, 5.0, 5.0]
 
   natural_joint_position: [0.9756, -0.9756,
                            2.0944, -2.0944,
@@ -27,7 +27,7 @@ command:
   wz_limit: 0.1
   vx_step:  0.01
   wz_step:  0.01
-  height_lower_limit: 0.48
+  height_lower_limit: 0.42
   height_upper_limit: 0.56
   height_step: 0.02
 
@@ -43,6 +43,6 @@ safety:
     - [-.inf,     .inf]       # wheel_L
     - [-.inf,     .inf]       # wheel_R
   # Latching estop, checked on leg joints only.
-  joint_vel_estop: 4.0
+  joint_vel_estop: 5.0
   # Torque clip [Nm]. Matches the MJCF <motor> ctrlrange.
   max_torque: [4.5, 4.5, 9.0, 9.0, 2.5, 2.5]

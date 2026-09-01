@@ -40,6 +40,7 @@
                  keyframe below stops matching; shrink its qpos too if you do. -->
             <freejoint name="root"/>
             <site name="imu_site" pos="0 0 0" size="0.01" type="sphere" rgba="1 0 0 1"/>
+            <camera name="track" mode="track" pos="0 -2.3 1.6" xyaxes="1 0 0 0 0.707 0.707"/>
             
             <inertial pos="0 0 0" mass="3.153308" fullinertia="0.021860000 0.025170000 0.023520000 -0.000011699458 0.006702000 0.000004493943"/>
             <geom type="mesh" mesh="base_Link" material="black" pos="-0.112941 0 0.084350" contype="0" conaffinity="0" group="1"/>
