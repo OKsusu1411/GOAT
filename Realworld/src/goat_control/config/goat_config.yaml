@@ -92,13 +92,12 @@ nsc_wheel_outer_derivative_gain: 0.05
 nsc_wheel_inner_proportional_gain: 3.0
 nsc_wheel_inner_derivative_gain: 0.1
 nsc_theta_cmd_limit: 10.0
-
 policy_mode: movable
 policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
-policy_command_height_lower_limit: 0.48
+policy_command_height_lower_limit: 0.42
 policy_command_height_upper_limit: 0.56
 policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
@@ -122,7 +121,6 @@ policy_leg_derivative_gain:
 policy_wheel_proportional_gain:
 - 0.05
 - 0.05
-
 policy_fixed:
   observation_info:
     joint_pos: 6
@@ -155,7 +153,6 @@ policy_fixed:
   effective_wheel_indices:
   - 6
   - 7
-
 policy_movable:
   observation_info:
     base_ang_vel: 3
@@ -188,7 +185,6 @@ policy_movable:
   effective_wheel_indices:
   - 6
   - 7
-
 max_torque_per_joint:
 - 0.0
 - 0.0
@@ -224,14 +220,14 @@ speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
 joint_offsets:
-- -4.180726783642177
-- -4.1414917820573445
-- -4.195841334964447
-- 6.335510278154375
-- 1.3667411572979797
-- -2.3687608608067032
-- 103.98561727639341
-- -94.61202982258504
+- -4.173431307368842
+- -4.1429578586290186
+- -4.123658007760467
+- 6.291329886134017
+- 2.291626034514814
+- -2.4163298095698096
+- 0.3649186759947284
+- 1.3881301672811759
 imu_offsets:
 - 1.0
 - 0.0
