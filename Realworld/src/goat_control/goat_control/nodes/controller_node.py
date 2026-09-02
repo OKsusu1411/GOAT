@@ -267,7 +267,7 @@ class ControllerNode(Node):
             imu_values = [
                 imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
                 imu.gyro.x, imu.gyro.y, imu.gyro.z,
-                imu.vel.x, imu.vel.y, imu.vel.z,
+                imu.acc.x, imu.acc.y, imu.acc.z,
                 imu.mag.x, imu.mag.y, imu.mag.z,
             ]
             if np.any(np.isnan(np.asarray(imu_values, dtype=float))):
