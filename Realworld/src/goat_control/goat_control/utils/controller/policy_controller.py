@@ -257,6 +257,9 @@ class PolicyController(BaseController):
                 for i in range(self.num_leg_joints):
                     self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i], self.num_traj_points)
             target_leg_pos = self.q_ref_traj[min(self.num_traj_points-1, self.count), :]
+
+        grav = self.get_gravity_orientation(base_quat)
+        print(f"grav_x : {grav[0]:4f} | grav_y : {grav[1]:4f} | grav_z : {grav[2]:4f}")
         
         # --- Error Calculation (Joint Space) ---
         leg_pos_err = target_leg_pos - joint_leg_pos
