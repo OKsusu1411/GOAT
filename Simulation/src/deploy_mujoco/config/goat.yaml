@@ -18,8 +18,8 @@ policy:
                            2.0944, -2.0944,
                            0.0,   0.0]
 gains:
-  leg_kp:   [5.0, 5.0, 5.0, 5.0]
-  leg_kd:   [0.05, 0.05, 0.05, 0.05]
+  leg_kp:   [3.0, 3.0, 3.0, 3.0]
+  leg_kd:   [0.1, 0.1, 0.1, 0.1]
   wheel_kp: [0.05, 0.05]
 
 command:
@@ -27,7 +27,7 @@ command:
   wz_limit: 0.1
   vx_step:  0.01
   wz_step:  0.01
-  height_lower_limit: 0.42
+  height_lower_limit: 0.4
   height_upper_limit: 0.56
   height_step: 0.02
 

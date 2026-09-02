@@ -19,7 +19,6 @@ class MovableBasePolicyController(PolicyController):
 
     MODE = "movable"
     HAS_WHEELS = True
-    COMMAND_TYPE = "base_velocity"
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
         super().__init__(cfg, logger)

@@ -122,7 +122,7 @@ class Policy:
         elif action == "zero":
             self.command[:] = 0.0
             self.command[3] = lim["height_lower_limit"]
-        return f"cmd  v_x={self.command[0]:+.2f}  w_z={self.command[2]:+.2f} h={self.command[3]:+.3f}"
+        return f"cmd  v_x={self.command[0]:+.2f}  w_z={self.command[2]:+.2f}  h={self.command[3]:+.3f}"
 
 
 class Safety:
