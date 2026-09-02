@@ -455,7 +455,7 @@ class ControllerNode(Node):
         msg_imu.header.stamp = joint_state_msg.header.stamp
         msg_imu.quat = imu_msg.quat
         msg_imu.gyro = imu_msg.gyro
-        msg_imu.vel = imu_msg.vel
+        msg_imu.acc = imu_msg.acc
         msg_imu.mag = imu_msg.mag
         msg_imu.time_ms = imu_msg.time_ms
 

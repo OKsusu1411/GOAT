@@ -45,9 +45,9 @@ class ImuPacket:
     gyro_z: float
     
     # Linear velocity - m/s
-    vel_x: float
-    vel_y: float
-    vel_z: float
+    acc_x: float
+    acc_y: float
+    acc_z: float
 
     # Magnetometer(not used) - ?
     mag_x: float
@@ -146,14 +146,14 @@ class ImuSerialReader:
 
         quat_w, quat_x, quat_y, quat_z = data_list[0:4]
         gyro_x, gyro_y, gyro_z = np.deg2rad(data_list[4:7])         # Convert into radian!!
-        vel_x, vel_y, vel_z = data_list[7:10]
+        acc_x, acc_y, acc_z = data_list[7:10]
         mag_x, mag_y, mag_z = data_list[10:13]
         time_ms = data_list[13]
 
         return ImuPacket(
             quat_w=quat_w, quat_x=quat_x, quat_y=quat_y, quat_z=quat_z,
             gyro_x=gyro_x, gyro_y=gyro_y, gyro_z=gyro_z,
-            vel_x=vel_x, vel_y=vel_y, vel_z=vel_z,
+            acc_x=acc_x, acc_y=acc_y, acc_z=acc_z,
             mag_x=mag_x, mag_y=mag_y, mag_z=mag_z,
             time_ms=float(time_ms),
         )

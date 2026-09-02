@@ -231,7 +231,7 @@ class PolicyController(BaseController):
                 dt_sec: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute raw torque: PD on legs + P on wheels (wheels only if HAS_WHEELS)."""
         # Data processing
-        base_lin_vel = np.asarray([base_state.vel.x, base_state.vel.y, base_state.vel.z])
+        base_lin_vel = np.asarray([base_state.acc.x, base_state.acc.y, base_state.acc.z])
         base_ang_vel = np.asarray([base_state.gyro.x, base_state.gyro.y, base_state.gyro.z])
         base_quat = np.asarray([base_state.quat.w, base_state.quat.x, base_state.quat.y, base_state.quat.z])
         joint_pos = np.asarray(joint_state.position, dtype=float).flatten()
@@ -258,8 +258,7 @@ class PolicyController(BaseController):
                     self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i], self.num_traj_points)
             target_leg_pos = self.q_ref_traj[min(self.num_traj_points-1, self.count), :]
 
-        grav = self.get_gravity_orientation(base_quat)
-        print(f"grav_x : {grav[0]:4f} | grav_y : {grav[1]:4f} | grav_z : {grav[2]:4f}")
+        print(f"acc_x : {base_lin_vel[0]:4f} | acc_y : {base_lin_vel[1]:4f} | acc_z : {base_lin_vel[2]:4f}")
         
         # --- Error Calculation (Joint Space) ---
         leg_pos_err = target_leg_pos - joint_leg_pos
