@@ -1,9 +1,9 @@
-<mujoco model="GOAT_on_Stand">
+<mujoco model="WF_GOAT_on_Stand">
     <compiler angle="radian" coordinate="local" meshdir="../meshes/"/>
-    <option timestep="0.005" gravity="0 0 -9.81"/>
-
+    <option timestep="0.005" gravity="0 0 -9.81" integrator="implicit" solver="Newton" iterations="32"/>
+    
     <!-- GOAT robot -->
-    <include file="./goat_floating.xml"/>
+    <include file="./WF_GOAT.xml"/>
 
     <!-- Stand jig -->
     <asset>
@@ -21,4 +21,33 @@
                   contype="1" conaffinity="1"/>
         </body>
     </worldbody>
+
+    <asset>
+        <texture  name="groundplane" type="2d" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="512" height="512"/>
+        <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    </asset>
+
+    <worldbody>
+        <light directional="true" diffuse=".8 .8 .8" specular=".2 .2 .2" pos="0 0 5" dir="0 0 -1"/>
+        <geom name="floor" type="plane" size="0 0 1" material="groundplane"/>
+    </worldbody>
+
+    <contact>
+        <pair name="floor_wheel_L"
+            geom1="floor"
+            geom2="wheel_L_collision"
+            condim="3"
+            friction="0.6 0.6 0.0 0.0 0.0"
+            solref="0.02 1.0"
+            solimp="0.9 0.95 0.001 0.5 2"/>
+
+        <pair name="floor_wheel_R"
+            geom1="floor"
+            geom2="wheel_R_collision"
+            condim="3"
+            friction="0.6 0.6 0.0 0.0 0.0"
+            solref="0.02 1.0"
+            solimp="0.9 0.95 0.001 0.5 2"/>
+    </contact>
+
 </mujoco>
