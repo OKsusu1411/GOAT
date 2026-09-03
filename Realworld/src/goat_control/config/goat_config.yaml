@@ -97,7 +97,7 @@ policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
-policy_command_height_lower_limit: 0.4
+policy_command_height_lower_limit: 0.39
 policy_command_height_upper_limit: 0.56
 policy_command_vx_step: 0.01
 policy_command_wz_step: 0.01
