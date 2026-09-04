@@ -162,9 +162,9 @@ class CalibrationNode(Node):
         self._save_joint_offsets_to_yaml(joint_offsets)
     
     def _imu_calibration(self):
-        """IMU Calibration Logic (Placeholder)."""
+        """IMU Calibration without Yaw"""
         # Settings for sampling
-        sleep_interval = 0.05  # 20 * 0.05 = 1.0 second total duration
+        sleep_interval = 0.05                           # 20 * 0.05 = 1.0 second total duration
 
         self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
         
@@ -195,21 +195,23 @@ class CalibrationNode(Node):
         avg_quat = np.mean(quat_samples, axis=0)
         avg_quat /= np.linalg.norm(avg_quat)
 
+        # Local Z axis
         z_axis_local = np.array([0.0, 0.0, 1.0])
         v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
 
         # Target Z axis
         v_target = np.array([0.0, 0.0, 1.0])
 
-        
+        # Cross axis between local, target z axis
         axis = np.cross(v_up, v_target)
         axis_norm = np.linalg.norm(axis)
+        axis = axis / axis_norm
 
         # Already robot is upright
         if axis_norm < 1e-8:
             quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
 
-        axis = axis / axis_norm
+        # Dot product
         dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
         angle = np.arccos(dot_prod)
 
@@ -220,7 +222,6 @@ class CalibrationNode(Node):
 
         # Save to YAML
         self._save_imu_offsets_to_yaml(quat_offsets)
-        
 
     def _save_joint_offsets_to_yaml(self, offsets):
         # Read existing file
