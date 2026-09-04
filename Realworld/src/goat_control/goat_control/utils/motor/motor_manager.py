@@ -75,7 +75,6 @@ class MotorManager:
         self.motor_torque_constant_nm_per_amp = np.asarray(self.cfg["motor_torque_constant_nm_per_amp"], dtype=np.float64).flatten()
         self.max_torque_per_joint = np.asarray(self.cfg["max_torque_per_joint"], dtype=np.float64).flatten()
         self.motor_gear_ratio = np.asarray(self.cfg["motor_gear_ratio"], dtype=np.float64).flatten()
-        self.motor_direction = np.asarray(self.cfg["motor_direction"], dtype=np.float64).flatten()
         self.joint_offsets = np.asarray(self.cfg["joint_offsets"], dtype=np.float64).flatten()
         self.torque_to_current_denominator = self.motor_gear_ratio * self.motor_torque_constant_nm_per_amp
         if np.any(np.abs(self.torque_to_current_denominator) < 1e-12):
