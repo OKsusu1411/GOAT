@@ -57,15 +57,6 @@ motor_gear_ratio:
 - 2
 - 1
 - 1
-motor_direction:
-- 1
-- 1
-- 1
-- 1
-- 1
-- 1
-- 1
-- 1
 wheel_radius: 0.095
 num_traj_points: 200
 nsc_urdf_path: null

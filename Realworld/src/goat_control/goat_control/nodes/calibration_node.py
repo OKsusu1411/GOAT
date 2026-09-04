@@ -180,7 +180,10 @@ class CalibrationNode(Node):
                 return
             
             # Store current positions
-            current_quat = np.array(self.latest_imu_state.quat, dtype=float)
+            current_quat = np.array([self.latest_imu_state.quat.w,
+                                     self.latest_imu_state.quat.x,
+                                     self.latest_imu_state.quat.y,
+                                     self.latest_imu_state.quat.z], dtype=float)
             old_joint_offsets_inv = inverse_quat(self.old_joint_offsets)
             current_quat = multiply_quat(old_joint_offsets_inv, current_quat)               # Restore original quaternion
             quat_samples.append(current_quat)

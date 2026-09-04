@@ -116,12 +116,11 @@ class MotorManager:
                 continue  # wheel — nothing to fold into
 
             gear = float(self.motor_gear_ratio[motor_i])
-            direction = float(self.motor_direction[motor_i])
             offset_rad = float(self.joint_offsets[joint_i])
 
             # Inverse of _package_motor_states: calibrated joint rad -> raw motor deg.
-            raw_lo_deg = math.degrees(limit_lo_rad + offset_rad) * gear / direction
-            raw_hi_deg = math.degrees(limit_hi_rad + offset_rad) * gear / direction
+            raw_lo_deg = math.degrees(limit_lo_rad + offset_rad) * gear
+            raw_hi_deg = math.degrees(limit_hi_rad + offset_rad) * gear
             self.motor_fold_center_deg[motor_i] = 0.5 * (raw_lo_deg + raw_hi_deg)
 
         # Persistent thread pool reused across every tick. 
@@ -297,7 +296,6 @@ class MotorManager:
         for joint_i in range(joint_count):
             motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
             gear = self.motor_gear_ratio[motor_i]
-            direction = self.motor_direction[motor_i]
 
             raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_i]
             raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
@@ -306,11 +304,11 @@ class MotorManager:
             elif raw_single != 0: motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else: motor_angle_deg = 0.0
 
-            joint_angle_deg = (motor_angle_deg * direction) / gear # Motor -> Joint
+            joint_angle_deg = motor_angle_deg / gear # Motor -> Joint
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
 
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
-            joint_speed_deg_s = (motor_speed_deg_s * direction) / gear # Motor -> Joint
+            joint_speed_deg_s = motor_speed_deg_s / gear # Motor -> Joint
             joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
 
             motor_current_amp = self.motor_phase_current_amp[motor_i]
