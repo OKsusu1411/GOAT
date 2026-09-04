@@ -168,8 +168,9 @@ class CalibrationNode(Node):
 
         self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
         
-        # Joint position buffer list
+        # IMU buffer list
         quat_samples = []
+        old_imu_offsets_inv = inverse_quat(self.old_imu_offsets)
 
         # Sampling Loop
         for i in range(self.sample_count):
@@ -184,8 +185,12 @@ class CalibrationNode(Node):
                                      self.latest_imu_state.quat.x,
                                      self.latest_imu_state.quat.y,
                                      self.latest_imu_state.quat.z], dtype=float)
-            old_joint_offsets_inv = inverse_quat(self.old_joint_offsets)
-            current_quat = multiply_quat(old_joint_offsets_inv, current_quat)               # Restore original quaternion
+            current_quat = multiply_quat(old_imu_offsets_inv, current_quat)               # Restore original quaternion
+
+            # q and -q are the same rotation
+            if quat_samples and np.dot(quat_samples[0], current_quat) < 0.0:
+                current_quat = -current_quat
+
             quat_samples.append(current_quat)
             
             # Wait for next update
@@ -193,7 +198,11 @@ class CalibrationNode(Node):
 
         # Calculate Average
         avg_quat = np.mean(quat_samples, axis=0)
-        avg_quat /= np.linalg.norm(avg_quat)
+        avg_norm = np.linalg.norm(avg_quat)
+        if avg_norm < 1e-8:
+            self.get_logger().info("Averaged quaternion is 0. Calibration failed.")
+            return
+        avg_quat /= avg_norm
 
         # Local Z axis
         z_axis_local = np.array([0.0, 0.0, 1.0])
@@ -207,16 +216,17 @@ class CalibrationNode(Node):
         axis_norm = np.linalg.norm(axis)
         axis = axis / axis_norm
 
-        # Already robot is upright
-        if axis_norm < 1e-8:
-            quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
-
         # Dot product
         dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
         angle = np.arccos(dot_prod)
 
+        # Already robot is upright
+        if axis_norm < 1e-8:
+            quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
+
         # Offset quaternion
-        quat_offsets = axis_angle_to_quat(axis, angle)
+        else:
+            quat_offsets = axis_angle_to_quat(axis, angle)
 
         self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
 
