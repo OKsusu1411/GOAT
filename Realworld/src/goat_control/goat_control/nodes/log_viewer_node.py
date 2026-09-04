@@ -80,7 +80,7 @@ class LogViewerNode(Node):
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
             header += [f"{name}_actual_torque" for name in self.joint_names]
-            header += [f'obs_{i}' for i in range(32)]                       # NOTE: Observation logging
+            header += [f'obs_{i}' for i in range(25)]                       # NOTE: Observation logging
 
             self.csv_writer.writerow(header)
             self.csv_file.flush()
