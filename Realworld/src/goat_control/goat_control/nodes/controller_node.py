@@ -170,6 +170,8 @@ class ControllerNode(Node):
         self.q_receive_time = None
 
         # Dedicated hardware-control thread
+        self.deadline_miss_count = 0
+        self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
         self._control_stop_event = threading.Event()
 
         self.control_thread = threading.Thread(target=self._control_thread_loop, 
@@ -446,7 +448,7 @@ class ControllerNode(Node):
         self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
                          f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz"
                          f"| gap : {gap_ms:6.2f} \r",
-                         throttle_duration_sec=3.0)
+                         throttle_duration_sec=5.0)
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
@@ -495,9 +497,6 @@ class ControllerNode(Node):
 
     def _control_thread_loop(self):
         """Run the hardware control step at a fixed absolute rate."""
-        period_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        period_ns = int(period_sec * 1e9)
-
         # First cycle starts immediately.
         next_tick_ns = time.perf_counter_ns()
         while rclpy.ok() and not self._control_stop_event.is_set():
@@ -506,23 +505,22 @@ class ControllerNode(Node):
             remaining_ns = next_tick_ns - now_ns
 
             if remaining_ns > 0:
-                # Event.wait() instead of time.sleep() so shutdown
-                # can interrupt the wait immediately.
+                # Event.wait() instead of time.sleep() so shutdown can interrupt the wait immediately.
                 if self._control_stop_event.wait(remaining_ns * 1e-9):
                     break
             # Execute exactly one control cycle.
             self._control_loop()
 
             # Schedule the next absolute cycle.
-            next_tick_ns += period_ns
+            next_tick_ns += self.period_ns
 
             # If execution exceeded the next deadline,
             # skip missed slots instead of running back-to-back cycles.
             now_ns = time.perf_counter_ns()
-
             if now_ns > next_tick_ns:
-                missed_periods = ((now_ns - next_tick_ns) // period_ns) + 1
-                next_tick_ns += missed_periods * period_ns
+                self.deadline_miss_count += 1
+                # missed_periods = ((now_ns - next_tick_ns) // self.period_ns) + 1
+                # next_tick_ns += missed_periods * self.period_ns
 
     def stop_control_thread(self) -> None:
         """Stop and join the dedicated hardware-control thread."""
