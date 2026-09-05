@@ -152,11 +152,6 @@ class ControllerNode(Node):
         self.kill_switch_on = False
         self.kill_reason = ""
 
-        # Timing — use ROS clock so it works under sim time too.
-        self.last_tick_time = time.perf_counter()
-        self.last_end_time = time.perf_counter()
-        self.q_receive_time = None
-
         self.logger.info("Main Controller Node started")
         self._print_menu()
 
@@ -166,8 +161,22 @@ class ControllerNode(Node):
         self.input_thread.start()
 
         # Control loop timer
-        control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        self.control_timer = self.create_timer(control_period_sec, self._control_loop)
+        # control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
+        # self.control_timer = self.create_timer(control_period_sec, self._control_loop)
+
+        # Timing — use ROS clock so it works under sim time too.
+        self.last_tick_time = time.perf_counter()
+        self.last_end_time = time.perf_counter()
+        self.q_receive_time = None
+
+        # Dedicated hardware-control thread
+        self._control_stop_event = threading.Event()
+
+        self.control_thread = threading.Thread(target=self._control_thread_loop, 
+                                               name="goat_control_thread", 
+                                               daemon=False,)
+
+        self.control_thread.start()
 
     # ---------------------------------------------------------------------
     # Callback Functions
@@ -482,7 +491,48 @@ class ControllerNode(Node):
             obs_msg.data = [0.0] * self.policy_controller.policy_observation_dim
         obs_msg.header.stamp = joint_state_msg.header.stamp
         self.observation_pub.publish(obs_msg)
-        
+
+
+    def _control_thread_loop(self):
+        """Run the hardware control step at a fixed absolute rate."""
+        period_sec = 1.0 / max(self.control_rate_hz, 1.0)
+        period_ns = int(period_sec * 1e9)
+
+        # First cycle starts immediately.
+        next_tick_ns = time.perf_counter_ns()
+        while rclpy.ok() and not self._control_stop_event.is_set():
+            # Wait until the absolute start time of this control cycle.
+            now_ns = time.perf_counter_ns()
+            remaining_ns = next_tick_ns - now_ns
+
+            if remaining_ns > 0:
+                # Event.wait() instead of time.sleep() so shutdown
+                # can interrupt the wait immediately.
+                if self._control_stop_event.wait(remaining_ns * 1e-9):
+                    break
+            # Execute exactly one control cycle.
+            self._control_loop()
+
+            # Schedule the next absolute cycle.
+            next_tick_ns += period_ns
+
+            # If execution exceeded the next deadline,
+            # skip missed slots instead of running back-to-back cycles.
+            now_ns = time.perf_counter_ns()
+
+            if now_ns > next_tick_ns:
+                missed_periods = ((now_ns - next_tick_ns) // period_ns) + 1
+                next_tick_ns += missed_periods * period_ns
+
+    def stop_control_thread(self) -> None:
+        """Stop and join the dedicated hardware-control thread."""
+
+        self._control_stop_event.set()
+
+        control_thread = getattr(self, "control_thread", None)
+
+        if control_thread is not None and control_thread.is_alive():
+            control_thread.join(timeout=1.0)
 
 
 def main(args=None):
@@ -499,6 +549,7 @@ def main(args=None):
                 termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
                 node.tty.close()
         finally:
+            node.stop_control_thread()
             for _ in range(10):
                 node.motor_io.write_motor(np.zeros(node.num_joints, dtype=np.float32))
                 time.sleep(0.1)
