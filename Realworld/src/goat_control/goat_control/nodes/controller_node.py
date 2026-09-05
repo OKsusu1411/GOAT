@@ -155,6 +155,7 @@ class ControllerNode(Node):
         # Timing — use ROS clock so it works under sim time too.
         self.last_tick_time = time.perf_counter()
         self.last_end_time = time.perf_counter()
+        self.q_receive_time = None
 
         self.logger.info("Main Controller Node started")
         self._print_menu()
@@ -345,6 +346,9 @@ class ControllerNode(Node):
         obs_msg = States()  # NOTE: Obs message
 
         # Commands
+        if self.q_receive_time is not None:
+            self.logger.info(f"[timing] Command latency: {(now_time - self.q_receive_time) * 1e3:.2f} ms\r", throttle_duration_sec=1.0)
+
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
@@ -414,7 +418,8 @@ class ControllerNode(Node):
 
         # Publish torque command (only start mode)
         tau[:] = safe_torque
-        q_current = self.motor_io.read_write_motor(tau)                                     
+        q_current = self.motor_io.read_write_motor(tau)     
+        self.q_receive_time = time.perf_counter()                                
 
         # Publish for logging
         q_current.header.stamp = self.get_clock().now().to_msg()
@@ -435,7 +440,7 @@ class ControllerNode(Node):
         self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
                          f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz"
                          f"| gap : {gap_ms:6.2f} \r",
-                         throttle_duration_sec=2.0)
+                         throttle_duration_sec=3.0)
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
