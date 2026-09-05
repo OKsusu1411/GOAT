@@ -92,9 +92,15 @@ class MotorIO:
         js.velocity = list(states.joint_velocity_rad_per_sec)
         js.effort = list(states.joint_effort_like)
         return js
+    
+    def read_joint_state(self) -> JointState:
+        """Explicitly request fresh joint state using 0x9C."""
+        motor_states_data = self.motor_manager.read_joint_states(timeout=self.can_tx_timeout_sec)
+        self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
+        return self.latest_joint_state
 
-    def read_write_motor(self, torque_cmd_nm: np.ndarray):
-        """Write torque to all motors and read back joint state in one CAN pass.
+    def write_motor(self, torque_cmd_nm: np.ndarray):
+        """Write torque (0xA1) to all motors and read back joint state in one CAN pass.
 
         Slow-poll (0x9A error-flag read) moved off the hot path — driven by a
         ~1 Hz ROS timer via `poll_error_flags_once()` instead. Removing it
@@ -103,12 +109,7 @@ class MotorIO:
         # Torque clip -> current conversion
         clipped_torque_cmd = self.motor_manager.torque_clipping(torque_cmd_nm.flatten()) # Joint space torque
         current_cmd_amp = self.motor_manager.torque_to_current(clipped_torque_cmd) # Joint torque -> Motor torque -> Motor current
-        motor_states_data = self.motor_manager.write_torques_and_read_states(current_cmd_amp, 
-                                                                             timeout=self.can_tx_timeout_sec)
-        # Cache for next tick + return to caller.
-        self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
-
-        return self.latest_joint_state
+        self.motor_manager.write_torques(current_cmd_amp, timeout=self.can_tx_timeout_sec)
 
     def close(self) -> None:
         """Close both CAN buses on shutdown (stops reader threads first)."""

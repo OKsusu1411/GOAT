@@ -341,7 +341,7 @@ class ControllerNode(Node):
         self.last_tick_time = now_time
 
         # Messages
-        joint_state_msg = self.motor_io.latest_joint_state
+        joint_state_msg = self.motor_io.read_joint_state()
         imu_msg = self.imu_io.read_imu() 
         obs_msg = States()  # NOTE: Obs message
 
@@ -357,20 +357,20 @@ class ControllerNode(Node):
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
-            self.motor_io.read_write_motor(tau)
+            self.motor_io.write_motor(tau)
             self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
-            self.motor_io.read_write_motor(tau)
+            self.motor_io.write_motor(tau)
             self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         
         # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
         if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
-            self.motor_io.read_write_motor(tau)
+            self.motor_io.write_motor(tau)
             self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         # ==================================================================
@@ -402,7 +402,7 @@ class ControllerNode(Node):
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
             self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
-            self.motor_io.read_write_motor(tau)
+            self.motor_io.write_motor(tau)
             return
 
         # Safety Limiter
@@ -413,18 +413,17 @@ class ControllerNode(Node):
         # Block handling (latching kill switch)
         if is_blocked:
             self._trigger_kill_switch("SafetyLimiter blocked command")
-            self.motor_io.read_write_motor(tau)
+            self.motor_io.write_motor(tau)
             return
 
         # Publish torque command (only start mode)
         tau[:] = safe_torque
-        q_current = self.motor_io.read_write_motor(tau)     
+        self.motor_io.write_motor(tau)     
         self.q_receive_time = time.perf_counter()                                
 
         # Publish for logging
-        q_current.header.stamp = self.get_clock().now().to_msg()
         obs_msg.data = self.policy_controller.observation[0].tolist()
-        self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg, obs_msg)           # NOTE: Publish observaion too
+        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)           # NOTE: Publish observaion too
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
         exec_dt = (time.perf_counter() - now_time) 
@@ -447,6 +446,7 @@ class ControllerNode(Node):
         # Interrupting handling
         if not rclpy.ok():
             return
+        
         # Update joint state message for logging
         msg_joint = JointState()
         msg_joint.header.stamp = joint_state_msg.header.stamp
@@ -479,7 +479,7 @@ class ControllerNode(Node):
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
 
-        # NOTE: Observation publishing
+        # Observation
         if not obs_msg.data:
             obs_msg.data = [0.0] * self.policy_controller.policy_observation_dim
         obs_msg.header.stamp = joint_state_msg.header.stamp
@@ -502,7 +502,7 @@ def main(args=None):
                 node.tty.close()
         finally:
             for _ in range(10):
-                node.motor_io.read_write_motor(np.zeros(node.num_joints, dtype=np.float32))
+                node.motor_io.write_motor(np.zeros(node.num_joints, dtype=np.float32))
                 time.sleep(0.1)
             if hasattr(node, "motor_io"):
                 node.motor_io.close()

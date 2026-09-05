@@ -237,12 +237,12 @@ class ActuatorTargetTestNode(Node):
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
-                self.motor_io.read_write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.write_motor(np.zeros(self.num_joints, dtype=np.float32))
+                self.motor_io.write_motor(np.zeros(self.num_joints, dtype=np.float32))
                 rclpy.shutdown()
                 break
             else:
@@ -305,7 +305,7 @@ class ActuatorTargetTestNode(Node):
         self.last_tick_time = now_time
 
         # Joint state
-        joint_state_msg = self.motor_io.latest_joint_state
+        joint_state_msg = self.motor_io.read_joint_state()
         # IMU state
         imu_msg = self.imu_io.read_imu()       
 
@@ -327,7 +327,7 @@ class ActuatorTargetTestNode(Node):
             tau[self.wheel_ids] = self.wheel_control(q_dot[self.wheel_ids], v_ref[self.wheel_ids])
 
         # pulbish torque command
-        self.motor_io.read_write_motor(tau)   
+        self.motor_io.write_motor(tau)   
         self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
 
 

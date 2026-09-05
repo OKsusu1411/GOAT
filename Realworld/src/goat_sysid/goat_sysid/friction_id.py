@@ -95,7 +95,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
                 # Update reference input
                 ref_now = ref[i]
 
-                joint_state_msg = motor_interface.latest_joint_state
+                joint_state_msg = motor_interface.read_joint_state()
                 q = np.asarray(joint_state_msg.position, dtype=np.float32)
                 q_dot = np.asarray(joint_state_msg.velocity, dtype=np.float32)
                 q_tau = np.asarray(joint_state_msg.effort, dtype=np.float32)
@@ -107,7 +107,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
                     tau[joint_id] = wheel_control(kp_wheel, q_dot[joint_id], ref_now, max_torque_wheel)
 
                 # Send torque
-                motor_interface.read_write_motor(tau)
+                motor_interface.write_motor(tau)
 
                 # CSV logging
                 row = [elapsed_time]
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     finally:
         # Zero torque send
         for _ in range(5):
-            motor_io.read_write_motor(np.zeros(num_joints, dtype=np.float32))
+            motor_io.write_motor(np.zeros(num_joints, dtype=np.float32))
         time.sleep(0.01)
         
         motor_io.close()
