@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from goat_control.utils.imu.quaternion_utils import *
+from goat_control.utils.imu.calibration import simple_accelerometer_calibration
 from motor_interfaces.msg import ImuState
 
 import yaml
@@ -160,78 +161,94 @@ class CalibrationNode(Node):
 
         # Save to YAML
         self._save_joint_offsets_to_yaml(joint_offsets)
-    
+
     def _imu_calibration(self):
-        """IMU Calibration without Yaw"""
-        # Settings for sampling
-        sleep_interval = 0.05                           # 20 * 0.05 = 1.0 second total duration
+        """Run EBIMU simple accelerometer calibration (<cas>)."""
 
-        self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
-        
-        # IMU buffer list
-        quat_samples = []
-        old_imu_offsets_inv = inverse_quat(self.old_imu_offsets)
+        self.get_logger().info("=============================================")
+        self.get_logger().info("Simple Accelerometer Calibration")
+        self.get_logger().info("Keep the robot BASE LEVEL and STATIONARY.")
+        self.get_logger().info("=============================================")
 
-        # Sampling Loop
-        for i in range(self.sample_count):
-            
-            # Exception
-            if self.latest_imu_state is None:
-                self.get_logger().warn("IMU data lost during sampling!")
-                return
-            
-            # Store current positions
-            current_quat = np.array([self.latest_imu_state.quat.w,
-                                     self.latest_imu_state.quat.x,
-                                     self.latest_imu_state.quat.y,
-                                     self.latest_imu_state.quat.z], dtype=float)
-            current_quat = multiply_quat(old_imu_offsets_inv, current_quat)               # Restore original quaternion
+        success = simple_accelerometer_calibration(port="/dev/ttyUSB0", baudrate=115200) 
 
-            # q and -q are the same rotation
-            if quat_samples and np.dot(quat_samples[0], current_quat) < 0.0:
-                current_quat = -current_quat
-
-            quat_samples.append(current_quat)
-            
-            # Wait for next update
-            time.sleep(sleep_interval)
-
-        # Calculate Average
-        avg_quat = np.mean(quat_samples, axis=0)
-        avg_norm = np.linalg.norm(avg_quat)
-        if avg_norm < 1e-8:
-            self.get_logger().info("Averaged quaternion is 0. Calibration failed.")
-            return
-        avg_quat /= avg_norm
-
-        # Local Z axis
-        z_axis_local = np.array([0.0, 0.0, 1.0])
-        v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
-
-        # Target Z axis
-        v_target = np.array([0.0, 0.0, 1.0])
-
-        # Cross axis between local, target z axis
-        axis = np.cross(v_up, v_target)
-        axis_norm = np.linalg.norm(axis)
-        axis = axis / axis_norm
-
-        # Dot product
-        dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
-        angle = np.arccos(dot_prod)
-
-        # Already robot is upright
-        if axis_norm < 1e-8:
-            quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
-
-        # Offset quaternion
+        if success:
+            self.get_logger().info("[SUCCESS] IMU accelerometer calibration completed.")
+            self.get_logger().info("Calibration data is stored inside the IMU.")
         else:
-            quat_offsets = axis_angle_to_quat(axis, angle)
+            self.get_logger().error("[FAILED] IMU accelerometer calibration failed.")
 
-        self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
+    # def _imu_calibration(self):
+    #     """IMU Calibration without Yaw"""
+    #     # Settings for sampling
+    #     sleep_interval = 0.05                           # 20 * 0.05 = 1.0 second total duration
 
-        # Save to YAML
-        self._save_imu_offsets_to_yaml(quat_offsets)
+    #     self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
+        
+    #     # IMU buffer list
+    #     quat_samples = []
+    #     old_imu_offsets_inv = inverse_quat(self.old_imu_offsets)
+
+    #     # Sampling Loop
+    #     for i in range(self.sample_count):
+            
+    #         # Exception
+    #         if self.latest_imu_state is None:
+    #             self.get_logger().warn("IMU data lost during sampling!")
+    #             return
+            
+    #         # Store current positions
+    #         current_quat = np.array([self.latest_imu_state.quat.w,
+    #                                  self.latest_imu_state.quat.x,
+    #                                  self.latest_imu_state.quat.y,
+    #                                  self.latest_imu_state.quat.z], dtype=float)
+    #         current_quat = multiply_quat(old_imu_offsets_inv, current_quat)               # Restore original quaternion
+
+    #         # q and -q are the same rotation
+    #         if quat_samples and np.dot(quat_samples[0], current_quat) < 0.0:
+    #             current_quat = -current_quat
+
+    #         quat_samples.append(current_quat)
+            
+    #         # Wait for next update
+    #         time.sleep(sleep_interval)
+
+    #     # Calculate Average
+    #     avg_quat = np.mean(quat_samples, axis=0)
+    #     avg_norm = np.linalg.norm(avg_quat)
+    #     if avg_norm < 1e-8:
+    #         self.get_logger().info("Averaged quaternion is 0. Calibration failed.")
+    #         return
+    #     avg_quat /= avg_norm
+
+    #     # Local Z axis
+    #     z_axis_local = np.array([0.0, 0.0, 1.0])
+    #     v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
+
+    #     # Target Z axis
+    #     v_target = np.array([0.0, 0.0, 1.0])
+
+    #     # Cross axis between local, target z axis
+    #     axis = np.cross(v_up, v_target)
+    #     axis_norm = np.linalg.norm(axis)
+    #     axis = axis / axis_norm
+
+    #     # Dot product
+    #     dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
+    #     angle = np.arccos(dot_prod)
+
+    #     # Already robot is upright
+    #     if axis_norm < 1e-8:
+    #         quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
+
+    #     # Offset quaternion
+    #     else:
+    #         quat_offsets = axis_angle_to_quat(axis, angle)
+
+    #     self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
+
+    #     # Save to YAML
+    #     self._save_imu_offsets_to_yaml(quat_offsets)
 
     def _save_joint_offsets_to_yaml(self, offsets):
         # Read existing file

@@ -38,15 +38,50 @@ def wait_for_response(ser: serial.Serial, timeout: float = COMMAND_TIMEOUT) -> s
     return None
 
 
-def simple_accelerometer_calibration(ser: serial.Serial) -> bool:
-    """
-    Run EBIMU-9DOFV5 Simple Accelerometer Calibration.
+def simple_accelerometer_calibration(port: str = "/dev/ttyUSB0",
+                                     baudrate: int = 115200,
+                                     serial_timeout: float = 0.1,
+                                     command_timeout: float = 3.0) -> bool:
 
-    IMPORTANT:
-        - Robot base must be mechanically level.
-        - Robot must remain completely stationary.
-    """
+    try:
+        with serial.Serial(
+            port=port,
+            baudrate=baudrate,
+            timeout=serial_timeout,
+        ) as ser:
 
+            time.sleep(0.2)
+
+            ser.reset_input_buffer()
+
+            ser.write(b"<cas>")
+            ser.flush()
+
+            deadline = time.monotonic() + command_timeout
+            buffer = bytearray()
+
+            while time.monotonic() < deadline:
+                byte = ser.read(1)
+
+                if not byte:
+                    continue
+
+                buffer.extend(byte)
+
+                if b"<ok>" in buffer:
+                    return True
+
+                if b"<er>" in buffer:
+                    return False
+
+            return False
+
+    except serial.SerialException:
+        return False
+
+
+def main():
+    print("[IMU] Opening /dev/ttyUSB0 @ 115200 bps")
     print()
     print("============================================")
     print(" Simple Accelerometer Calibration")
@@ -56,57 +91,16 @@ def simple_accelerometer_calibration(ser: serial.Serial) -> bool:
 
     input("Press ENTER to start calibration...")
 
-    # Remove already-buffered streaming packets.
-    ser.reset_input_buffer()
-
     print("[IMU] Sending <cas> ...")
 
-    ser.write(b"<cas>")
-    ser.flush()
+    success = simple_accelerometer_calibration()
 
-    response = wait_for_response(ser)
-
-    if response == "<ok>":
+    if success:
         print("[IMU] <ok> received.")
         print("[SUCCESS] Accelerometer calibration completed.")
+    else:
+        print("[FAILED] Accelerometer calibration failed.")
 
-        # Allow AHRS to settle after calibration
-        time.sleep(1.0)
-
-        return True
-
-    if response == "<er>":
-        print("[FAILED] IMU returned <er>.")
-        return False
-
-    print("[FAILED] Response timeout.")
-    return False
-
-
-def main():
-    print(f"[IMU] Opening {IMU_PORT} @ {IMU_BAUDRATE} bps")
-
-    try:
-        with serial.Serial(port=IMU_PORT, baudrate=IMU_BAUDRATE, timeout=IMU_TIMEOUT) as ser:
-
-            # Give serial device a little time after opening.
-            time.sleep(0.2)
-
-            success = simple_accelerometer_calibration(ser)
-
-            if success:
-                print()
-                print("Calibration data is stored inside the IMU.")
-                print("You may now close this program and restart the controller.")
-            else:
-                print()
-                print("Calibration failed.")
-
-    except serial.SerialException as e:
-        print(f"[ERROR] Failed to open IMU serial port: {e}")
-
-    except KeyboardInterrupt:
-        print("\n[IMU] Calibration cancelled.")
 
 
 if __name__ == "__main__":
