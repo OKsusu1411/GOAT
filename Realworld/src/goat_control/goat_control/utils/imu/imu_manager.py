@@ -142,7 +142,7 @@ class ImuSerialReader:
             return None
 
         # IMU offset applied
-        data_list[0:4] = multiply_quat(self.imu_offsets, data_list[0:4])
+        # data_list[0:4] = multiply_quat(self.imu_offsets, data_list[0:4])
 
         quat_w, quat_x, quat_y, quat_z = data_list[0:4]
         gyro_x, gyro_y, gyro_z = np.deg2rad(data_list[4:7])         # Convert into radian!!
