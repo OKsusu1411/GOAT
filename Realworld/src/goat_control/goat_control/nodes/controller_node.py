@@ -469,7 +469,7 @@ class ControllerNode(Node):
                 f"dt mean={avg_dt_ms:.3f} ms | "
                 f"min={self._dt_min * 1e3:.3f} ms | "
                 f"max={self._dt_max * 1e3:.3f} ms | "
-                f"deadline miss={self.deadline_miss_count}"
+                f"deadline miss={self.deadline_miss_count}\r"
             )
 
             self._rate_window_start = now
