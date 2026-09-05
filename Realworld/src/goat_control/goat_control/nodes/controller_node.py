@@ -170,21 +170,17 @@ class ControllerNode(Node):
         self.q_receive_time = None
 
         # Dedicated hardware-control thread
-        self.deadline_miss_count = 0
-        self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
         self._control_stop_event = threading.Event()
+        self.control_thread = threading.Thread(target=self._control_thread_loop, name="goat_control_thread", daemon=False,)
 
-        self.control_thread = threading.Thread(target=self._control_thread_loop, 
-                                               name="goat_control_thread", 
-                                               daemon=False,)
-
+        self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
         self._rate_window_start = time.perf_counter()
+        self.deadline_miss_count = 0
         self._rate_cycle_count = 0
-
         self._dt_min = float("inf")
         self._dt_max = 0.0
         self._dt_sum = 0.0
-        
+
         self.control_thread.start()
 
 
@@ -359,7 +355,6 @@ class ControllerNode(Node):
         if dt_sec <= 0.0: dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
-
         self._rate_cycle_count += 1
         self._dt_min = min(self._dt_min, dt_sec)
         self._dt_max = max(self._dt_max, dt_sec)
@@ -449,12 +444,11 @@ class ControllerNode(Node):
         self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)           # NOTE: Publish observaion too
 
         # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        exec_dt = (time.perf_counter() - now_time) 
-        exec_ms = exec_dt * 1e3  
-        exec_hz = 1.0 / max(exec_dt, 1e-9)
-
-        gap_ms = (now_time - self.last_end_time) * 1e3
-        self.last_end_time = time.perf_counter()
+        # exec_dt = (time.perf_counter() - now_time) 
+        # exec_ms = exec_dt * 1e3  
+        # exec_hz = 1.0 / max(exec_dt, 1e-9)
+        # gap_ms = (now_time - self.last_end_time) * 1e3
+        # self.last_end_time = time.perf_counter()
 
         # Time logging
         # actual_period_ms = dt_sec * 1e3
@@ -467,11 +461,8 @@ class ControllerNode(Node):
         if self._rate_cycle_count >= 500:
             now = time.perf_counter()
             elapsed = now - self._rate_window_start
-
             avg_hz = self._rate_cycle_count / elapsed
-            avg_dt_ms = (
-                self._dt_sum / self._rate_cycle_count
-            ) * 1e3
+            avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
 
             self.logger.info(
                 f"[rate] avg={avg_hz:.2f} Hz | "
@@ -554,8 +545,8 @@ class ControllerNode(Node):
             # If execution exceeded the next deadline,
             # skip missed slots instead of running back-to-back cycles.
             now_ns = time.perf_counter_ns()
-            # if now_ns > next_tick_ns:
-            #     self.deadline_miss_count += 1
+            if now_ns > next_tick_ns:
+                self.deadline_miss_count += 1
                 # missed_periods = ((now_ns - next_tick_ns) // self.period_ns) + 1
                 # next_tick_ns += missed_periods * self.period_ns
 
