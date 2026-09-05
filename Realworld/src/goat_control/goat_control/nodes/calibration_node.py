@@ -102,8 +102,8 @@ class CalibrationNode(Node):
 
             elif key == 'i':
                 if self._is_controller_running():
-                    self.get_logger().warning("[IMU Calibration] controller_node is running.")
-                    self.get_logger().warning("Stop controller_node before IMU calibration.")
+                    self.get_logger().info("[IMU Calibration] controller_node is running.\r")
+                    self.get_logger().info("Stop controller_node before IMU calibration.\r")
                     continue
                 self.get_logger().info("Key 'i' pressed: Starting IMU Calibration\r")
                 self._imu_calibration()
