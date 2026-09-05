@@ -3,15 +3,7 @@ from __future__ import annotations
 import time
 import serial
 
-
-IMU_PORT = "/dev/ttyUSB0"
-IMU_BAUDRATE = 115200
-IMU_TIMEOUT = 0.1
-
-COMMAND_TIMEOUT = 3.0
-
-
-def wait_for_response(ser: serial.Serial, timeout: float = COMMAND_TIMEOUT) -> str | None:
+def wait_for_response(ser: serial.Serial, timeout: float = 3.0) -> str | None:
     """Wait for EBIMU response such as <ok> or <er>."""
 
     deadline = time.monotonic() + timeout
@@ -44,11 +36,7 @@ def simple_accelerometer_calibration(port: str = "/dev/ttyUSB0",
                                      command_timeout: float = 3.0) -> bool:
 
     try:
-        with serial.Serial(
-            port=port,
-            baudrate=baudrate,
-            timeout=serial_timeout,
-        ) as ser:
+        with serial.Serial(port=port, baudrate=baudrate, timeout=serial_timeout) as ser:
 
             time.sleep(0.2)
 
@@ -100,7 +88,6 @@ def main():
         print("[SUCCESS] Accelerometer calibration completed.")
     else:
         print("[FAILED] Accelerometer calibration failed.")
-
 
 
 if __name__ == "__main__":

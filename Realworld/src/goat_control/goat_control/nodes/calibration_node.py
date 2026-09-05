@@ -77,6 +77,16 @@ class CalibrationNode(Node):
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
         return key
 
+    def _is_controller_running(self) -> bool:
+        """Check whether controller_node exists in the current ROS graph."""
+        node_names_and_namespaces = self.get_node_names_and_namespaces()
+
+        for node_name, namespace in node_names_and_namespaces:
+            if node_name == "controller_node":
+                return True
+
+        return False
+
     def _keyboard_listener_loop(self):
         """Main loop to monitor keyboard input."""
         while rclpy.ok():
@@ -91,6 +101,10 @@ class CalibrationNode(Node):
                 self._joint_calibration()
 
             elif key == 'i':
+                if self._is_controller_running():
+                    self.get_logger().warning("[IMU Calibration] controller_node is running.")
+                    self.get_logger().warning("Stop controller_node before IMU calibration.")
+                    return
                 self.get_logger().info("Key 'i' pressed: Starting IMU Calibration\r")
                 self._imu_calibration()
                 
@@ -178,6 +192,37 @@ class CalibrationNode(Node):
         else:
             self.get_logger().error("[FAILED] IMU accelerometer calibration failed.")
 
+
+    def _save_joint_offsets_to_yaml(self, offsets):
+        # Read existing file
+        data = {}
+        if os.path.exists(self.yaml_path):
+            try:
+                with open(self.yaml_path, 'r') as f:
+                    data = yaml.safe_load(f) or {}
+            except Exception as e:
+                self.get_logger().error(f"Failed to load existing YAML: {e}")
+                return
+        
+        # Update data structure
+        formatted_offsets = [float(val) for val in offsets]
+        
+        if 'joint_offsets' not in data:
+            data['joint_offsets'] = {}
+            
+        data['joint_offsets'] = formatted_offsets
+
+        # Write to file
+        try:
+            os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
+            with open(self.yaml_path, 'w') as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+            
+            self.get_logger().info(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n")
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to write YAML file: {e}")
+
     # def _imu_calibration(self):
     #     """IMU Calibration without Yaw"""
     #     # Settings for sampling
@@ -250,65 +295,35 @@ class CalibrationNode(Node):
     #     # Save to YAML
     #     self._save_imu_offsets_to_yaml(quat_offsets)
 
-    def _save_joint_offsets_to_yaml(self, offsets):
-        # Read existing file
-        data = {}
-        if os.path.exists(self.yaml_path):
-            try:
-                with open(self.yaml_path, 'r') as f:
-                    data = yaml.safe_load(f) or {}
-            except Exception as e:
-                self.get_logger().error(f"Failed to load existing YAML: {e}")
-                return
+    # def _save_imu_offsets_to_yaml(self, offsets):
+    #     # Read existing file
+    #     data = {}
+    #     if os.path.exists(self.yaml_path):
+    #         try:
+    #             with open(self.yaml_path, 'r') as f:
+    #                 data = yaml.safe_load(f) or {}
+    #         except Exception as e:
+    #             self.get_logger().error(f"Failed to load existing YAML: {e}")
+    #             return
         
-        # Update data structure
-        formatted_offsets = [float(val) for val in offsets]
+    #     # Update data structure
+    #     formatted_offsets = [float(val) for val in offsets]
         
-        if 'joint_offsets' not in data:
-            data['joint_offsets'] = {}
+    #     if 'imu_offsets' not in data:
+    #         data['imu_offsets'] = {}
             
-        data['joint_offsets'] = formatted_offsets
+    #     data['imu_offsets'] = formatted_offsets
 
-        # Write to file
-        try:
-            os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
-            with open(self.yaml_path, 'w') as f:
-                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    #     # Write to file
+    #     try:
+    #         os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
+    #         with open(self.yaml_path, 'w') as f:
+    #             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             
-            self.get_logger().info(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n")
+    #         self.get_logger().info(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
             
-        except Exception as e:
-            self.get_logger().error(f"Failed to write YAML file: {e}")
-
-    def _save_imu_offsets_to_yaml(self, offsets):
-        # Read existing file
-        data = {}
-        if os.path.exists(self.yaml_path):
-            try:
-                with open(self.yaml_path, 'r') as f:
-                    data = yaml.safe_load(f) or {}
-            except Exception as e:
-                self.get_logger().error(f"Failed to load existing YAML: {e}")
-                return
-        
-        # Update data structure
-        formatted_offsets = [float(val) for val in offsets]
-        
-        if 'imu_offsets' not in data:
-            data['imu_offsets'] = {}
-            
-        data['imu_offsets'] = formatted_offsets
-
-        # Write to file
-        try:
-            os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
-            with open(self.yaml_path, 'w') as f:
-                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-            
-            self.get_logger().info(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
-            
-        except Exception as e:
-            self.get_logger().error(f"Failed to write YAML file: {e}")
+    #     except Exception as e:
+    #         self.get_logger().error(f"Failed to write YAML file: {e}")
 
 
 def main(args=None):
