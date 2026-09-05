@@ -178,14 +178,15 @@ class ControllerNode(Node):
                                                name="goat_control_thread", 
                                                daemon=False,)
 
-        self.control_thread.start()
-
         self._rate_window_start = time.perf_counter()
         self._rate_cycle_count = 0
 
         self._dt_min = float("inf")
         self._dt_max = 0.0
         self._dt_sum = 0.0
+        
+        self.control_thread.start()
+
 
     # ---------------------------------------------------------------------
     # Callback Functions
