@@ -135,10 +135,7 @@ class CalibrationNode(Node):
         if self.latest_joint_state is None:
             self.get_logger().warn("No joint states received yet! Cannot calibrate joints.")
             return
-
-        # Settings for sampling
-        sleep_interval = 0.05  # 20 * 0.05 = 1.0 second total duration
-
+        
         self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
         
         # Joint position buffer list
@@ -146,7 +143,7 @@ class CalibrationNode(Node):
         joint_names = None
 
         # Sampling Loop
-        for i in range(self.sample_count):
+        for _ in range(self.sample_count):
             
             # Exception
             if self.latest_joint_state is None:
@@ -162,7 +159,7 @@ class CalibrationNode(Node):
             position_samples.append(current_pos)
             
             # Wait for next update
-            time.sleep(sleep_interval)
+            time.sleep(0.05)
 
         # Calculate Average
         avg_positions = np.mean(position_samples, axis=0)
