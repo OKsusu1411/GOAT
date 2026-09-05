@@ -180,6 +180,13 @@ class ControllerNode(Node):
 
         self.control_thread.start()
 
+        self._rate_window_start = time.perf_counter()
+        self._rate_cycle_count = 0
+
+        self._dt_min = float("inf")
+        self._dt_max = 0.0
+        self._dt_sum = 0.0
+
     # ---------------------------------------------------------------------
     # Callback Functions
     # ---------------------------------------------------------------------
@@ -351,6 +358,12 @@ class ControllerNode(Node):
         if dt_sec <= 0.0: dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
+
+        self._rate_cycle_count += 1
+        self._dt_min = min(self._dt_min, dt_sec)
+        self._dt_max = max(self._dt_max, dt_sec)
+        self._dt_sum += dt_sec
+
         # Messages
         joint_state_msg = self.motor_io.read_joint_state()
         imu_msg = self.imu_io.read_imu() 
@@ -443,12 +456,35 @@ class ControllerNode(Node):
         self.last_end_time = time.perf_counter()
 
         # Time logging
-        actual_period_ms = dt_sec * 1e3
-        actual_hz = 1.0 / max(dt_sec, 1e-9)
-        self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
-                         f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz"
-                         f"| gap : {gap_ms:6.2f} \r",
-                         throttle_duration_sec=5.0)
+        # actual_period_ms = dt_sec * 1e3
+        # actual_hz = 1.0 / max(dt_sec, 1e-9)
+        # self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
+        #                  f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz"
+        #                  f"| gap : {gap_ms:6.2f} \r",
+        #                  throttle_duration_sec=5.0)
+
+        if self._rate_cycle_count >= 500:
+            now = time.perf_counter()
+            elapsed = now - self._rate_window_start
+
+            avg_hz = self._rate_cycle_count / elapsed
+            avg_dt_ms = (
+                self._dt_sum / self._rate_cycle_count
+            ) * 1e3
+
+            self.logger.info(
+                f"[rate] avg={avg_hz:.2f} Hz | "
+                f"dt mean={avg_dt_ms:.3f} ms | "
+                f"min={self._dt_min * 1e3:.3f} ms | "
+                f"max={self._dt_max * 1e3:.3f} ms | "
+                f"deadline miss={self.deadline_miss_count}"
+            )
+
+            self._rate_window_start = now
+            self._rate_cycle_count = 0
+            self._dt_min = float("inf")
+            self._dt_max = 0.0
+            self._dt_sum = 0.0
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
@@ -517,8 +553,8 @@ class ControllerNode(Node):
             # If execution exceeded the next deadline,
             # skip missed slots instead of running back-to-back cycles.
             now_ns = time.perf_counter_ns()
-            if now_ns > next_tick_ns:
-                self.deadline_miss_count += 1
+            # if now_ns > next_tick_ns:
+            #     self.deadline_miss_count += 1
                 # missed_periods = ((now_ns - next_tick_ns) // self.period_ns) + 1
                 # next_tick_ns += missed_periods * self.period_ns
 
