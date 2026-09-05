@@ -346,9 +346,8 @@ class ControllerNode(Node):
         obs_msg = States()  # NOTE: Obs message
 
         # Commands
-        if self.q_receive_time is not None:
-            self.logger.info(f"[timing] Command latency: {(now_time - self.q_receive_time) * 1e3:.2f} ms\r", throttle_duration_sec=1.0)
-
+        # if self.q_receive_time is not None:
+        #     self.logger.info(f"[timing] Command latency: {(now_time - self.q_receive_time) * 1e3:.2f} ms\r", throttle_duration_sec=1.0)
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
@@ -418,8 +417,7 @@ class ControllerNode(Node):
 
         # Publish torque command (only start mode)
         tau[:] = safe_torque
-        self.motor_io.write_motor(tau)     
-        self.q_receive_time = time.perf_counter()                                
+        self.motor_io.write_motor(tau)                                  
 
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
