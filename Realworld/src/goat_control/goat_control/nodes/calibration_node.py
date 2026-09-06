@@ -173,6 +173,8 @@ class CalibrationNode(Node):
         # Save to YAML
         self._save_joint_offsets_to_yaml(joint_offsets)
 
+        self.get_logger().info("======== !!Joint calibration completed!! ========")
+
     def _imu_calibration(self):
         """Execute EBIMU's accelerometer, magnetometer calibration function."""
 
@@ -194,6 +196,8 @@ class CalibrationNode(Node):
             self.get_logger().info("[SUCCESS] Magnetometer calibration completed.")
         else:
             self.get_logger().info("[FAILED] Magnetometer calibration failed.")
+
+        self.get_logger().info("======== !!IMU calibration completed!! ========")
 
 
     def _save_joint_offsets_to_yaml(self, offsets):
