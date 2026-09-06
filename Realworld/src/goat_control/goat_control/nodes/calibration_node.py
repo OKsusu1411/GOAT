@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from goat_control.utils.imu.quaternion_utils import *
-from goat_control.utils.imu.calibration import simple_accelerometer_calibration
+from goat_control.utils.imu.calibration import simple_accelerometer_calibration, magnetometer_calibration
 from motor_interfaces.msg import ImuState
 
 import yaml
@@ -174,20 +174,26 @@ class CalibrationNode(Node):
         self._save_joint_offsets_to_yaml(joint_offsets)
 
     def _imu_calibration(self):
-        """Run EBIMU simple accelerometer calibration (<cas>)."""
+        """Execute EBIMU's accelerometer, magnetometer calibration function."""
 
         self.get_logger().info("=============================================")
-        self.get_logger().info("Simple Accelerometer Calibration")
-        self.get_logger().info("Keep the robot BASE LEVEL and STATIONARY.")
+        self.get_logger().info(" IMU Accelerometer, Magnetometer Calibration ")
         self.get_logger().info("=============================================")
+        self.get_logger().info("Keep the robot Upright and Steady")
 
-        success = simple_accelerometer_calibration(port="/dev/ttyUSB0", baudrate=115200) 
+        success_acc = simple_accelerometer_calibration(port="/dev/ttyUSB0", baudrate=115200) 
 
-        if success:
-            self.get_logger().info("[SUCCESS] IMU accelerometer calibration completed.")
-            self.get_logger().info("Calibration data is stored inside the IMU.")
+        if success_acc:
+            self.get_logger().info("[SUCCESS] IMU Accelerometer calibration completed.")
         else:
-            self.get_logger().error("[FAILED] IMU accelerometer calibration failed.")
+            self.get_logger().error("[FAILED] Accelerometer calibration failed.")
+
+        success_mag = magnetometer_calibration(port="/dev/ttyUSB0", baudrate=115200)
+    
+        if success_mag:
+            self.get_logger().info("[SUCCESS] Magnetometer calibration completed.")
+        else:
+            self.get_logger().info("[FAILED] Magnetometer calibration failed.")
 
 
     def _save_joint_offsets_to_yaml(self, offsets):
