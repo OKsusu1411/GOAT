@@ -3,7 +3,7 @@
 set -e
 
 IFACE="${1:-can0}"
-BITRATE="${2:-1000000}"
+BITRATE="${2:-5000000}"
 
 echo "[*] Setting up CAN interface: ${IFACE} @ ${BITRATE} bps"
 
