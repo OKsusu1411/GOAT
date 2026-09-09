@@ -410,7 +410,9 @@ class MotorManager:
         t_done = time.perf_counter()
 
         self._last_read_submit_ms = (t_fired - t_submit) * 1e3
-        self._last_read_wait_ms = (t_done - t_fired) * 1e3
+        self._last_read_wait_ms = (t_done - t_fired) * 1e3\
+
+        print(f"MotorManager: read_joint_states() timings: submit={self._last_read_submit_ms:.3f} ms, wait={self._last_read_wait_ms:.3f} ms")
 
         return self._package_motor_states()
 
@@ -449,3 +451,5 @@ class MotorManager:
         # Surface timings (read by controller_node timing log).
         self._last_write_submit_ms = (t_fired - t_submit) * 1e3
         self._last_write_wait_ms = (t_done - t_fired) * 1e3
+
+        print(f"[MotorManager] write_torques: submit={self._last_write_submit_ms:.3f} ms, wait={self._last_write_wait_ms:.3f} ms")
