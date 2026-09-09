@@ -20,16 +20,16 @@ wheel_indices:
 num_joints: 8
 can_channels:
 - can0
-- can1
+# - can1
 motor_bus_index:
 - 0
-- 1
 - 0
-- 1
 - 0
-- 1
 - 0
-- 1
+- 0
+- 0
+- 0
+- 0
 motor_node_ids:
 - 1
 - 2
