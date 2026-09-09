@@ -337,7 +337,7 @@ class MotorManager:
         speed_deg_per_sec = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
         encoder_count = int(struct.unpack("<H", response_data[6:8])[0])
 
-        return (temperature_c, current_amp, speed_deg_per_sec, encoder_count,)
+        return (temperature_c, current_amp, speed_deg_per_sec, encoder_count)
 
     def _update_motor_angle_from_encoder(self, motor_index: int) -> None:
         """Integrate the latest uint16 encoder count into a multi-turn motor
@@ -373,11 +373,7 @@ class MotorManager:
     # [Primary Read]
     # =========================================================================
     def read_joint_states(self, timeout: float = 0.003) -> MotorStatesData:
-        """Read fresh State2 (0x9C) from all motors.
-
-        This is the ONLY hot-path function that updates the
-        controller-facing motor position / velocity / effort state.
-        """
+        """Read fresh State2 (0x9C) from all motors."""
         # Phase 1: Clear and send all 0x9C requests
         t_submit = time.perf_counter()
         for driver in self.motor_drivers:
@@ -424,10 +420,8 @@ class MotorManager:
     def write_torques(self, current_cmd_amp: Sequence[float], timeout: float = 0.003) -> MotorStatesData:
         """Synchronous fire-all-then-wait-all torque + state2 pass.
 
-        Phase 1 — clear each motor's 0xA1 reply event, then send its torque
-                  command. TXs are non-blocking (kernel ring); both buses
-                  run in parallel by virtue of separate CanInterface
-                  instances.
+        Phase 1 — Send its torque command. TXs are non-blocking (kernel ring)
+
         Phase 2 — for each motor, wait on its arrival event until the shared
                   deadline. On timeout, inject NaN so the kill switch fires
                   instead of letting stale data drive the controller.
@@ -455,5 +449,3 @@ class MotorManager:
         # Surface timings (read by controller_node timing log).
         self._last_write_submit_ms = (t_fired - t_submit) * 1e3
         self._last_write_wait_ms = (t_done - t_fired) * 1e3
-
-        return self._package_motor_states()

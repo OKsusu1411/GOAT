@@ -49,13 +49,7 @@ class ControllerNode(Node):
         self.declare_parameter("imu_baudrate", 115200)
         self.declare_parameter("imu_timeout", 1.0)
 
-        self.set_parameters([
-            rclpy.parameter.Parameter(
-                "use_sim_time",
-                rclpy.Parameter.Type.BOOL,
-                False,
-            )
-        ])
+        self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, False)])
 
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
@@ -76,11 +70,7 @@ class ControllerNode(Node):
 
         # Logger
         self.logger = self.get_logger()
-
-        self.logger.info(
-            f"Python thread switch interval: "
-            f"{sys.getswitchinterval() * 1e3:.3f} ms"
-        )
+        self.logger.info(f"Python thread switch interval: {sys.getswitchinterval() * 1e3:.3f} ms")
 
         # Controller
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
@@ -133,7 +123,7 @@ class ControllerNode(Node):
                                                         "/commands", 
                                                         qos_profile=qos_profile)
 
-        # NOTE: Observation publisher for debbugging
+        # Observation publisher for debbugging
         self.observation_pub = self.create_publisher(States,
                                                      "/obs",
                                                      qos_profile=qos_profile)
@@ -164,25 +154,24 @@ class ControllerNode(Node):
         # control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
         # self.control_timer = self.create_timer(control_period_sec, self._control_loop)
 
-        # Timing — use ROS clock so it works under sim time too.
+        # Timing
         self.last_tick_time = time.perf_counter()
         self.last_end_time = time.perf_counter()
         self.q_receive_time = None
 
-        # Dedicated hardware-control thread
-        self._control_stop_event = threading.Event()
-        self.control_thread = threading.Thread(target=self._control_thread_loop, name="goat_control_thread", daemon=False,)
-
+        # Hardware-control thread to skip ROS overhead and sleep
         self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
-        self._rate_window_start = time.perf_counter()
         self.deadline_miss_count = 0
-        self._rate_cycle_count = 0
         self._dt_min = float("inf")
         self._dt_max = 0.0
         self._dt_sum = 0.0
 
+        self._rate_cycle_count = 0
+        self._rate_check_interval = 500
+        self._rate_window_start = time.perf_counter()
+        self._control_stop_event = threading.Event()
+        self.control_thread = threading.Thread(target=self._control_thread_loop, name="goat_control_thread", daemon=False,)
         self.control_thread.start()
-
 
     # ---------------------------------------------------------------------
     # Callback Functions
@@ -280,12 +269,11 @@ class ControllerNode(Node):
         # IMU state: quaternion + gyro / vel / mag vectors.
         imu = imu_msg
         if imu is not None:
-            imu_values = [
-                imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
-                imu.gyro.x, imu.gyro.y, imu.gyro.z,
-                imu.acc.x, imu.acc.y, imu.acc.z,
-                imu.mag.x, imu.mag.y, imu.mag.z,
-            ]
+            imu_values = [imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
+                          imu.gyro.x, imu.gyro.y, imu.gyro.z,
+                          imu.acc.x, imu.acc.y, imu.acc.z,
+                          imu.mag.x, imu.mag.y, imu.mag.z,
+                          ]
             if np.any(np.isnan(np.asarray(imu_values, dtype=float))):
                 return True
 
@@ -350,7 +338,7 @@ class ControllerNode(Node):
         """Main control loop called by create_timer at control_rate_hz."""
         now_time = time.perf_counter()
 
-        # Time - Time → Duration; convert to seconds via nanoseconds.
+        # Time information
         dt_sec = (now_time - self.last_tick_time)
         if dt_sec <= 0.0: dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
@@ -363,11 +351,9 @@ class ControllerNode(Node):
         # Messages
         joint_state_msg = self.motor_io.read_joint_state()
         imu_msg = self.imu_io.read_imu() 
-        obs_msg = States()  # NOTE: Obs message
+        obs_msg = States()
 
         # Commands
-        # if self.q_receive_time is not None:
-        #     self.logger.info(f"[timing] Command latency: {(now_time - self.q_receive_time) * 1e3:.2f} ms\r", throttle_duration_sec=1.0)
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
@@ -441,24 +427,9 @@ class ControllerNode(Node):
 
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
-        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)           # NOTE: Publish observaion too
+        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)  
 
-        # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        # exec_dt = (time.perf_counter() - now_time) 
-        # exec_ms = exec_dt * 1e3  
-        # exec_hz = 1.0 / max(exec_dt, 1e-9)
-        # gap_ms = (now_time - self.last_end_time) * 1e3
-        # self.last_end_time = time.perf_counter()
-
-        # Time logging
-        # actual_period_ms = dt_sec * 1e3
-        # actual_hz = 1.0 / max(dt_sec, 1e-9)
-        # self.logger.info(f"[timing] Loop: {actual_period_ms:6.2f} ms | {actual_hz:6.1f} Hz "
-        #                  f"| exec: {exec_ms:6.2f} ms | {exec_hz:6.1f} Hz"
-        #                  f"| gap : {gap_ms:6.2f} \r",
-        #                  throttle_duration_sec=5.0)
-
-        if self._rate_cycle_count >= 500:
+        if self._rate_cycle_count >= self._rate_check_interval:
             now = time.perf_counter()
             elapsed = now - self._rate_window_start
             avg_hz = self._rate_cycle_count / elapsed
@@ -492,6 +463,7 @@ class ControllerNode(Node):
         msg_joint.position = joint_state_msg.position
         msg_joint.velocity = joint_state_msg.velocity
         msg_joint.effort = joint_state_msg.effort
+
         # Update IMU message for logging 
         msg_imu = ImuState()
         msg_imu.header.stamp = joint_state_msg.header.stamp
@@ -504,9 +476,7 @@ class ControllerNode(Node):
         # Update joint command message
         msg_command = JointState()
         msg_command.header.stamp = joint_state_msg.header.stamp
-        # Use configured joint names so /commands stays consistent with the
-        # actual num_joints (8 in normal setup, 6 in wheel-less bring-up).
-        msg_command.name = list(self.cfg["joint_names"])
+        msg_command.name = joint_state_msg.name
         msg_command.position = position.tolist()
         msg_command.velocity = velocity.tolist()
         msg_command.effort = effort.tolist()
@@ -531,32 +501,23 @@ class ControllerNode(Node):
             # Wait until the absolute start time of this control cycle.
             now_ns = time.perf_counter_ns()
             remaining_ns = next_tick_ns - now_ns
-
             if remaining_ns > 0:
                 # Event.wait() instead of time.sleep() so shutdown can interrupt the wait immediately.
                 if self._control_stop_event.wait(remaining_ns * 1e-9):
                     break
             # Execute exactly one control cycle.
             self._control_loop()
-
             # Schedule the next absolute cycle.
             next_tick_ns += self.period_ns
-
-            # If execution exceeded the next deadline,
-            # skip missed slots instead of running back-to-back cycles.
             now_ns = time.perf_counter_ns()
             if now_ns > next_tick_ns:
                 self.deadline_miss_count += 1
-                # missed_periods = ((now_ns - next_tick_ns) // self.period_ns) + 1
-                # next_tick_ns += missed_periods * self.period_ns
+
 
     def stop_control_thread(self) -> None:
         """Stop and join the dedicated hardware-control thread."""
-
         self._control_stop_event.set()
-
         control_thread = getattr(self, "control_thread", None)
-
         if control_thread is not None and control_thread.is_alive():
             control_thread.join(timeout=1.0)
 
