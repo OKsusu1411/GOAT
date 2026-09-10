@@ -451,6 +451,7 @@ class ControllerNode(Node):
                 f"M{i}: "
                 f"{self.motor_io.motor_manager.motor_request_start_time_ms[i]:.3f}"
                 f"->{self.motor_io.motor_manager.motor_request_end_time_ms[i]:.3f}"
+                f"Wait={self.motor_io.motor_manager.motor_wait_time_ms[i]:.3f}"
                 for i in range(self.motor_io.motor_manager.motor_count)
             )
             self.logger.info(f"[CAN] Motor timings: {motor_timing_str}\r")

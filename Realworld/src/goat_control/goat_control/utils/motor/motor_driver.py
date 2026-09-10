@@ -104,6 +104,16 @@ class MotorDriver:
         if msg is not None:
             return msg
         return self.can_interface.get_latest_frame(self.can_ids.tx_id, command_byte)
+    
+    def latest_reply_with_time(self, command_byte: int):
+        """
+        Return the latest reply for a given command byte along with its reception time.
+        Prefer rx_id frame; fall back to tx_id (this hardware replies on tx_id).
+        """
+        msg, rx_time = self.can_interface.get_latest_frame_with_time(self.can_ids.rx_id, command_byte)
+        if msg is not None:
+            return (msg, rx_time)
+        return self.can_interface.get_latest_frame_with_time(self.can_ids.tx_id, command_byte)
 
     # =======================
     # External helpers
@@ -131,4 +141,5 @@ class MotorDriver:
         arrived = self.state2_reply_event.wait(remaining)
         if not arrived:
             return None # Timeout Signal
-        return self.latest_reply(0x9C)
+        # return self.latest_reply(0x9C)
+        return self.latest_reply_with_time(0x9C)

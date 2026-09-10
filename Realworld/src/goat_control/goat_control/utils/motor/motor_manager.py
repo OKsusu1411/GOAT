@@ -386,19 +386,19 @@ class MotorManager:
             self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
             driver.send_state2_request()
             self.motor_request_end_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
-    
         t_fired = time.perf_counter()
 
         # Phase 2: wait for all replies with one shared deadline
         deadline = time.monotonic() + timeout
         for motor_index, driver in enumerate(self.motor_drivers):
-            response_message = driver.await_state2_reply(deadline)
+            response_message, rx_time = driver.await_state2_reply(deadline)
             if response_message is None:
                 # Force existing sensor-NaN safety path.
                 self.motor_speed_deg_per_sec[motor_index] = float("nan")
                 self.motor_phase_current_amp[motor_index] = float("nan")
                 continue
 
+            self.motor_wait_time_ms[motor_index] = (rx_time - t_submit) * 1e3
             (
                 temperature_c, 
                 current_amp, 
