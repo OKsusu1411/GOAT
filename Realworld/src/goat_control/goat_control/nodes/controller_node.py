@@ -440,12 +440,18 @@ class ControllerNode(Node):
                 f"[Time] mean={avg_dt_ms:.3f} ms | "
                 f"[Time] min={self._dt_min * 1e3:.3f} ms | "
                 f"[Time] max={self._dt_max * 1e3:.3f} ms | "
-                f"[Time] deadline miss={self.deadline_miss_count} | \n"
+                f"[Time] deadline miss={self.deadline_miss_count} | \r"
                 f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
                 f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
                 f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f} | "
                 f"[CAN] write_wait={self.motor_io.motor_manager._last_write_wait_ms:.3f}\r"
             )
+
+            for i in range(self.motor_io.motor_manager.motor_count):
+                self.logger.info(
+                    f"[CAN] motor{i} request start={self.motor_io.motor_manager.motor_request_start_time_ms[i]:.3f} | "
+                    f"[CAN] motor{i} request start={self.motor_io.motor_manager.motor_request_end_time_ms[i]:.3f}\r"
+                )
 
             self._rate_window_start = now
             self._rate_cycle_count = 0

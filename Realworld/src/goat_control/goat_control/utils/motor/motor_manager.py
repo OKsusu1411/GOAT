@@ -102,6 +102,11 @@ class MotorManager:
         self.motor_prev_encoder_count:     List[Optional[int]]   = [None] * self.motor_count
         self.motor_encoder_wrap_count:     List[int]             = [0]    * self.motor_count
 
+        # Per-motor timing
+        self.motor_request_start_time_ms: list[float] = [0.0] * self.motor_count
+        self.motor_request_end_time_ms: list[float] = [0.0] * self.motor_count
+        self.motor_wait_time_ms: list[float] = [0.0] * self.motor_count
+
         # Boot anchor fold window (per motor, motor degrees)
         self.motor_fold_center_deg: List[Optional[float]] = [None] * self.motor_count
 
@@ -376,9 +381,12 @@ class MotorManager:
         """Read fresh State2 (0x9C) from all motors."""
         # Phase 1: Clear and send all 0x9C requests
         t_submit = time.perf_counter()
-        for driver in self.motor_drivers:
+        for i, driver in enumerate(self.motor_drivers):
             driver.clear_state2_reply_event()
+            self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
             driver.send_state2_request()
+            self.motor_request_end_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
+    
         t_fired = time.perf_counter()
 
         # Phase 2: wait for all replies with one shared deadline
