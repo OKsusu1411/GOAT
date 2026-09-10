@@ -440,7 +440,7 @@ class ControllerNode(Node):
                 f"[Time] mean={avg_dt_ms:.3f} ms | "
                 f"[Time] min={self._dt_min * 1e3:.3f} ms | "
                 f"[Time] max={self._dt_max * 1e3:.3f} ms | "
-                f"[Time] deadline miss={self.deadline_miss_count} | \r"
+                f"[Time] deadline miss={self.deadline_miss_count} | "
                 f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
                 f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
                 f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f} | "
