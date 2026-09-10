@@ -140,6 +140,6 @@ class MotorDriver:
         remaining = max(0.0, deadline_monotonic - time.monotonic())
         arrived = self.state2_reply_event.wait(remaining)
         if not arrived:
-            return None # Timeout Signal
+            return (None, None) # Timeout Signal
         # return self.latest_reply(0x9C)
         return self.latest_reply_with_time(0x9C)
