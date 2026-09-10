@@ -4,8 +4,9 @@ set -e
 
 IFACE="${1:-can0}"
 BITRATE="${2:-1000000}"
+DBITRATE="${3:-5000000}"
 
-echo "[*] Setting up CAN interface: ${IFACE} @ ${BITRATE} bps"
+echo "[*] Setting up CAN interface: ${IFACE} @ ${BITRATE} bps, FD ${DBITRATE} bps"
 
 # Native Jetson CAN driver
 sudo modprobe can
@@ -23,13 +24,12 @@ echo "[*] Bringing ${IFACE} down..."
 sudo ip link set "${IFACE}" down || true
 
 echo "[*] Configuring ${IFACE}..."
-sudo ip link set "${IFACE}" type can \
+sudo ip link set "${IFACE}" up type can \
     bitrate "${BITRATE}" \
+    dbitrate "${DBITRATE}"\
     restart-ms 100 \
-    berr-reporting on
-
-echo "[*] Bringing ${IFACE} up..."
-sudo ip link set "${IFACE}" up
+    berr-reporting on \
+    fd on
 
 sleep 0.5
 
@@ -40,7 +40,7 @@ ip -details -statistics link show "${IFACE}"
 echo
 
 if ip link show "${IFACE}" | grep -q "UP"; then
-    echo "[OK] ${IFACE} is UP and configured at ${BITRATE} bps."
+    echo "[OK] ${IFACE} is UP and configured at ${BITRATE} bps, FD ${DBITRATE} bps."
 else
     echo "[FAIL] ${IFACE} is NOT UP."
     exit 1
