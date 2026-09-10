@@ -450,7 +450,7 @@ class ControllerNode(Node):
             for i in range(self.motor_io.motor_manager.motor_count):
                 self.logger.info(
                     f"[CAN] motor{i} request start={self.motor_io.motor_manager.motor_request_start_time_ms[i]:.3f} | "
-                    f"[CAN] motor{i} request start={self.motor_io.motor_manager.motor_request_end_time_ms[i]:.3f}\r"
+                    f"motor{i} request end={self.motor_io.motor_manager.motor_request_end_time_ms[i]:.3f}\r"
                 )
 
             self._rate_window_start = now
