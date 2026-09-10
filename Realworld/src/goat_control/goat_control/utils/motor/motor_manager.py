@@ -383,9 +383,9 @@ class MotorManager:
         t_submit = time.perf_counter()
         for i, driver in enumerate(self.motor_drivers):
             driver.clear_state2_reply_event()
-            self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
+            # self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
             driver.send_state2_request()
-            self.motor_request_end_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
+            # self.motor_request_end_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
     
         t_fired = time.perf_counter()
 
