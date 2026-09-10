@@ -436,11 +436,15 @@ class ControllerNode(Node):
             avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
 
             self.logger.info(
-                f"[rate] avg={avg_hz:.2f} Hz | "
-                f"dt mean={avg_dt_ms:.3f} ms | "
-                f"min={self._dt_min * 1e3:.3f} ms | "
-                f"max={self._dt_max * 1e3:.3f} ms | "
-                f"deadline miss={self.deadline_miss_count}\r"
+                f"[Rate] avg={avg_hz:.2f} Hz | "
+                f"[Time] mean={avg_dt_ms:.3f} ms | "
+                f"[Time] min={self._dt_min * 1e3:.3f} ms | "
+                f"[Time] max={self._dt_max * 1e3:.3f} ms | "
+                f"[Time] deadline miss={self.deadline_miss_count} | \n"
+                f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
+                f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
+                f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f} | "
+                f"[CAN] write_wait={self.motor_io.motor_manager._last_write_wait_ms:.3f}\r"
             )
 
             self._rate_window_start = now

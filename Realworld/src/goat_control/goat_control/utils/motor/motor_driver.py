@@ -29,8 +29,7 @@ class MotorDriver:
         self.node_id = node_id
         self.can_ids = CanIds(tx_id=0x140 + node_id, rx_id=0x180 + node_id)
 
-        # 0xA1 (torque) reply may land on rx_id OR tx_id depending on the motor setup.
-        self.reply_event = self.can_interface.alias_event_keys((self.can_ids.rx_id, 0xA1), (self.can_ids.tx_id, 0xA1))
+        self.torque_reply_event = self.can_interface.alias_event_keys((self.can_ids.rx_id, 0xA1), (self.can_ids.tx_id, 0xA1))
         self.state2_reply_event = self.can_interface.alias_event_keys((self.can_ids.rx_id, 0x9C), (self.can_ids.tx_id, 0x9C))
 
     # ========================
@@ -111,7 +110,7 @@ class MotorDriver:
     # =======================
     def clear_torque_reply_event(self) -> None:
         """Arm this motor for a fresh 0xA1 reply."""
-        self.reply_event.clear()
+        self.torque_reply_event.clear()
 
     def clear_state2_reply_event(self) -> None:
         """Arm this motor for a fresh 0x9C reply."""
@@ -121,7 +120,7 @@ class MotorDriver:
         """Block until a fresh 0xA1 reply arrives for this motor."""
         # rx_id and tx_id 0xA1 events are aliased to one shared Event.
         remaining = max(0.0, deadline_monotonic - time.monotonic())
-        arrive = self.reply_event.wait(remaining)  # woken on arrival, or fell through on timeout
+        arrive = self.torque_reply_event.wait(remaining)  # woken on arrival, or fell through on timeout
         if not arrive:
             return None # Timeout Signal
         return self.latest_reply(0xA1)
