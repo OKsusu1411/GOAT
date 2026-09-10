@@ -455,7 +455,6 @@ class MotorManager:
         #     response_message = driver.await_torque_reply(deadline)
         #     if response_message is None:
         #         raise TimeoutError(f"Motor {motor_index}: 0xA1 torque reply timeout.")
-            
         # t_done = time.perf_counter()                                             # [timing]
 
         # Surface timings (read by controller_node timing log).
