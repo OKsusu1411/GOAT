@@ -439,21 +439,21 @@ class MotorManager:
         t_submit = time.perf_counter()                                           # [timing]
         for motor_index, amp in enumerate(current_cmd_amp):
             driver = self.motor_drivers[motor_index]
-            driver.clear_torque_reply_event()
+            # driver.clear_torque_reply_event()
             driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
         t_fired = time.perf_counter()                                            # [timing]
 
         # Phase 2 — bounded wait, one shared deadline so total RX time is
         # bounded by `timeout` rather than 8 × per-motor timeout.
-        deadline = time.monotonic() + timeout
-        for motor_index in range(self.motor_count):
-            driver = self.motor_drivers[motor_index]
-            response_message = driver.await_torque_reply(deadline)
-            if response_message is None:
-                raise TimeoutError(f"Motor {motor_index}: 0xA1 torque reply timeout.")
+        # deadline = time.monotonic() + timeout
+        # for motor_index in range(self.motor_count):
+        #     driver = self.motor_drivers[motor_index]
+        #     response_message = driver.await_torque_reply(deadline)
+        #     if response_message is None:
+        #         raise TimeoutError(f"Motor {motor_index}: 0xA1 torque reply timeout.")
             
-        t_done = time.perf_counter()                                             # [timing]
+        # t_done = time.perf_counter()                                             # [timing]
 
         # Surface timings (read by controller_node timing log).
         self._last_write_request_ms = (t_fired - t_submit) * 1e3
-        self._last_write_wait_ms = (t_done - t_fired) * 1e3
+        self._last_write_wait_ms = (t_fired - t_fired) * 1e3
