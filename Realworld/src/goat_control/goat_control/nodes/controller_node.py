@@ -447,6 +447,12 @@ class ControllerNode(Node):
                 f"[CAN] write_wait={self.motor_io.motor_manager._last_write_wait_ms:.3f}\r"
             )
 
+            motor_timing_str = " | ".join(
+                f"M{i}: "
+                f"{self.motor_io.motor_manager.torque_request_start_time_ms[i]:.3f}"
+                f"->{self.motor_io.motor_manager.torque_request_end_time_ms[i]:.3f} "
+                for i in range(self.motor_io.motor_manager.motor_count)
+            )
             # motor_timing_str = " | ".join(
             #     f"M{i}: "
             #     f"{self.motor_io.motor_manager.motor_request_start_time_ms[i]:.3f}"
@@ -454,7 +460,7 @@ class ControllerNode(Node):
             #     f"Wait={self.motor_io.motor_manager.motor_wait_time_ms[i]:.3f}"
             #     for i in range(self.motor_io.motor_manager.motor_count)
             # )
-            # self.logger.info(f"[CAN] Motor timings: {motor_timing_str}\r")
+            self.logger.info(f"[CAN] Motor torque timings: {motor_timing_str}\r")
 
             self._rate_window_start = now
             self._rate_cycle_count = 0

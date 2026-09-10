@@ -106,6 +106,8 @@ class MotorManager:
         self.motor_request_start_time_ms: list[float] = [0.0] * self.motor_count
         self.motor_request_end_time_ms: list[float] = [0.0] * self.motor_count
         self.motor_wait_time_ms: list[float] = [0.0] * self.motor_count
+        self.torque_request_start_time_ms: list[float] = [0.0] * self.motor_count
+        self.torque_request_end_time_ms: list[float] = [0.0] * self.motor_count
 
         # Boot anchor fold window (per motor, motor degrees)
         self.motor_fold_center_deg: List[Optional[float]] = [None] * self.motor_count
@@ -440,7 +442,9 @@ class MotorManager:
         for motor_index, amp in enumerate(current_cmd_amp):
             driver = self.motor_drivers[motor_index]
             # driver.clear_torque_reply_event()
+            self.torque_request_start_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
             driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
+            self.torque_request_end_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
         t_fired = time.perf_counter()                                            # [timing]
 
         # Phase 2 — bounded wait, one shared deadline so total RX time is
