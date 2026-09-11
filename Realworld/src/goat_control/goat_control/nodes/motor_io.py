@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 from sensor_msgs.msg import JointState
 
-from goat_control.utils.motor import CanInterface, MotorDriver, MotorParams
+from goat_control.utils.motor import CanInterface, MotorDriver
 from goat_control.utils.motor.motor_manager import MotorManager
 
 
@@ -19,7 +19,10 @@ class MotorIO:
     direct function call, eliminating the cross-process DDS latency.
     """
 
-    def __init__(self, cfg: dict, logger, can_interface: str = "socketcan",
+    def __init__(self, 
+                 cfg: dict, 
+                 logger, 
+                 can_interface: str = "socketcan", 
                  can_tx_timeout_sec: float = 0.05):
         # Config + logger are owned by ControllerNode and passed in.
         self.cfg = cfg
@@ -52,45 +55,35 @@ class MotorIO:
             seen_bus_node_pairs.add(pair_key)
 
         # Open both CAN buses.
-        self.cans: list[CanInterface] = [
-            CanInterface(channel=ch, interface=can_interface) for ch in can_channels
-        ]
+        self.cans: list[CanInterface] = [CanInterface(channel=ch, interface=can_interface) for ch in can_channels]
         for c in self.cans:
             c.open()
 
         # One driver per joint, bound to its bus.
-        self.motor_drivers: list[MotorDriver] = [
-            MotorDriver(self.cans[int(bus_i)], MotorParams(node_id=int(nid)))
-            for nid, bus_i in zip(motor_node_ids, motor_bus_idx)
-        ]
-
-        # Debug: print the joint -> (bus, id) mapping once.
-        mapping_str = ", ".join(
-            f"{name}=can{b}#id{nid}"
-            for name, b, nid in zip(self.joint_names, motor_bus_idx, motor_node_ids)
-        )
-        self.logger.info(f"[MotorIO] motor bus map: {mapping_str}")
+        self.motor_drivers: list[MotorDriver] = [MotorDriver(self.cans[int(bus_i)], nid) for nid, bus_i in zip(motor_node_ids, motor_bus_idx)]
 
         # Shared CAN scan / torque conversion helper.
         self.motor_manager = MotorManager(motor_drivers=self.motor_drivers, cfg=cfg)
 
         # Initial blocking read so the controller has valid state on tick 0.
-        # MUST run before the reader threads start — uses txrx() which would
-        # otherwise lose responses to the background reader.
-        self.latest_joint_state: JointState = self._read_initial_state()
+        states = self.motor_manager.read_initial_motor_state()
+        self.latest_joint_state: JointState = self._to_joint_state_msg(states)
 
-        # Switch every bus into background-reader mode. From here on
-        # the hot path uses send_only() + get_latest_frame() — no more
-        # per-motor recv() blocking the control loop.
-        for can_interface in self.cans:
-            can_interface.start_reader_thread()
+        # Switch every bus into background-reader mode.
+        for can in self.cans:
+            can.start_reader_thread()
 
-        self.logger.info("[MotorIO] initialized — owns both CAN buses (in-process).")
+        # Initialization Logging
+        if self.logger is not None:
+            self.logger.info("[MotorIO] initialized — owns both CAN buses (in-process).")
+            pi_gain_lines = ["[MotorIO] Motor Specification:"]
+            for i, (name, bus_i, node_id) in enumerate(zip(self.joint_names, motor_bus_idx, motor_node_ids)):
+                iq_kp, iq_ki = self.motor_manager.motor_pi_gain[i]
 
-    def _read_initial_state(self) -> JointState:
-        """One full blocking read before the control loop starts."""
-        states = self.motor_manager.decode_motor_encoder(perform_slow_poll=True)
-        return self._to_joint_state_msg(states)
+                pi_gain_lines.append(f"  {name:<12} can{bus_i} id={node_id:<2} " f"Iq_Kp={iq_kp:<3} Iq_Ki={iq_ki:<3}")
+
+            self.logger.info("\n".join(pi_gain_lines))
+
 
     def _to_joint_state_msg(self, states) -> JointState:
         """Pack MotorStatesData into a JointState container (no ROS node needed)."""
@@ -100,38 +93,24 @@ class MotorIO:
         js.velocity = list(states.joint_velocity_rad_per_sec)
         js.effort = list(states.joint_effort_like)
         return js
+    
+    def read_joint_state(self) -> JointState:
+        """Explicitly request fresh joint state using 0x9C."""
+        motor_states_data = self.motor_manager.read_joint_states(timeout=self.can_tx_timeout_sec)
+        self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
+        return self.latest_joint_state
 
-    def read_write_motor(self, torque_cmd_nm: np.ndarray) -> JointState:
-        """Write torque to all motors and read back joint state in one CAN pass.
+    def write_motor(self, torque_cmd_nm: np.ndarray):
+        """Write torque (0xA1) to all motors and read back joint state in one CAN pass.
 
         Slow-poll (0x9A error-flag read) moved off the hot path — driven by a
         ~1 Hz ROS timer via `poll_error_flags_once()` instead. Removing it
         kills the periodic 4-5 ms spike that previously hit every 10th tick.
         """
-        torque_cmd_nm = np.asarray(torque_cmd_nm, dtype=float).flatten()
-
-        # Torque clip -> LPF -> current conversion (was motor_io_node._tick).
-        clipped_torque_cmd = self.motor_manager.torque_clipping(torque_cmd_nm)
-        lpf_torque_cmd = self.motor_manager.torque_lpf(clipped_torque_cmd)
-        current_cmd_amp = self.motor_manager.torque_to_current(lpf_torque_cmd)
-
-        motor_states_data = self.motor_manager.write_torques_and_read_states(
-            current_cmd_amp,
-            timeout=self.can_tx_timeout_sec,
-            perform_slow_poll=False,
-        )
-
-        # Cache for next tick + return to caller.
-        self.latest_joint_state = self._to_joint_state_msg(motor_states_data)
-        return self.latest_joint_state
-
-    def poll_error_flags_once(self) -> None:
-        """Read 0x9A error flags on every motor — call from a ~1 Hz timer.
-        After Step 3 poll_state1 is fire-and-forget; no need for the thread
-        pool. Sequential send_only is essentially free (<1 ms total)."""
-        mm = self.motor_manager
-        for motor_index in range(mm.motor_count):
-            mm.poll_state1(motor_index)
+        # Torque clip -> current conversion
+        clipped_torque_cmd = self.motor_manager.torque_clipping(torque_cmd_nm.flatten()) # Joint space torque
+        current_cmd_amp = self.motor_manager.torque_to_current(clipped_torque_cmd) # Joint torque -> Motor torque -> Motor current
+        self.motor_manager.write_torques(current_cmd_amp, timeout=self.can_tx_timeout_sec)
 
     def close(self) -> None:
         """Close both CAN buses on shutdown (stops reader threads first)."""

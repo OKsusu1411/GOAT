@@ -17,7 +17,7 @@ def generate_launch_description():
     ])
 
     default_urdf_path = PathJoinSubstitution([
-        FindPackageShare("goat_control"),
+        FindPackageShare("goat_description"),
         "urdf",
         "WF_GOAT.urdf",
     ])
@@ -45,7 +45,7 @@ def generate_launch_description():
     )
     control_rate_arg = DeclareLaunchArgument(
         "control_rate_hz",
-        default_value="200.0",
+        default_value="100.0",
         description="Control loop rate for GoatControlNode.",
     )
     imu_port_arg = DeclareLaunchArgument(

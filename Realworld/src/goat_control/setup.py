@@ -21,13 +21,12 @@ setup(
         (os.path.join('share', package_name, 'config'),
          glob(os.path.join('config', '*.yaml')) + glob(os.path.join('config', '*.yml'))),
 
-        # URDF
-        (os.path.join("share", package_name, "urdf"),
-         glob(os.path.join("urdf/*"))),
-
-        # Checkpoints -> share/goat_control/checkpoint
+        # Policy checkpoints -> share/goat_control/checkpoint
+        # NOTE: these are ONNX, not .pt. The previous "*.pt" glob matched nothing,
+        # so no checkpoint was ever installed and configs had to use a
+        # CWD-relative path. Launch files now inject the installed absolute path.
         (os.path.join("share", package_name, "checkpoint"),
-         glob(os.path.join("checkpoint", "*.pt"))),
+         glob(os.path.join("checkpoint", "*.onnx"))),
 
     ],
     install_requires=['setuptools'],
@@ -46,8 +45,6 @@ setup(
             'calibration_node = goat_control.nodes.calibration_node:main',
             'controller_node = goat_control.nodes.controller_node:main',
             'log_viewer_node = goat_control.nodes.log_viewer_node:main',
-            'sim_controller_node = goat_control.nodes.sim_controller_node:main',
-            'topic_converter_node = goat_control.nodes.topic_converter_node:main',
         ],
     },
 )

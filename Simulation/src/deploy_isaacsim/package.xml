@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>deploy_isaacsim</name>
+  <version>0.0.0</version>
+  <description>Isaac Sim deployment bridge for the GOAT robot: sim topic conversion + sim-side controller node.</description>
+  <maintainer email="hansusu1411@gmail.com">Hansu Kim</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Realworld workspace (underlay). Build/source Realworld first:
+         cd Realworld && colcon build && source install/setup.bash -->
+  <exec_depend>goat_control</exec_depend>      <!-- shared control core: utils/controller/* -->
+  <exec_depend>motor_interfaces</exec_depend>  <!-- ImuState msg -->
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <!-- NOTE: pinocchio and onnxruntime are also required at runtime. They are
+       pulled in by goat_control.utils.controller (which imports all five
+       controllers in its __init__), and have no rosdep keys, so they are not
+       listed here. Install them into the same Python environment. -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

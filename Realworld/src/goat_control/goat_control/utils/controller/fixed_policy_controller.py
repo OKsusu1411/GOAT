@@ -14,9 +14,7 @@ class FixedBasePolicyController(PolicyController):
                   joint_command(legs)].
     Action     : leg-only action, scaled per leg joint.
 
-    Tracking mode: Joint Position. The 6-dim ``_joint_command`` (leg joint
-    targets) is the tracking command and is updated from the keyboard via
-    :meth:`handle_key` (two-stage: select joint class, then +/- with arrows).
+    Tracking mode: Joint Position. The 6-dim ``_joint_command`` (leg joint targets) 
     """
 
     MODE = "fixed"
@@ -70,7 +68,6 @@ class FixedBasePolicyController(PolicyController):
         policy_action = raw_action * self.policy_action_scale_factor
         self._delta_pos = policy_action
         self._wheel_speed_ref[:] = 0.0
-        self.previous_action = raw_action
 
     # ------------------------------------------------------------------
     # Keyboard command interface (Joint Position Tracking)
@@ -100,16 +97,27 @@ class FixedBasePolicyController(PolicyController):
                     f"R={self._joint_command[r_idx]:.3f}\r")
 
         # Reset to default pose (zeros).
-        if key == " ":
+        elif key == " ":
             self._joint_command[:] = 0.0
             return "Joint command reset to zero\r"
+
+        elif key == "d":
+            self._joint_command = np.array([0.0, 0.0, 0.738, -0.738, 1.462, -1.462], dtype=np.float32)
+            return "Default joint command is assigned\r"
+
+        elif key == "s":
+            self._start = True
+            self.count = 0
+            return "Policy Start.\r"
 
         return None
 
     def command_help(self) -> list[str]:
         return [
-            "--- Joint Position Command ---",
+            "--- Fixed Policy Command ---",
+            "'s' : Policy Start",
             "'1'/'2'/'3': select hip/thigh/knee",
             "Up/Down arrow: selected joint +/-",
+            "'d': Default standing position",
             "'space': reset joint command\r",
         ]

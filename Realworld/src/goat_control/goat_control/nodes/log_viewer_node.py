@@ -5,18 +5,15 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
+import time
 import rclpy
 import yaml
 import csv
 from pathlib import Path
 from rclpy.node import Node
-from message_filters import Subscriber, ApproximateTimeSynchronizer
+from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
-
-@dataclass
-class LatestLog:
-    vector: Optional[np.ndarray] = None
-
+from motor_interfaces.msg import States
 
 class LogViewerNode(Node):
     """
@@ -38,10 +35,9 @@ class LogViewerNode(Node):
 
         # Parameters
         self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
-        self.declare_parameter("sample_count", 20)
-        self.declare_parameter("csv_path", "joint_pos_log.csv")
+        self.declare_parameter("csv_path", "experiment_logs.csv")
         self.declare_parameter("log_degrees", False)
-        self.declare_parameter("is_csv_logging", True)
+        self.declare_parameter("csv", True)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -49,13 +45,16 @@ class LogViewerNode(Node):
         with open(yaml_path, "r", encoding="utf-8") as file_handle:
             self.cfg = yaml.safe_load(file_handle)
 
-        self.declare_parameter("print_rate_hz", 50.0)
+        self.declare_parameter("print_rate_hz", 10.0)
         self.declare_parameter("print_degrees", True)
         self.declare_parameter("precision", 3)
 
         self.print_rate_hz = float(self.get_parameter("print_rate_hz").value)
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
+        self.start_time = None
+        self.source_start_time = None
+        self.log_start = False
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
@@ -69,68 +68,92 @@ class LogViewerNode(Node):
         self.command_unit = "Nm"
 
         # CSV logging
-        self.is_csv_logging = bool(self.get_parameter("is_csv_logging").value)
-        self.csv_logging_interval_sec = 0.1
-        self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve())
+        self.csv_path = str(Path(self.get_parameter("csv_path").value).expanduser().resolve().with_name(f"{time.strftime('%Y%m%d_%H%M%S')}_real_experiment_logs.csv"))
+        self.is_csv_logging = bool(self.get_parameter("csv").value)
         self.log_degrees = bool(self.get_parameter("log_degrees").value)
-
-        self.csv_file = None
-        self.csv_writer = None
 
         if self.is_csv_logging:
             self.csv_file = open(self.csv_path, "w", newline="", encoding="utf-8")
             self.csv_writer = csv.writer(self.csv_file)
 
-            header = ["time_sec"] + [
-                f"{name}_pos_{'deg' if self.log_degrees else 'rad'}"
-                for name in self.joint_names
-            ]
+            header = ["time_sec"] + ["source_time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
+            header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
+            header += [f"{name}_torque" for name in self.joint_names]
+            header += [f"{name}_actual_torque" for name in self.joint_names]
+            header += [f'obs_{i}' for i in range(25)]                       # NOTE: Observation logging
+
             self.csv_writer.writerow(header)
             self.csv_file.flush()
 
             self.get_logger().info(f"CSV logging enabled: {self.csv_path}")
         else:
             self.get_logger().info("CSV logging disabled.")
-
-        # Subscribers
-        self.create_subscription(JointState, "/commands", self._on_joint_ref, 10)
-        self.create_subscription(JointState, "/joint_states", self._on_joint_state, 10)
-        # self.command_subscriber = Subscriber(self, JointState, "/commands", 10)
-        # self.state_subscriber = Subscriber(self, JointState, "/joint_states", 10)
-        # self.time_sync = ApproximateTimeSynchronizer([self.command_subscriber, self.state_subscriber], 10, 0.01)
-        # self.time_sync.registerCallback(self._sync_callback)
+            
+        # Subscribers for synchronized CSV logging
+        self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
+        self.command_sub = Subscriber(self, JointState, "/commands")
+        self.observation_sub = Subscriber(self, States, "/obs")              # NOTE: Debugging 
+        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub, self.observation_sub], queue_size=20)     # NOTE: Observation
+        self.sync.registerCallback(self._on_synced_data)
 
         # Timer (rate-limit printing)
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-        # Logging interval
-        self.csv_logging_interval = max(1, int(round(self.csv_logging_interval_sec / period_sec)))
+    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState, obs: States) -> None:
+        # Keep latest synchronized pair for terminal printing
+        self.joint_current = joint_current
+        self.joint_ref = joint_ref
+        self.obs = obs              # NOTE: Observation
 
-        self.get_logger().info(
-            "LogViewerNode started."
-            f"(names of Joints: {self.joint_names})."
-        )
+        if not self.is_csv_logging:
+            return
 
-    def _on_joint_ref(self, msg: JointState) -> None:
-        self.joint_ref = msg
+        recv_time_ns = time.perf_counter_ns()
+        source_time_ns = joint_current.header.stamp.sec * 1_000_000_000 + int(joint_current.header.stamp.nanosec)
 
-    def _on_joint_state(self, msg: JointState) -> None:
-        self.joint_current = msg
+        if self.start_time is None:
+            self.start_time = recv_time_ns
+        if self.source_start_time is None:
+            self.source_start_time = source_time_ns
 
-    def _sync_callback(self, msg_ref, msg_current):
-        self._on_joint_ref(msg_ref)
-        self._on_joint_state(msg_current)
+        time_sec = (recv_time_ns - self.start_time) * 1e-9
+        source_time_sec = (source_time_ns - self.source_start_time) * 1e-9
+
+        # State
+        joint_pos = np.asarray(joint_current.position, dtype=float)
+        joint_vel = np.asarray(joint_current.velocity, dtype=float)
+        joint_effort_real = np.asarray(joint_current.effort, dtype=float)
+
+        # Command from exactly the same controller cycle
+        joint_effort_ref = np.asarray(joint_ref.effort, dtype=float)
+
+        if self.log_degrees:
+            joint_pos = np.rad2deg(joint_pos)
+            joint_vel = np.rad2deg(joint_vel)
+
+        row = [time_sec]
+        row += [source_time_sec]
+        row += [float(joint_pos[i]) for i in range(self.num_joints)]
+        row += [float(joint_vel[i]) for i in range(self.num_joints)]
+        row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
+        row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
+        row += [float(val) for val in obs.data] # NOTE: Observation
+
+        self.csv_writer.writerow(row)
 
     def _tick(self) -> None:
         # No subscription
         if self.joint_current is None:
             return
-        
+                
         if self.joint_ref is None:
             self.joint_ref = self.joint_current
 
-        # Decode JointState msg
+        # Decode torque msg
+        joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
+        joint_effort_real = np.array(self.joint_current.effort, dtype=float)
+
         if self.print_degrees:
             joint_pos_current = np.rad2deg(self.joint_current.position)
             joint_vel_current = np.rad2deg(self.joint_current.velocity)
@@ -146,35 +169,8 @@ class LogViewerNode(Node):
             position_unit = "rad"
             velocity_unit = "rad/s"
 
-        joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
-        joint_effort_current = np.array(self.joint_current.effort, dtype=float)
-
-        # Save joint position only to CSV
-        if self.is_csv_logging and (self._print_count % self.csv_logging_interval == 0):
-            if self.log_degrees:
-                joint_pos_log = np.rad2deg(np.array(self.joint_current.position, dtype=float))
-            else:
-                joint_pos_log = np.array(self.joint_current.position, dtype=float)
-
-            now_sec = self.get_clock().now().nanoseconds * 1e-9
-            row = [now_sec] + [float(joint_pos_log[i]) for i in range(self.num_joints)]
-
-            self.csv_writer.writerow(row)
-            self.csv_file.flush()
-
-        # Gear ratio
-        motor_pos_current = joint_pos_current / self.gear_ratio
-        motor_vel_current = joint_vel_current / self.gear_ratio
-        motor_effort_current = joint_effort_current * self.gear_ratio
-        motor_pos_ref = joint_pos_ref / self.gear_ratio
-        motor_vel_ref = joint_vel_ref / self.gear_ratio
-        motor_effort_ref = joint_effort_ref * self.gear_ratio
-
         # Print rows (batch: all joints in ONE log block)
-        header_str = (
-            f"{'ID':>3}  {'NAME':<12}  "
-            f"{'POS':>15}  {'VEL':>12}  {'CMD_TAU':>12}  {'CMD_POS':>12}  {'CMD_VEL':>12}"
-        )
+        header_str = (f"{'ID':>3}  {'NAME':<12}  "f"{'POS':>15}  {'VEL':>12}  {'CMD_TAU':>12} {'REAL_TAU':>11}  {'CMD_POS':>12}  {'CMD_VEL':>12}")
         div_str = "-" * len(header_str)
         lines = [header_str, div_str]
 
@@ -185,16 +181,16 @@ class LogViewerNode(Node):
             # Integrate data (all data is !!motor!! based)
             lines.append(
                 f"{joint_index:>3}  {name[:12]:<12}  "
-                f"{float(motor_pos_current[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
-                f"{float(motor_vel_current[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
-                f"{float(motor_effort_ref[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
-                f"{float(motor_pos_ref[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
-                f"{float(motor_vel_ref[joint_index]):>9.{self.precision}f} {velocity_unit:<5}"
+                f"{float(joint_pos_current[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
+                f"{float(joint_vel_current[joint_index]):>9.{self.precision}f} {velocity_unit:<5}  "
+                f"{float(joint_effort_ref[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
+                f"{float(joint_effort_real[joint_index]):>9.{self.precision}f} {self.command_unit:<5}  "
+                f"{float(joint_pos_ref[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
+                f"{float(joint_vel_ref[joint_index]):>9.{self.precision}f} {velocity_unit:<5}"
             )
 
         # Leading newline: print one line below the logger prefix ([INFO] ...)
         self.get_logger().info("\n" + "\n".join(lines))
-        self._print_count += 1
 
 def main(args=None):
     rclpy.init(args=args)
@@ -211,6 +207,17 @@ def main(args=None):
             node.csv_file.flush()
             node.csv_file.close()
             print(f"CSV file '{node.csv_path}' closed.")
+
+            # Check csv file validity
+            with open(node.csv_path, "r", newline="") as f:
+                reader = csv.reader(f)
+                # Call header and first low data
+                _ = next(reader, None)
+                first_data = next(reader, None) 
+            # Delete empty csv file
+            if first_data is None:
+                Path(node.csv_path).unlink()
+                print(f"Delete CSV file because it is empty.")
 
         node.destroy_node()
 

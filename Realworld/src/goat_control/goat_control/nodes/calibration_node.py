@@ -3,7 +3,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from goat_control.utils.imu.quaternion_utils import *
-from goat_api.msg import ImuState
+from goat_control.utils.imu.calibration import simple_accelerometer_calibration, magnetometer_calibration
+from motor_interfaces.msg import ImuState
 
 import yaml
 import os
@@ -52,15 +53,14 @@ class CalibrationNode(Node):
         self.input_thread.start()
 
         # Print UI
-        self.get_logger().info("Calibration Node Started.")
-        self.get_logger().info(f"Target YAML: {self.yaml_path}")
-        print("=============================================")
-        print("[CONTROLS]")
-        print("'j': All Joint Position Calibration")
-        print("'w': Wheel Position Calibration")
-        print("'i': IMU Calibration")
-        print("'q': Quit")
-        print("=============================================\r")
+        self.get_logger().info("Calibration Node Started.\r")
+        self.get_logger().info("=============================================")
+        self.get_logger().info("[CONTROLS]")
+        self.get_logger().info("'j': All Joint Position Calibration")
+        self.get_logger().info("'w': Wheel Position Calibration")
+        self.get_logger().info("'i': IMU Calibration")
+        self.get_logger().info("'q': Quit")
+        self.get_logger().info("=============================================\r")
 
     def _on_joint_state_msg(self, msg: JointState):
         self.latest_joint_state = msg
@@ -77,6 +77,16 @@ class CalibrationNode(Node):
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
         return key
 
+    def _is_controller_running(self) -> bool:
+        """Check whether controller_node exists in the current ROS graph."""
+        node_names_and_namespaces = self.get_node_names_and_namespaces()
+
+        for node_name, namespace in node_names_and_namespaces:
+            if node_name == "controller_node":
+                return True
+
+        return False
+
     def _keyboard_listener_loop(self):
         """Main loop to monitor keyboard input."""
         while rclpy.ok():
@@ -91,6 +101,10 @@ class CalibrationNode(Node):
                 self._joint_calibration()
 
             elif key == 'i':
+                if self._is_controller_running():
+                    self.get_logger().warning("[IMU Calibration] controller_node is running.\r")
+                    self.get_logger().warning("Stop controller_node before IMU calibration.\r")
+                    continue
                 self.get_logger().info("Key 'i' pressed: Starting IMU Calibration\r")
                 self._imu_calibration()
                 
@@ -107,13 +121,13 @@ class CalibrationNode(Node):
             # Execption
             else:
                 self.get_logger().info("Wrong key! Please enter the right key")
-                print("=============================================")
-                print("[CONTROLS]")
-                print("'j': All Joint Position Calibration")
-                print("'w': Wheel Position Calibration")
-                print("'i': IMU Calibration")
-                print("'q': Quit")
-                print("=============================================\r")
+                self.get_logger().info("=============================================")
+                self.get_logger().info("[CONTROLS]")
+                self.get_logger().info("'j': All Joint Position Calibration")
+                self.get_logger().info("'w': Wheel Position Calibration")
+                self.get_logger().info("'i': IMU Calibration")
+                self.get_logger().info("'q': Quit")
+                self.get_logger().info("=============================================\r")
                 continue
 
     def _joint_calibration(self, is_wheel_mode:bool = False):
@@ -121,10 +135,7 @@ class CalibrationNode(Node):
         if self.latest_joint_state is None:
             self.get_logger().warn("No joint states received yet! Cannot calibrate joints.")
             return
-
-        # Settings for sampling
-        sleep_interval = 0.05  # 20 * 0.05 = 1.0 second total duration
-
+        
         self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
         
         # Joint position buffer list
@@ -132,7 +143,7 @@ class CalibrationNode(Node):
         joint_names = None
 
         # Sampling Loop
-        for i in range(self.sample_count):
+        for _ in range(self.sample_count):
             
             # Exception
             if self.latest_joint_state is None:
@@ -148,7 +159,7 @@ class CalibrationNode(Node):
             position_samples.append(current_pos)
             
             # Wait for next update
-            time.sleep(sleep_interval)
+            time.sleep(0.05)
 
         # Calculate Average
         avg_positions = np.mean(position_samples, axis=0)
@@ -161,64 +172,33 @@ class CalibrationNode(Node):
 
         # Save to YAML
         self._save_joint_offsets_to_yaml(joint_offsets)
-    
+
+        self.get_logger().info("======== !!Joint calibration completed!! ========")
+
     def _imu_calibration(self):
-        """IMU Calibration Logic (Placeholder)."""
-        # Settings for sampling
-        sleep_interval = 0.05  # 20 * 0.05 = 1.0 second total duration
+        """Execute EBIMU's accelerometer, magnetometer calibration function."""
 
-        self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
-        
-        # Joint position buffer list
-        quat_samples = []
+        self.get_logger().info("=============================================")
+        self.get_logger().info(" IMU Accelerometer, Magnetometer Calibration ")
+        self.get_logger().info("=============================================")
+        self.get_logger().info("Keep the robot Upright and Steady")
 
-        # Sampling Loop
-        for i in range(self.sample_count):
-            
-            # Exception
-            if self.latest_imu_state is None:
-                self.get_logger().warn("IMU data lost during sampling!")
-                return
-            
-            # Store current positions
-            current_quat = np.array(self.latest_imu_state.quat, dtype=float)
-            old_joint_offsets_inv = inverse_quat(self.old_joint_offsets)
-            current_quat = multiply_quat(old_joint_offsets_inv, current_quat)               # Restore original quaternion
-            quat_samples.append(current_quat)
-            
-            # Wait for next update
-            time.sleep(sleep_interval)
+        success_acc = simple_accelerometer_calibration(port="/dev/ttyUSB0", baudrate=115200) 
 
-        # Calculate Average
-        avg_quat = np.mean(quat_samples, axis=0)
-        avg_quat /= np.linalg.norm(avg_quat)
+        if success_acc:
+            self.get_logger().info("[SUCCESS] IMU Accelerometer calibration completed.")
+        else:
+            self.get_logger().error("[FAILED] Accelerometer calibration failed.")
 
-        z_axis_local = np.array([0.0, 0.0, 1.0])
-        v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
+        success_mag = magnetometer_calibration(port="/dev/ttyUSB0", baudrate=115200)
+    
+        if success_mag:
+            self.get_logger().info("[SUCCESS] Magnetometer calibration completed.")
+        else:
+            self.get_logger().info("[FAILED] Magnetometer calibration failed.")
 
-        # Target Z axis
-        v_target = np.array([0.0, 0.0, 1.0])
+        self.get_logger().info("======== !!IMU calibration completed!! ========")
 
-        
-        axis = np.cross(v_up, v_target)
-        axis_norm = np.linalg.norm(axis)
-
-        # Already robot is upright
-        if axis_norm < 1e-8:
-            quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
-
-        axis = axis / axis_norm
-        dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
-        angle = np.arccos(dot_prod)
-
-        # Offset quaternion
-        quat_offsets = axis_angle_to_quat(axis, angle)
-
-        self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
-
-        # Save to YAML
-        self._save_imu_offsets_to_yaml(quat_offsets)
-        
 
     def _save_joint_offsets_to_yaml(self, offsets):
         # Read existing file
@@ -245,40 +225,112 @@ class CalibrationNode(Node):
             with open(self.yaml_path, 'w') as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             
-            print(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n")
+            self.get_logger().info(f"\n[SUCCESS] Joint offsets saved to '{self.yaml_path}'\n")
             
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
 
-    def _save_imu_offsets_to_yaml(self, offsets):
-        # Read existing file
-        data = {}
-        if os.path.exists(self.yaml_path):
-            try:
-                with open(self.yaml_path, 'r') as f:
-                    data = yaml.safe_load(f) or {}
-            except Exception as e:
-                self.get_logger().error(f"Failed to load existing YAML: {e}")
-                return
-        
-        # Update data structure
-        formatted_offsets = [float(val) for val in offsets]
-        
-        if 'imu_offsets' not in data:
-            data['imu_offsets'] = {}
-            
-        data['imu_offsets'] = formatted_offsets
+    # def _imu_calibration(self):
+    #     """IMU Calibration without Yaw"""
+    #     # Settings for sampling
+    #     sleep_interval = 0.05                           # 20 * 0.05 = 1.0 second total duration
 
-        # Write to file
-        try:
-            os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
-            with open(self.yaml_path, 'w') as f:
-                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    #     self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
+        
+    #     # IMU buffer list
+    #     quat_samples = []
+    #     old_imu_offsets_inv = inverse_quat(self.old_imu_offsets)
+
+    #     # Sampling Loop
+    #     for i in range(self.sample_count):
             
-            print(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
+    #         # Exception
+    #         if self.latest_imu_state is None:
+    #             self.get_logger().warn("IMU data lost during sampling!")
+    #             return
             
-        except Exception as e:
-            self.get_logger().error(f"Failed to write YAML file: {e}")
+    #         # Store current positions
+    #         current_quat = np.array([self.latest_imu_state.quat.w,
+    #                                  self.latest_imu_state.quat.x,
+    #                                  self.latest_imu_state.quat.y,
+    #                                  self.latest_imu_state.quat.z], dtype=float)
+    #         current_quat = multiply_quat(old_imu_offsets_inv, current_quat)               # Restore original quaternion
+
+    #         # q and -q are the same rotation
+    #         if quat_samples and np.dot(quat_samples[0], current_quat) < 0.0:
+    #             current_quat = -current_quat
+
+    #         quat_samples.append(current_quat)
+            
+    #         # Wait for next update
+    #         time.sleep(sleep_interval)
+
+    #     # Calculate Average
+    #     avg_quat = np.mean(quat_samples, axis=0)
+    #     avg_norm = np.linalg.norm(avg_quat)
+    #     if avg_norm < 1e-8:
+    #         self.get_logger().info("Averaged quaternion is 0. Calibration failed.")
+    #         return
+    #     avg_quat /= avg_norm
+
+    #     # Local Z axis
+    #     z_axis_local = np.array([0.0, 0.0, 1.0])
+    #     v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
+
+    #     # Target Z axis
+    #     v_target = np.array([0.0, 0.0, 1.0])
+
+    #     # Cross axis between local, target z axis
+    #     axis = np.cross(v_up, v_target)
+    #     axis_norm = np.linalg.norm(axis)
+    #     axis = axis / axis_norm
+
+    #     # Dot product
+    #     dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
+    #     angle = np.arccos(dot_prod)
+
+    #     # Already robot is upright
+    #     if axis_norm < 1e-8:
+    #         quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
+
+    #     # Offset quaternion
+    #     else:
+    #         quat_offsets = axis_angle_to_quat(axis, angle)
+
+    #     self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
+
+    #     # Save to YAML
+    #     self._save_imu_offsets_to_yaml(quat_offsets)
+
+    # def _save_imu_offsets_to_yaml(self, offsets):
+    #     # Read existing file
+    #     data = {}
+    #     if os.path.exists(self.yaml_path):
+    #         try:
+    #             with open(self.yaml_path, 'r') as f:
+    #                 data = yaml.safe_load(f) or {}
+    #         except Exception as e:
+    #             self.get_logger().error(f"Failed to load existing YAML: {e}")
+    #             return
+        
+    #     # Update data structure
+    #     formatted_offsets = [float(val) for val in offsets]
+        
+    #     if 'imu_offsets' not in data:
+    #         data['imu_offsets'] = {}
+            
+    #     data['imu_offsets'] = formatted_offsets
+
+    #     # Write to file
+    #     try:
+    #         os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
+    #         with open(self.yaml_path, 'w') as f:
+    #             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+            
+    #         self.get_logger().info(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
+            
+    #     except Exception as e:
+    #         self.get_logger().error(f"Failed to write YAML file: {e}")
 
 
 def main(args=None):

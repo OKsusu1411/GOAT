@@ -57,9 +57,9 @@ class ImuIO:
         msg.gyro.z = float(packet.gyro_z)
 
         # Linear velocity - m/s
-        msg.vel.x = float(packet.vel_x)
-        msg.vel.y = float(packet.vel_y)
-        msg.vel.z = float(packet.vel_z)
+        msg.acc.x = float(packet.acc_x)
+        msg.acc.y = float(packet.acc_y)
+        msg.acc.z = float(packet.acc_z)
 
         # Magnetometer
         msg.mag.x = float(packet.mag_x)
