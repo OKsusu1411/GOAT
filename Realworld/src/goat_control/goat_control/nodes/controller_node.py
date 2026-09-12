@@ -41,7 +41,7 @@ class ControllerNode(Node):
         super().__init__("controller_node")
 
         # Parameters by Launch File
-        self.declare_parameter("control_rate_hz", 200.0)
+        self.declare_parameter("control_rate_hz", 100.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("action_timeout_sec", 0.05)

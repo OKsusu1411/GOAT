@@ -83,7 +83,7 @@ nsc_wheel_inner_proportional_gain: 3.0
 nsc_wheel_inner_derivative_gain: 0.1
 nsc_theta_cmd_limit: 10.0
 policy_mode: movable
-policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/stand2.onnx
 policy_device: cpu
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
