@@ -95,16 +95,16 @@ class CanInterface:
     # ---------------
     # Event Managing
     # ---------------
-    def event_for_key(self, arbitration_id: int, cmd_byte: int) -> threading.Event:
-        """Return (creating if needed) the arrival Event for one reply key.
-        Lazily allocated so we only carry events for keys the hot path uses."""
-        key = (arbitration_id, cmd_byte)
-        with self._events_lock:
-            ev = self.frame_events.get(key)
-            if ev is None:
-                ev = threading.Event()
-                self.frame_events[key] = ev
-            return ev
+    # def event_for_key(self, arbitration_id: int, cmd_byte: int) -> threading.Event:
+    #     """Return (creating if needed) the arrival Event for one reply key.
+    #     Lazily allocated so we only carry events for keys the hot path uses."""
+    #     key = (arbitration_id, cmd_byte)
+    #     with self._events_lock:
+    #         ev = self.frame_events.get(key)
+    #         if ev is None:
+    #             ev = threading.Event()
+    #             self.frame_events[key] = ev
+    #         return ev
 
     def alias_event_keys(self, key_a: tuple[int, int], key_b: tuple[int, int]) -> threading.Event:
         """Make two reply keys share ONE arrival Event.
