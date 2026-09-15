@@ -109,8 +109,8 @@ policy_leg_derivative_gain:
 - 0.1
 - 0.1
 policy_wheel_proportional_gain:
-- 0.05
-- 0.05
+- 0.02
+- 0.02
 policy_fixed:
   observation_info:
     joint_pos: 6
