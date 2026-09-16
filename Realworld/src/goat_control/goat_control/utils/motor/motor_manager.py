@@ -87,6 +87,11 @@ class MotorManager:
         self.motor_temperature_c: List[float] = [float("nan")] * self.motor_count
         self.motor_phase_current_amp: List[float] = [float("nan")] * self.motor_count
         self.motor_speed_deg_per_sec: List[float] = [float("nan")] * self.motor_count
+
+        self.motor_temperature_c[:2] = 0.0
+        self.motor_phase_current_amp[:2] = 0.0
+        self.motor_speed_deg_per_sec[:2] = 0.0
+
         self.motor_encoder_count: List[int] = [0] * self.motor_count
         self.motor_pi_gain: List[List[int]] = [[0, 0] for _ in range(self.motor_count)]
 
@@ -384,8 +389,8 @@ class MotorManager:
         # Phase 1: Clear and send all 0x9C requests
         t_submit = time.perf_counter()
         for i, driver in enumerate(self.motor_drivers):
-            # if i < 2:
-            #     continue
+            if i < 2:
+                continue
             driver.clear_state2_reply_event()
             self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
             driver.send_state2_request()
@@ -395,11 +400,12 @@ class MotorManager:
         # Phase 2: wait for all replies with one shared deadline
         deadline = time.monotonic() + timeout
         for motor_index, driver in enumerate(self.motor_drivers):
-            # if i < 2:
-            #     continue
+            if i < 2:
+                continue
             response_message, rx_time = driver.await_state2_reply(deadline)
             if response_message is None:
                 # Force existing sensor-NaN safety path.
+                self.motor_temperature_c[motor_index] = float("nan")
                 self.motor_speed_deg_per_sec[motor_index] = float("nan")
                 self.motor_phase_current_amp[motor_index] = float("nan")
                 continue
@@ -444,24 +450,14 @@ class MotorManager:
         # kernel TX ring without blocking on the wire.
         t_submit = time.perf_counter()                                           # [timing]
         for motor_index, amp in enumerate(current_cmd_amp):
-            # if motor_index < 2:
-            #     continue
+            if motor_index < 2:
+                continue
             driver = self.motor_drivers[motor_index]
             # driver.clear_torque_reply_event()
             self.torque_request_start_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
             driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
             self.torque_request_end_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
         t_fired = time.perf_counter()                                            # [timing]
-
-        # Phase 2 — bounded wait, one shared deadline so total RX time is
-        # bounded by `timeout` rather than 8 × per-motor timeout.
-        # deadline = time.monotonic() + timeout
-        # for motor_index in range(self.motor_count):
-        #     driver = self.motor_drivers[motor_index]
-        #     response_message = driver.await_torque_reply(deadline)
-        #     if response_message is None:
-        #         raise TimeoutError(f"Motor {motor_index}: 0xA1 torque reply timeout.")
-        # t_done = time.perf_counter()                                             # [timing]
 
         # Surface timings (read by controller_node timing log).
         self._last_write_request_ms = (t_fired - t_submit) * 1e3
