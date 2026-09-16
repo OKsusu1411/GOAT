@@ -487,6 +487,11 @@ class ControllerNode(Node):
             self._dt_max = 0.0
             self._dt_sum = 0.0
 
+            self.write_delta_max = 0.0
+            self.write_delta_min = float("inf")
+            self.write_delta_sum = 0.0
+
+
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
         # Interrupting handling
