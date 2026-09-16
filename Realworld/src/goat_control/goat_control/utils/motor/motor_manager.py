@@ -400,7 +400,7 @@ class MotorManager:
         # Phase 2: wait for all replies with one shared deadline
         deadline = time.monotonic() + timeout
         for motor_index, driver in enumerate(self.motor_drivers):
-            if i < 2:
+            if motor_index < 2:
                 continue
             response_message, rx_time = driver.await_state2_reply(deadline)
             if response_message is None:
