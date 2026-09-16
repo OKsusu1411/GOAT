@@ -157,7 +157,10 @@ class ControllerNode(Node):
         # Timing
         self.last_tick_time = time.perf_counter()
         self.last_end_time = time.perf_counter()
-        self.q_receive_time = None
+        self.prev_write_time = None
+        self.write_delta_sum = 0.0
+        self.write_delta_min = 0.0
+        self.write_delta_max = 0.0
 
         # Hardware-control thread to skip ROS overhead and sleep
         self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
@@ -423,7 +426,19 @@ class ControllerNode(Node):
 
         # Publish torque command (only start mode)
         tau[:] = safe_torque
-        self.motor_io.write_motor(tau)                                  
+        self.motor_io.write_motor(tau)
+
+        write_time = time.perf_counter()
+        if self.prev_write_time is None:
+            self.prev_write_time = time.perf_counter()
+
+        delta_write_time = write_time - self.prev_write_time
+
+        self.prev_write_time = write_time   
+
+        self.write_delta_min = min(self.write_delta_min, delta_write_time)
+        self.write_delta_max = max(self.write_delta_max, delta_write_time)
+        self.write_delta_sum += delta_write_time                          
 
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
@@ -434,6 +449,7 @@ class ControllerNode(Node):
             elapsed = now - self._rate_window_start
             avg_hz = self._rate_cycle_count / elapsed
             avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
+            avg_write_dt_ms = (self.write_delta_sum / self._rate_cycle_count) * 1e3
 
             self.logger.info(
                 f"[Rate] avg={avg_hz:.2f} Hz | "
@@ -441,6 +457,9 @@ class ControllerNode(Node):
                 f"[Time] min={self._dt_min * 1e3:.3f} ms | "
                 f"[Time] max={self._dt_max * 1e3:.3f} ms | "
                 f"[Time] deadline miss={self.deadline_miss_count} | "
+                f"[Write] mean={avg_write_dt_ms:.3f} ms | "
+                f"[Write] min={self.write_delta_min * 1e3:.3f} ms | "
+                f"[Write] max={self.write_delta_max * 1e3:.3f} ms | "
                 f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
                 f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
                 f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f} | "
