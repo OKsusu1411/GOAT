@@ -440,49 +440,26 @@ class ControllerNode(Node):
         self.write_delta_max = max(self.write_delta_max, delta_write_time)
         self.write_delta_sum += delta_write_time                          
 
-        print(f"write_delta : {delta_write_time*1e3:.3f} ms\n")
-
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
         self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)  
 
-
         if self._rate_cycle_count >= self._rate_check_interval:
             now = time.perf_counter()
-            elapsed = now - self._rate_window_start
-            avg_hz = self._rate_cycle_count / elapsed
             avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
             avg_write_dt_ms = (self.write_delta_sum / self._rate_cycle_count) * 1e3
 
             self.logger.info(
-                f"[Rate] avg={avg_hz:.2f} Hz | "
                 f"[Time] mean={avg_dt_ms:.3f} ms | "
                 f"[Time] min={self._dt_min * 1e3:.3f} ms | "
                 f"[Time] max={self._dt_max * 1e3:.3f} ms | "
-                f"[Time] deadline miss={self.deadline_miss_count} | "
-                f"[Write] mean={avg_write_dt_ms:.3f} ms | "
-                f"[Write] min={self.write_delta_min * 1e3:.3f} ms | "
-                f"[Write] max={self.write_delta_max * 1e3:.3f} ms | "
+                f"[Apply] mean={avg_write_dt_ms:.3f} ms | "
+                f"[Apply] min={self.write_delta_min * 1e3:.3f} ms | "
+                f"[Apply] max={self.write_delta_max * 1e3:.3f} ms | "
                 f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
                 f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
                 f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f} | "
-                f"[CAN] write_wait={self.motor_io.motor_manager._last_write_wait_ms:.3f}\r"
             )
-
-            # motor_write_timing_str = " | ".join(
-            #     f"M{i}: "
-            #     f"{self.motor_io.motor_manager.torque_request_start_time_ms[i]:.3f}"
-            #     f"->{self.motor_io.motor_manager.torque_request_end_time_ms[i]:.3f} "
-            #     for i in range(self.motor_io.motor_manager.motor_count)
-            # )
-            # motor_send_timing_str = " | ".join(
-            #     f"M{i}: "
-            #     f"{self.motor_io.motor_manager.motor_request_start_time_ms[i]:.3f}"
-            #     f"->{self.motor_io.motor_manager.motor_request_end_time_ms[i]:.3f} "
-            #     f"Wait={self.motor_io.motor_manager.motor_wait_time_ms[i]:.3f}"
-            #     for i in range(self.motor_io.motor_manager.motor_count)
-            # )
-            # self.logger.info(f"[CAN] Motor torque timings: {motor_write_timing_str}\r")
 
             self._rate_window_start = now
             self._rate_cycle_count = 0
