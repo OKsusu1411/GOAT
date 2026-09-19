@@ -440,7 +440,7 @@ class ControllerNode(Node):
         self.write_delta_max = max(self.write_delta_max, delta_write_time)
         self.write_delta_sum += delta_write_time                          
 
-        print(f"write_delta : {delta_write_time:.3f}\n")
+        print(f"write_delta : {delta_write_time*1e3:.3f} ms\n")
 
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
