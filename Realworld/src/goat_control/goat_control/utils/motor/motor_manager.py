@@ -258,9 +258,9 @@ class MotorManager:
 
     def poll_wheel_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
         # write pi gain
-        response_message = self.motor_drivers[motor_index].write_wheel_pi_gain_ram(timeout=timeout)
-        if response_message is None:
-            return False
+        # response_message = self.motor_drivers[motor_index].write_wheel_pi_gain_ram(timeout=timeout)
+        # if response_message is None:
+        #     return False
 
         # read pi gain
         response_message = self.motor_drivers[motor_index].read_wheel_pi_gain(timeout=timeout)
