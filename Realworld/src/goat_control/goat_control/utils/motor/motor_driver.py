@@ -76,7 +76,7 @@ class MotorDriver:
     # =======================
     # Manager helpers [WRITE]
     # =======================
-    def write_wheel_pi_gain_ram(self, iq_kp: int = 255, iq_ki: int = 255, timeout: float = 0.05):
+    def write_wheel_pi_gain_ram(self, iq_kp: int = 75, iq_ki: int = 25, timeout: float = 0.05):
         values = [0, 0, 0, 0, iq_kp, iq_ki]
 
         if any(v < 0 or v > 255 for v in values):
