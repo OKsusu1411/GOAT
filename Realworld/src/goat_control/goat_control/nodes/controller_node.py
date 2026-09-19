@@ -440,9 +440,12 @@ class ControllerNode(Node):
         self.write_delta_max = max(self.write_delta_max, delta_write_time)
         self.write_delta_sum += delta_write_time                          
 
+        print(f"write_delta : {delta_write_time:.3f}\n")
+
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
         self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)  
+
 
         if self._rate_cycle_count >= self._rate_check_interval:
             now = time.perf_counter()
