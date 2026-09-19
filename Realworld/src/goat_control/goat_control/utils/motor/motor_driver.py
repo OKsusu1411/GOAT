@@ -76,6 +76,24 @@ class MotorDriver:
     # =======================
     # Manager helpers [WRITE]
     # =======================
+    def write_wheel_pi_gain_ram(self, iq_kp: int = 255, iq_ki: int = 255, timeout: float = 0.05):
+        values = [0, 0, 0, 0, iq_kp, iq_ki]
+
+        if any(v < 0 or v > 255 for v in values):
+            raise ValueError("PID gains must be uint8 values (0~255).")
+
+        payload = bytes([0x00,       # DATA[1]
+                         0,          # DATA[2]
+                         0,          # DATA[3]
+                         0,          # DATA[4]
+                         0,          # DATA[5]
+                         iq_kp,      # DATA[6]
+                         iq_ki,      # DATA[7]
+                        ])
+
+        return self._txrx(0x31, payload, timeout)
+
+
     def send_torque_only(self, amps: float, max_current_lsb: int, motor_current_amp_per_lsb: float) -> None:
         """Send 0xA1 torque command; response will be cached by reader thread."""
         current_lsb = int(round(amps / motor_current_amp_per_lsb))
