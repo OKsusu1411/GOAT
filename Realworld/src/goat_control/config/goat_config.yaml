@@ -148,10 +148,12 @@ policy_movable:
     base_ang_vel: 3
     gravity_vector: 3
     base_command: 4
-    joint_pos: 4
-    joint_vel: 6
-    previous_action: 6
+    joint_pos: 6
+    joint_vel: 8
+    previous_action: 8
   action_scale_factor:
+  - 0.5
+  - 0.5
   - 0.5
   - 0.5
   - 0.5
@@ -168,6 +170,8 @@ policy_movable:
   - 0.0
   - 0.0
   effective_joint_indices:
+  - 0
+  - 1
   - 2
   - 3
   - 4
@@ -176,8 +180,8 @@ policy_movable:
   - 6
   - 7
 max_torque_per_joint:
-- 0.0
-- 0.0
+- 4.5
+- 4.5
 - 4.5
 - 4.5
 - 9.0
