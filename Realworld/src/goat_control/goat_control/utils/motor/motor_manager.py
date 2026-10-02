@@ -384,7 +384,6 @@ class MotorManager:
         total_count_delta = (current_count - anchor_count) + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
         motor_angle_deg = anchor_angle_deg + total_count_delta * (360.0 / counts_per_rev)
 
-        # Write back in the same 0.001 deg/LSB units _package_motor_states reads.
         self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(round(motor_angle_deg / self.angle_deg_per_lsb))
 
     # =========================================================================
@@ -395,8 +394,6 @@ class MotorManager:
         # Phase 1: Clear and send all 0x9C requests
         t_submit = time.perf_counter()
         for i, driver in enumerate(self.motor_drivers):
-            # if i < 2:
-            #     continue
             driver.clear_state2_reply_event()
             self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
             driver.send_state2_request()
@@ -406,8 +403,6 @@ class MotorManager:
         # Phase 2: wait for all replies with one shared deadline
         deadline = time.monotonic() + timeout
         for motor_index, driver in enumerate(self.motor_drivers):
-            # if motor_index < 2:
-            #     continue
             response_message, rx_time = driver.await_state2_reply(deadline)
             if response_message is None:
                 # Force existing sensor-NaN safety path.
@@ -456,8 +451,6 @@ class MotorManager:
         # kernel TX ring without blocking on the wire.
         t_submit = time.perf_counter()                                           # [timing]
         for motor_index, amp in enumerate(current_cmd_amp):
-            # if motor_index < 2:
-            #     continue
             driver = self.motor_drivers[motor_index]
             # driver.clear_torque_reply_event()
             self.torque_request_start_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3

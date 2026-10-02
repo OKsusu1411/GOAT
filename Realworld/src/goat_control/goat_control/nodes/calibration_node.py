@@ -39,7 +39,6 @@ class CalibrationNode(Node):
             self.cfg = yaml.safe_load(file_handle)
 
         self.old_joint_offsets = self.cfg["joint_offsets"]
-        self.old_imu_offsets = self.cfg["imu_offsets"]
 
         # Data buffers
         self.latest_joint_state = None

@@ -22,13 +22,8 @@ class PolicyController(BaseController):
         - fixed-base  (jig)   : legs only, no base/wheel observation.
         - movable-base(normal): base observation + wheels.
     """
-
-    #: Mode key (set by subclass). Selects the ``policy_<MODE>`` config block.
     MODE: str = ""
-    #: Whether this setup actuates the wheels.
     HAS_WHEELS: bool = True
-    #: Tracking command semantics this controller consumes (set by subclass):
-    #: "joint_position" (fixed) or "base_velocity" (movable).
     COMMAND_TYPE: str = ""
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
