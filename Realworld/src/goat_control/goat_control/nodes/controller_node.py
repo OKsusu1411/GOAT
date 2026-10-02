@@ -150,10 +150,6 @@ class ControllerNode(Node):
         self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
         self.input_thread.start()
 
-        # Control loop timer
-        # control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        # self.control_timer = self.create_timer(control_period_sec, self._control_loop)
-
         # Timing
         self.last_tick_time = time.perf_counter()
         self.last_end_time = time.perf_counter()
