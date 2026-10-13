@@ -12,7 +12,7 @@
 // #define IMU_IO_TEST_MAIN
 
 // Constructor
-ImuIO::ImuIO(ImuConfig cfg):cfg_(std::move(cfg)){
+ImuIO::ImuIO(ImuConfig cfg):cfg_(std::ref(cfg)){
   latest_raw_vector_.assign(cfg_.expected_length, 0.0);
   open();  
 }
@@ -102,11 +102,6 @@ void ImuIO::close(){
 void ImuIO::read_loop(){
   while (!stop_flag_.load()) {
     try {
-      if (!serial_port_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        continue;
-      }
-
       // Extract raw data
       std::string raw_line = serial_port_->readline(65536, "\n");
       const auto first = raw_line.find_first_not_of(" \t\r\n");
