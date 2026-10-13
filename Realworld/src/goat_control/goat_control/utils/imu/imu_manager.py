@@ -73,7 +73,6 @@ class ImuSerialReader:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
         self.serial_port: Optional[serial.Serial] = None
-        self.imu_offsets = config.yaml["imu_offsets"]
 
         self._latest_raw_vector: List[float] = [0.0] * self.config.expected_length
         self._lock = threading.Lock()
