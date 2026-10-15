@@ -443,12 +443,9 @@ class MotorManager:
                   deadline. On timeout, inject NaN so the kill switch fires
                   instead of letting stale data drive the controller.
         """
-        # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
-        # kernel TX ring without blocking on the wire.
         t_submit = time.perf_counter()                                           # [timing]
         for motor_index, amp in enumerate(current_cmd_amp):
             driver = self.motor_drivers[motor_index]
-            # driver.clear_torque_reply_event()
             self.torque_request_start_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
             driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
             self.torque_request_end_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3

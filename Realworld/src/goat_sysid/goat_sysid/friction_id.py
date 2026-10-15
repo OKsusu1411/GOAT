@@ -47,7 +47,6 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         repeat = args.repeat
         period = 1.0 / args.hz
         num_points = int(duration / period)
-        is_leg = True if joint_id < 6 else False
 
         # Configs
         joint_names = cfg["joint_names"]
@@ -56,6 +55,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         kp_leg = cfg["policy_leg_proportional_gain"][0]
         kd_leg = cfg["policy_leg_derivative_gain"][0]
         kp_wheel = cfg["policy_wheel_proportional_gain"][0]
+        is_leg = True if joint_id < num_joints-2 else False
         max_pos_per_joint = np.asarray(cfg["joint_pos_limit"]).reshape(-1, 2) * soft_factor                 # Position amplitude (soft relaxation)
         max_vel_per_joint = 33.0 * soft_factor                                                              # Velocity amplitude
         max_torque_leg = 4                                                                                  # Torque clipping
@@ -133,8 +133,8 @@ if __name__ == "__main__":
     parser.add_argument("--joint_id", type=int, default=4)
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--soft_factor", type=float, default=0.4)
-    parser.add_argument("--repeat", type=int, default=10)
-    parser.add_argument("--hz", type=float, default=200.0)
+    parser.add_argument("--repeat", type=int, default=15.0)
+    parser.add_argument("--hz", type=float, default=100.0)
     parser.add_argument("--timeout", type=float, default=0.05)
     parser.add_argument("--config", default="src/goat_control/config/goat_config.yaml")
 

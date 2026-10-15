@@ -467,7 +467,6 @@ class ControllerNode(Node):
             self.write_delta_min = float("inf")
             self.write_delta_sum = 0.0
 
-
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
         # Interrupting handling
@@ -531,7 +530,6 @@ class ControllerNode(Node):
             now_ns = time.perf_counter_ns()
             if now_ns > next_tick_ns:
                 self.deadline_miss_count += 1
-
 
     def stop_control_thread(self) -> None:
         """Stop and join the dedicated hardware-control thread."""
