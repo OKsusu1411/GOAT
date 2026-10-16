@@ -67,6 +67,7 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
         header += [f"{name}_actual_torque" for name in joint_names]
         header += [f"{target_joint_name}_target_ref"]
         header += [f"{target_joint_name}_target_torque"]
+        header += [f"{target_joint_name}_target_prev_torque"]
 
         tau = np.zeros(num_joints, dtype=np.float32)
         prev_tau = np.zeros(num_joints, dtype=np.float32)
@@ -115,13 +116,14 @@ def run(motor_interface: MotorIO, cfg: dict, args: Any, csv_path: Path) -> None:
                 row += [q_dot[i] for i in range(num_joints)]
                 row += [q_tau[i] for i in range(num_joints)]
                 row += [ref_now]
+                row += [tau[joint_id]]
                 row += [prev_tau[joint_id]]
                 writer.writerow(row)
 
                 next_time += period
                 sleep_time = next_time - time.perf_counter()
 
-                prev_tau = tau
+                prev_tau = tau.copy()
                 if sleep_time > 0:
                     time.sleep(sleep_time)
     
