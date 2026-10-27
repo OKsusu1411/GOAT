@@ -68,7 +68,7 @@ nsc_wheel_inner_proportional_gain: 3.0
 nsc_wheel_inner_derivative_gain: 0.1
 nsc_theta_cmd_limit: 10.0
 policy_mode: movable
-policy_checkpoint_path: src/goat_control/checkpoint/stand_base.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/stand.onnx
 policy_device: cpu
 policy_command_vx_limit: 0.1
 policy_command_wz_limit: 0.1
@@ -181,7 +181,7 @@ max_current_lsb: 2048
 joint_offsets:
 - -5.2566524543266
 - 3.1162853794358742
-- 9.019512503
-- -6.401291733
+- 8.879886503
+- -6.261664733
 - -5.3393810608711325
 - -5.390466848077008
