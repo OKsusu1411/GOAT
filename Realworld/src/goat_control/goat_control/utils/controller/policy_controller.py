@@ -250,7 +250,7 @@ class PolicyController(BaseController):
             if self.q_ref_traj is None:
                 self.q_ref_traj = np.zeros((self.num_traj_points, self.num_leg_joints), dtype=float)
                 for i in range(self.num_leg_joints):
-                    self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i], self.num_traj_points)
+                    self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i] * 1.1, self.num_traj_points)
             target_leg_pos = self.q_ref_traj[min(self.num_traj_points-1, self.count), :]
         
         # --- Error Calculation (Joint Space) ---
