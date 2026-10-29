@@ -70,11 +70,11 @@ nsc_theta_cmd_limit: 10.0
 policy_mode: movable
 policy_checkpoint_path: src/goat_control/checkpoint/stand2.onnx
 policy_device: cpu
-policy_command_vx_limit: 0.1
+policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.1
 policy_command_height_lower_limit: 0.41
 policy_command_height_upper_limit: 0.56
-policy_command_vx_step: 0.01
+policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
 policy_command_height_step: 0.075
 policy_command_joint_step: 10.0
@@ -179,9 +179,9 @@ speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
 joint_offsets:
-- -5.171654919754477
-- 3.1191651727016647
-- 8.931748627019761
-- -6.313938008599724
-- -0.9155997255962252
-- -2.3384968515771214
+- -5.169625974499036
+- 3.118144155089249
+- 10.545698197130168
+- -6.9771718285637805
+- -3.770330063328231
+- 2.959589719191825
