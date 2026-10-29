@@ -3,7 +3,7 @@
     <option timestep="0.01" gravity="0 0 -9.81"/>
 
     <!-- GOAT robot -->
-    <include file="./goat_floating_no_hip.xml"/>
+    <include file="./goat_floating.xml"/>
 
     <!-- Stand jig -->
     <!-- <asset>
