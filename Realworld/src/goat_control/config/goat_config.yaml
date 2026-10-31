@@ -178,6 +178,13 @@ angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
+kneel_pose_joint_pos:
+- -0.2007128639793479
+- 0.2007128639793479
+- 2.443460952792061
+- -2.443460952792061
+- 0
+- 0
 joint_offsets:
 - -5.169625974499036
 - 3.118144155089249

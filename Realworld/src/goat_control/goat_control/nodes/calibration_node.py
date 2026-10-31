@@ -37,8 +37,8 @@ class CalibrationNode(Node):
         # YAML file
         with open(self.yaml_path, 'r', encoding='utf-8') as file_handle:
             self.cfg = yaml.safe_load(file_handle)
-
         self.old_joint_offsets = self.cfg["joint_offsets"]
+        self.kneel_joint_pos = self.cfg["kneel_pose_joint_pos"]
 
         # Data buffers
         self.latest_joint_state = None
@@ -55,9 +55,10 @@ class CalibrationNode(Node):
         self.get_logger().info("Calibration Node Started.\r")
         self.get_logger().info("=============================================")
         self.get_logger().info("[CONTROLS]")
-        self.get_logger().info("'j': All Joint Position Calibration")
-        self.get_logger().info("'w': Wheel Position Calibration")
-        self.get_logger().info("'i': IMU Calibration")
+        self.get_logger().info("'j': Joint Position Zero Calibration")
+        self.get_logger().info("'w': Wheel Position Zero Calibration")
+        self.get_logger().info("'k': Kneel Pose Joint Position Calibration")
+        self.get_logger().info("'i': IMU Upright Calibration")
         self.get_logger().info("'q': Quit")
         self.get_logger().info("=============================================\r")
 
@@ -92,19 +93,23 @@ class CalibrationNode(Node):
             key = self._get_key()
             
             if key == 'j':
-                self.get_logger().info("Key 'j' pressed: Starting Joint Calibration\r")
+                self.get_logger().info("Key 'j' pressed: Starting Joint Zero Calibration\r")
                 self._joint_calibration()
             
             elif key == 'w':
-                self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration\r")
+                self.get_logger().info("Key 'w' pressed: Starting Wheel Zero Calibration\r")
                 self._joint_calibration()
+
+            elif key == 'k':
+                self.get_logger().info("Key 'k' pressed: Starting Kneel Joint Calibration\r")
+                self._joint_calibration(is_kneel_pose=True)
 
             elif key == 'i':
                 if self._is_controller_running():
-                    self.get_logger().warning("[IMU Calibration] controller_node is running.\r")
+                    self.get_logger().warning("[IMU Upright Calibration] controller_node is running.\r")
                     self.get_logger().warning("Stop controller_node before IMU calibration.\r")
                     continue
-                self.get_logger().info("Key 'i' pressed: Starting IMU Calibration\r")
+                self.get_logger().info("Key 'i' pressed: Starting IMU Upright Calibration\r")
                 self._imu_calibration()
                 
             elif key == 'q':
@@ -129,7 +134,7 @@ class CalibrationNode(Node):
                 self.get_logger().info("=============================================\r")
                 continue
 
-    def _joint_calibration(self, is_wheel_mode:bool = False):
+    def _joint_calibration(self, is_wheel_mode:bool = False, is_kneel_pose:bool = False):
         """Collect N samples, calculate average, and save offsets to YAML."""
         if self.latest_joint_state is None:
             self.get_logger().warn("No joint states received yet! Cannot calibrate joints.")
@@ -162,8 +167,15 @@ class CalibrationNode(Node):
 
         # Calculate Average
         avg_positions = np.mean(position_samples, axis=0)
-        # Calculate offsets (Average)
-        joint_offsets = avg_positions
+
+        # Calculate offsets
+        if is_kneel_pose:
+            # Kneel pose offset
+            kneel_reference = np.array(self.kneel_joint_pos, dtype=float)
+            joint_offsets = avg_positions - kneel_reference
+        else:
+            # Zero position offset
+            joint_offsets = avg_positions
 
         self.get_logger().info(f"Averaged Positions ({self.sample_count} samples): {avg_positions}")
         self.get_logger().info(f"Calculated Joint Offsets: {joint_offsets}")
