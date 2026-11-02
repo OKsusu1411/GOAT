@@ -129,6 +129,7 @@ class CalibrationNode(Node):
                 self.get_logger().info("[CONTROLS]")
                 self.get_logger().info("'j': All Joint Position Calibration")
                 self.get_logger().info("'w': Wheel Position Calibration")
+                self.get_logger().info("'k': Knee Pose Joint Calibration")
                 self.get_logger().info("'i': IMU Calibration")
                 self.get_logger().info("'q': Quit")
                 self.get_logger().info("=============================================\r")
