@@ -68,7 +68,7 @@ nsc_wheel_inner_proportional_gain: 3.0
 nsc_wheel_inner_derivative_gain: 0.1
 nsc_theta_cmd_limit: 10.0
 policy_mode: movable
-policy_checkpoint_path: src/goat_control/checkpoint/stand2.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/track.onnx
 policy_device: cpu
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.1
@@ -178,10 +178,17 @@ angle_deg_per_lsb: 0.001
 speed_deg_per_sec_per_lsb: 0.1
 motor_encoder_counts_per_rev: 65536
 max_current_lsb: 2048
+kneel_pose_joint_pos:
+- -0.20507618710933373
+- 0.20507618710933373
+- 2.399827721492203
+- -2.399827721492203
+- 0
+- 0
 joint_offsets:
-- -5.169625974499036
-- 3.118144155089249
-- 10.545698197130168
-- -6.9771718285637805
-- -3.770330063328231
-- 2.959589719191825
+- -5.182894840137322
+- 3.1155697944425573
+- 9.809893586859944
+- -6.551049714129414
+- 0.44650758253770917
+- 20.866475858435926
