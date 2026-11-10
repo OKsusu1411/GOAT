@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+import sys
 import yaml
 import time
 import copy
@@ -15,6 +16,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from motor_interfaces.msg import States
 from motor_interfaces.msg import ImuState
 from message_filters import Subscriber
 
@@ -39,7 +41,7 @@ class ControllerNode(Node):
         super().__init__("controller_node")
 
         # Parameters by Launch File
-        self.declare_parameter("control_rate_hz", 200.0)
+        self.declare_parameter("control_rate_hz", 100.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("action_timeout_sec", 0.05)
@@ -47,13 +49,7 @@ class ControllerNode(Node):
         self.declare_parameter("imu_baudrate", 115200)
         self.declare_parameter("imu_timeout", 1.0)
 
-        self.set_parameters([
-            rclpy.parameter.Parameter(
-                "use_sim_time",
-                rclpy.Parameter.Type.BOOL,
-                False,
-            )
-        ])
+        self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, False)])
 
         self.control_rate_hz = float(self.get_parameter("control_rate_hz").value)
         self.urdf_path = str(self.get_parameter("urdf_path").value)
@@ -74,6 +70,7 @@ class ControllerNode(Node):
 
         # Logger
         self.logger = self.get_logger()
+        self.logger.info(f"Python thread switch interval: {sys.getswitchinterval() * 1e3:.3f} ms")
 
         # Controller
         self.safety_limiter = SafetyLimiter(self.cfg, self.logger)
@@ -126,6 +123,11 @@ class ControllerNode(Node):
                                                         "/commands", 
                                                         qos_profile=qos_profile)
 
+        # Observation publisher for debbugging
+        self.observation_pub = self.create_publisher(States,
+                                                     "/obs",
+                                                     qos_profile=qos_profile)
+
         # Messages
         self.now_stamp = self.get_clock().now().to_msg()
         self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
@@ -140,9 +142,6 @@ class ControllerNode(Node):
         self.kill_switch_on = False
         self.kill_reason = ""
 
-        # Timing — use ROS clock so it works under sim time too.
-        self.last_tick_time = time.perf_counter()
-
         self.logger.info("Main Controller Node started")
         self._print_menu()
 
@@ -151,9 +150,27 @@ class ControllerNode(Node):
         self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
         self.input_thread.start()
 
-        # Control loop timer
-        control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        self.control_timer = self.create_timer(control_period_sec, self._control_loop)
+        # Timing
+        self.last_tick_time = time.perf_counter()
+        self.last_end_time = time.perf_counter()
+        self.prev_write_time = None
+        self.write_delta_sum = 0.0
+        self.write_delta_min = 0.0
+        self.write_delta_max = 0.0
+
+        # Hardware-control thread to skip ROS overhead and sleep
+        self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
+        self.deadline_miss_count = 0
+        self._dt_min = float("inf")
+        self._dt_max = 0.0
+        self._dt_sum = 0.0
+
+        self._rate_cycle_count = 0
+        self._rate_check_interval = 500
+        self._rate_window_start = time.perf_counter()
+        self._control_stop_event = threading.Event()
+        self.control_thread = threading.Thread(target=self._control_thread_loop, name="goat_control_thread", daemon=False,)
+        self.control_thread.start()
 
     # ---------------------------------------------------------------------
     # Callback Functions
@@ -165,8 +182,7 @@ class ControllerNode(Node):
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
         self.logger.info("'p': Policy Control Mode")
-        self.logger.info("'n': Nominal Control Mode")
-        self.logger.info("'s': Start the control loop (torque publishing)")
+        self.logger.info("'n': Nominal Control Mode [Deprecated]")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")
@@ -216,18 +232,12 @@ class ControllerNode(Node):
                     continue
                 self.publish_mode = 'nominal'
                 self.logger.info("Mode changed: [Nominal]\r")
+                self.logger.info("Current deprecated.")
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
                 rclpy.shutdown()
                 break
-
-            elif key == "s":
-                if self._start:
-                    self.logger.info("Already started. \r")
-                    continue
-                self._start = True
-                self.logger.info("Start the control loop. \r")
 
             elif key == 'r':
                 self.reset()
@@ -258,12 +268,11 @@ class ControllerNode(Node):
         # IMU state: quaternion + gyro / vel / mag vectors.
         imu = imu_msg
         if imu is not None:
-            imu_values = [
-                imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
-                imu.gyro.x, imu.gyro.y, imu.gyro.z,
-                imu.vel.x, imu.vel.y, imu.vel.z,
-                imu.mag.x, imu.mag.y, imu.mag.z,
-            ]
+            imu_values = [imu.quat.x, imu.quat.y, imu.quat.z, imu.quat.w,
+                          imu.gyro.x, imu.gyro.y, imu.gyro.z,
+                          imu.acc.x, imu.acc.y, imu.acc.z,
+                          imu.mag.x, imu.mag.y, imu.mag.z,
+                          ]
             if np.any(np.isnan(np.asarray(imu_values, dtype=float))):
                 return True
 
@@ -326,22 +335,22 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        self.now_stamp = self.get_clock().now().to_msg()
         now_time = time.perf_counter()
 
-        # Time - Time → Duration; convert to seconds via nanoseconds.
+        # Time information
         dt_sec = (now_time - self.last_tick_time)
-        if dt_sec <= 0.0:
-            dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
+        if dt_sec <= 0.0: dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
         self.last_tick_time = now_time
 
-        # Joint state
-        joint_state_msg = self.motor_io.latest_joint_state
+        self._rate_cycle_count += 1
+        self._dt_min = min(self._dt_min, dt_sec)
+        self._dt_max = max(self._dt_max, dt_sec)
+        self._dt_sum += dt_sec
 
-        # IMU state
-        t_imu_start = time.perf_counter()    
-        imu_msg = self.imu_io.read_imu()
-        imu_read_ms = (time.perf_counter() - t_imu_start) * 1e3                 
+        # Messages
+        joint_state_msg = self.motor_io.read_joint_state()
+        imu_msg = self.imu_io.read_imu() 
+        obs_msg = States()
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -352,54 +361,52 @@ class ControllerNode(Node):
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
-            self.motor_io.read_write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self.motor_io.write_motor(tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
-            self.motor_io.read_write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self.motor_io.write_motor(tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         
         # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
         if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
-            self.motor_io.read_write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self.motor_io.write_motor(tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
         # ==================================================================
 
         # Mode switch detection
         self._switch_mode(self.publish_mode)
 
-        # Active controller execution
-        t_ctrl_start = time.perf_counter()                                    
+        # Active controller execution                                 
         if self.publish_mode == 'policy':
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
                                                                               imu_msg,
-                                                                              dt_sec,
-                                                                              self._start)
+                                                                              dt_sec)
+
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:
                 v_ref[wheel_indices] = wheel_v_ref
 
-        elif self.publish_mode == 'nominal':
-            joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
-                                                                     imu_msg,
-                                                                     dt_sec,
-                                                                     self._start)
-            # Same wheel-slot guard as the policy branch.
-            wheel_indices = self.cfg["wheel_indices"]
-            if len(wheel_indices) > 0:
-                v_ref[wheel_indices] = 0.0
+        # elif self.publish_mode == 'nominal':
+        #     joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
+        #                                                              imu_msg,
+        #                                                              dt_sec)
+        #     # Same wheel-slot guard as the policy branch.
+        #     wheel_indices = self.cfg["wheel_indices"]
+        #     if len(wheel_indices) > 0:
+        #         v_ref[wheel_indices] = 0.0
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
-            self.motor_io.read_write_motor(tau)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
+            self.motor_io.write_motor(tau)
             return
 
         # Safety Limiter
@@ -410,40 +417,62 @@ class ControllerNode(Node):
         # Block handling (latching kill switch)
         if is_blocked:
             self._trigger_kill_switch("SafetyLimiter blocked command")
-            self.motor_io.read_write_motor(tau)
+            self.motor_io.write_motor(tau)
             return
-        ctrl_compute_ms = (time.perf_counter() - t_ctrl_start) * 1e3                    # [timing] controller compute duration in ms
 
         # Publish torque command (only start mode)
-        if self._start:
-            tau[:] = safe_torque
+        tau[:] = safe_torque
+        self.motor_io.write_motor(tau)
 
-        t_can_start = time.perf_counter()                                               # [timing] start CAN write+read window
-        q_current = self.motor_io.read_write_motor(tau)                                     
-        can_io_ms = (time.perf_counter() - t_can_start) * 1e3                           # [timing] CAN write+read duration in ms
+        write_time = time.perf_counter()
+        if self.prev_write_time is None:
+            self.prev_write_time = time.perf_counter()
+
+        delta_write_time = write_time - self.prev_write_time
+
+        self.prev_write_time = write_time   
+
+        self.write_delta_min = min(self.write_delta_min, delta_write_time)
+        self.write_delta_max = max(self.write_delta_max, delta_write_time)
+        self.write_delta_sum += delta_write_time                          
 
         # Publish for logging
-        q_current.header.stamp = self.get_clock().now().to_msg()
-        self._publish(q_ref, v_ref, safe_torque, q_current, imu_msg)
+        obs_msg.data = self.policy_controller.observation[0].tolist()
+        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)  
 
-        # Per-segment timing breakdown. Comment out once bottleneck confirmed.
-        total_ms = (time.perf_counter() - now_time) * 1e3                               # [timing] full _control_loop duration in ms
-        tx_submit_ms = getattr(self.motor_io.motor_manager, "_last_tx_submit_ms", 0.0)  # [timing] send phase cost
-        tx_wait_ms = getattr(self.motor_io.motor_manager, "_last_tx_wait_ms", 0.0)      # [timing] cache-read+parse cost
+        if self._rate_cycle_count >= self._rate_check_interval:
+            now = time.perf_counter()
+            avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
+            avg_write_dt_ms = (self.write_delta_sum / self._rate_cycle_count) * 1e3
 
-        # Time logging
-        self.logger.info(
-            f"[timing] total: {total_ms:6.2f} ms | {1.0 / max(total_ms * 1e-3, 1e-6):6.1f} Hz "
-            f"| can: {can_io_ms:6.2f} ms (tx {tx_submit_ms:5.2f} / rx {tx_wait_ms:6.2f}) "
-            f"| imu: {imu_read_ms:5.2f} ms | ctrl: {ctrl_compute_ms:5.2f} ms \r",
-            throttle_duration_sec=5.0,
-        )
+            self.logger.info(
+                f"[Time] mean={avg_dt_ms:.3f} ms | "
+                f"[Time] min={self._dt_min * 1e3:.3f} ms | "
+                f"[Time] max={self._dt_max * 1e3:.3f} ms | "
+                f"[Apply] mean={avg_write_dt_ms:.3f} ms | "
+                f"[Apply] min={self.write_delta_min * 1e3:.3f} ms | "
+                f"[Apply] max={self.write_delta_max * 1e3:.3f} ms | "
+                f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
+                f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
+                f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f}\r"
+            )
 
-    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
+            self._rate_window_start = now
+            self._rate_cycle_count = 0
+            self._dt_min = float("inf")
+            self._dt_max = 0.0
+            self._dt_sum = 0.0
+
+            self.write_delta_max = 0.0
+            self.write_delta_min = float("inf")
+            self.write_delta_sum = 0.0
+
+    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
         # Interrupting handling
         if not rclpy.ok():
             return
+        
         # Update joint state message for logging
         msg_joint = JointState()
         msg_joint.header.stamp = joint_state_msg.header.stamp
@@ -452,21 +481,20 @@ class ControllerNode(Node):
         msg_joint.position = joint_state_msg.position
         msg_joint.velocity = joint_state_msg.velocity
         msg_joint.effort = joint_state_msg.effort
+
         # Update IMU message for logging 
         msg_imu = ImuState()
         msg_imu.header.stamp = joint_state_msg.header.stamp
         msg_imu.quat = imu_msg.quat
         msg_imu.gyro = imu_msg.gyro
-        msg_imu.vel = imu_msg.vel
+        msg_imu.acc = imu_msg.acc
         msg_imu.mag = imu_msg.mag
         msg_imu.time_ms = imu_msg.time_ms
 
         # Update joint command message
         msg_command = JointState()
         msg_command.header.stamp = joint_state_msg.header.stamp
-        # Use configured joint names so /commands stays consistent with the
-        # actual num_joints (8 in normal setup, 6 in wheel-less bring-up).
-        msg_command.name = list(self.cfg["joint_names"])
+        msg_command.name = joint_state_msg.name
         msg_command.position = position.tolist()
         msg_command.velocity = velocity.tolist()
         msg_command.effort = effort.tolist()
@@ -475,6 +503,40 @@ class ControllerNode(Node):
         self.joint_state_pub.publish(msg_joint)
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
+
+        # Observation
+        if not obs_msg.data:
+            obs_msg.data = [0.0] * self.policy_controller.policy_observation_dim
+        obs_msg.header.stamp = joint_state_msg.header.stamp
+        self.observation_pub.publish(obs_msg)
+
+
+    def _control_thread_loop(self):
+        """Run the hardware control step at a fixed absolute rate."""
+        # First cycle starts immediately.
+        next_tick_ns = time.perf_counter_ns()
+        while rclpy.ok() and not self._control_stop_event.is_set():
+            # Wait until the absolute start time of this control cycle.
+            now_ns = time.perf_counter_ns()
+            remaining_ns = next_tick_ns - now_ns
+            if remaining_ns > 0:
+                # Event.wait() instead of time.sleep() so shutdown can interrupt the wait immediately.
+                if self._control_stop_event.wait(remaining_ns * 1e-9):
+                    break
+            # Execute exactly one control cycle.
+            self._control_loop()
+            # Schedule the next absolute cycle.
+            next_tick_ns += self.period_ns
+            now_ns = time.perf_counter_ns()
+            if now_ns > next_tick_ns:
+                self.deadline_miss_count += 1
+
+    def stop_control_thread(self) -> None:
+        """Stop and join the dedicated hardware-control thread."""
+        self._control_stop_event.set()
+        control_thread = getattr(self, "control_thread", None)
+        if control_thread is not None and control_thread.is_alive():
+            control_thread.join(timeout=1.0)
 
 
 def main(args=None):
@@ -491,8 +553,9 @@ def main(args=None):
                 termios.tcsetattr(node.tty.fileno(), termios.TCSADRAIN, node.settings)
                 node.tty.close()
         finally:
+            node.stop_control_thread()
             for _ in range(10):
-                node.motor_io.read_write_motor(np.zeros(node.num_joints, dtype=np.float32))
+                node.motor_io.write_motor(np.zeros(node.num_joints, dtype=np.float32))
                 time.sleep(0.1)
             if hasattr(node, "motor_io"):
                 node.motor_io.close()

@@ -75,7 +75,6 @@ class MotorManager:
         self.motor_torque_constant_nm_per_amp = np.asarray(self.cfg["motor_torque_constant_nm_per_amp"], dtype=np.float64).flatten()
         self.max_torque_per_joint = np.asarray(self.cfg["max_torque_per_joint"], dtype=np.float64).flatten()
         self.motor_gear_ratio = np.asarray(self.cfg["motor_gear_ratio"], dtype=np.float64).flatten()
-        self.motor_direction = np.asarray(self.cfg["motor_direction"], dtype=np.float64).flatten()
         self.joint_offsets = np.asarray(self.cfg["joint_offsets"], dtype=np.float64).flatten()
         self.torque_to_current_denominator = self.motor_gear_ratio * self.motor_torque_constant_nm_per_amp
         if np.any(np.abs(self.torque_to_current_denominator) < 1e-12):
@@ -88,6 +87,7 @@ class MotorManager:
         self.motor_temperature_c: List[float] = [float("nan")] * self.motor_count
         self.motor_phase_current_amp: List[float] = [float("nan")] * self.motor_count
         self.motor_speed_deg_per_sec: List[float] = [float("nan")] * self.motor_count
+
         self.motor_encoder_count: List[int] = [0] * self.motor_count
         self.motor_pi_gain: List[List[int]] = [[0, 0] for _ in range(self.motor_count)]
 
@@ -103,6 +103,13 @@ class MotorManager:
         self.motor_prev_encoder_count:     List[Optional[int]]   = [None] * self.motor_count
         self.motor_encoder_wrap_count:     List[int]             = [0]    * self.motor_count
 
+        # Per-motor timing
+        self.motor_request_start_time_ms: list[float] = [0.0] * self.motor_count
+        self.motor_request_end_time_ms: list[float] = [0.0] * self.motor_count
+        self.motor_wait_time_ms: list[float] = [0.0] * self.motor_count
+        self.torque_request_start_time_ms: list[float] = [0.0] * self.motor_count
+        self.torque_request_end_time_ms: list[float] = [0.0] * self.motor_count
+
         # Boot anchor fold window (per motor, motor degrees)
         self.motor_fold_center_deg: List[Optional[float]] = [None] * self.motor_count
 
@@ -116,12 +123,11 @@ class MotorManager:
                 continue  # wheel — nothing to fold into
 
             gear = float(self.motor_gear_ratio[motor_i])
-            direction = float(self.motor_direction[motor_i])
             offset_rad = float(self.joint_offsets[joint_i])
 
             # Inverse of _package_motor_states: calibrated joint rad -> raw motor deg.
-            raw_lo_deg = math.degrees(limit_lo_rad + offset_rad) * gear / direction
-            raw_hi_deg = math.degrees(limit_hi_rad + offset_rad) * gear / direction
+            raw_lo_deg = math.degrees(limit_lo_rad + offset_rad) * gear
+            raw_hi_deg = math.degrees(limit_hi_rad + offset_rad) * gear
             self.motor_fold_center_deg[motor_i] = 0.5 * (raw_lo_deg + raw_hi_deg)
 
         # Persistent thread pool reused across every tick. 
@@ -213,7 +219,7 @@ class MotorManager:
         if driver.can_interface.is_reader_running():
             # Reader thread mode: fire request, read prior reply from cache.
             driver.send_state1_request()
-            response_message = driver.latest_state1()
+            response_message = driver.latest_reply(0x9A) # State1 reply
         else:
             # Init mode: blocking round-trip is safe; reader not yet running.
             response_message = driver.read_state1(timeout=timeout)
@@ -247,6 +253,12 @@ class MotorManager:
         return True
 
     def poll_wheel_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
+        # write pi gain
+        # response_message = self.motor_drivers[motor_index].write_wheel_pi_gain_ram(timeout=timeout)
+        # if response_message is None:
+        #     return False
+
+        # read pi gain
         response_message = self.motor_drivers[motor_index].read_wheel_pi_gain(timeout=timeout)
         if response_message is None:
             return False
@@ -297,7 +309,6 @@ class MotorManager:
         for joint_i in range(joint_count):
             motor_i = self.motor_index_for_joint[joint_i] if self.motor_index_for_joint is not None else joint_i
             gear = self.motor_gear_ratio[motor_i]
-            direction = self.motor_direction[motor_i]
 
             raw_multi = self.motor_multi_turn_angle_raw_0p001deg[motor_i]
             raw_single = self.motor_single_turn_angle_raw_0p001deg[motor_i]
@@ -306,11 +317,11 @@ class MotorManager:
             elif raw_single != 0: motor_angle_deg = raw_single * self.angle_deg_per_lsb
             else: motor_angle_deg = 0.0
 
-            joint_angle_deg = (motor_angle_deg * direction) / gear # Motor -> Joint
+            joint_angle_deg = motor_angle_deg / gear # Motor -> Joint
             joint_position_rad[joint_i] = joint_angle_deg * math.pi / 180.0
 
             motor_speed_deg_s = self.motor_speed_deg_per_sec[motor_i]
-            joint_speed_deg_s = (motor_speed_deg_s * direction) / gear # Motor -> Joint
+            joint_speed_deg_s = motor_speed_deg_s / gear # Motor -> Joint
             joint_velocity_rad_per_sec[joint_i] = joint_speed_deg_s * math.pi / 180.0
 
             motor_current_amp = self.motor_phase_current_amp[motor_i]
@@ -327,6 +338,20 @@ class MotorManager:
             motor_error_flags=self.motor_error_flags.copy(),
             motor_operating_state=self.motor_operating_state.copy(),
             timestamp_sec=time.time())
+
+    def _decode_state2(self, response_message):
+        response_data = response_message.data
+
+        temperature_c = float(struct.unpack("<b", response_data[1:2])[0])
+
+        motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
+        current_amp = float(motor_current_raw_lsb) * self.motor_current_amp_per_lsb
+
+        speed_raw_lsb = struct.unpack("<h", response_data[4:6])[0]
+        speed_deg_per_sec = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
+        encoder_count = int(struct.unpack("<H", response_data[6:8])[0])
+
+        return (temperature_c, current_amp, speed_deg_per_sec, encoder_count)
 
     def _update_motor_angle_from_encoder(self, motor_index: int) -> None:
         """Integrate the latest uint16 encoder count into a multi-turn motor
@@ -355,64 +380,77 @@ class MotorManager:
         total_count_delta = (current_count - anchor_count) + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
         motor_angle_deg = anchor_angle_deg + total_count_delta * (360.0 / counts_per_rev)
 
-        # Write back in the same 0.001 deg/LSB units _package_motor_states reads.
         self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(round(motor_angle_deg / self.angle_deg_per_lsb))
 
     # =========================================================================
-    # [Write + Read]
+    # [Primary Read]
     # =========================================================================
-    def write_torques_and_read_states(self, current_cmd_amp: Sequence[float], timeout: float = 0.003) -> MotorStatesData:
-        """Synchronous fire-all-then-wait-all torque + state2 pass.
+    def read_joint_states(self, timeout: float = 0.003) -> MotorStatesData:
+        """Read fresh State2 (0x9C) from all motors."""
+        # Phase 1: Clear and send all 0x9C requests
+        t_submit = time.perf_counter()
+        for i, driver in enumerate(self.motor_drivers):
+            driver.clear_state2_reply_event()
+            self.motor_request_start_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
+            driver.send_state2_request()
+            self.motor_request_end_time_ms[i] = (time.perf_counter() - t_submit) * 1e3
+        t_fired = time.perf_counter()
 
-        Phase 1 — clear each motor's 0xA1 reply event, then send its torque
-                  command. TXs are non-blocking (kernel ring); both buses
-                  run in parallel by virtue of separate CanInterface
-                  instances.
-        Phase 2 — for each motor, wait on its arrival event until the shared
-                  deadline. On timeout, inject NaN so the kill switch fires
-                  instead of letting stale data drive the controller.
-        """
-        # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
-        # kernel TX ring without blocking on the wire.
-        t_submit = time.perf_counter()                                           # [timing]
-        for motor_index, amp in enumerate(current_cmd_amp):
-            driver = self.motor_drivers[motor_index]
-            driver.clear_state2_event()
-            driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
-        t_fired = time.perf_counter()                                            # [timing]
-
-        # Phase 2 — bounded wait, one shared deadline so total RX time is
-        # bounded by `timeout` rather than 8 × per-motor timeout.
-        deadline_monotonic = time.monotonic() + timeout
-        for motor_index in range(self.motor_count):
-            driver = self.motor_drivers[motor_index]
-            response_message = driver.await_state2(deadline_monotonic)
+        # Phase 2: wait for all replies with one shared deadline
+        deadline = time.monotonic() + timeout
+        for motor_index, driver in enumerate(self.motor_drivers):
+            response_message, rx_time = driver.await_state2_reply(deadline)
             if response_message is None:
-                # Motor silent this tick. Mark its slot NaN so
-                # controller_node._sensor_data_has_nan() trips the kill
-                # switch — far safer than re-using stale state for a balance loop.
+                # Force existing sensor-NaN safety path.
+                self.motor_temperature_c[motor_index] = float("nan")
                 self.motor_speed_deg_per_sec[motor_index] = float("nan")
                 self.motor_phase_current_amp[motor_index] = float("nan")
                 continue
 
-            response_data = response_message.data
+            self.motor_wait_time_ms[motor_index] = (rx_time - t_submit) * 1e3
+            (
+                temperature_c, 
+                current_amp, 
+                speed_deg_per_sec, 
+                encoder_count
+            ) = self._decode_state2(response_message)
 
-            # 0xA1 reply has the same byte layout as 0x9C state2.
-            self.motor_temperature_c[motor_index] = float(struct.unpack("<b", response_data[1:2])[0])
+            # Control-state update.
+            self.motor_temperature_c[motor_index] = temperature_c
+            self.motor_phase_current_amp[motor_index] = current_amp
+            self.motor_speed_deg_per_sec[motor_index] = speed_deg_per_sec
+            self.motor_encoder_count[motor_index] = encoder_count
 
-            motor_current_raw_lsb = struct.unpack("<h", response_data[2:4])[0]
-            self.motor_phase_current_amp[motor_index] = float(motor_current_raw_lsb) * self.motor_current_amp_per_lsb
-
-            speed_raw_lsb = struct.unpack("<h", response_data[4:6])[0]
-            self.motor_speed_deg_per_sec[motor_index] = float(speed_raw_lsb) * self.speed_deg_per_sec_per_lsb
-
-            self.motor_encoder_count[motor_index] = int(struct.unpack("<H", response_data[6:8])[0])
-
+            # Encoder integration / multi-turn update:
             self._update_motor_angle_from_encoder(motor_index)
-        t_done = time.perf_counter()                                             # [timing]
 
-        # Surface timings (read by controller_node timing log).
-        self._last_tx_submit_ms = (t_fired - t_submit) * 1e3
-        self._last_tx_wait_ms = (t_done - t_fired) * 1e3
+        t_done = time.perf_counter()
+
+        self._last_read_request_ms = (t_fired - t_submit) * 1e3
+        self._last_read_wait_ms = (t_done - t_fired) * 1e3\
 
         return self._package_motor_states()
+
+    # =========================================================================
+    # [Primary Write]
+    # =========================================================================
+    def write_torques(self, current_cmd_amp: Sequence[float], timeout: float = 0.003) -> MotorStatesData:
+        """Synchronous fire-all-then-wait-all torque + state2 pass.
+
+        Phase 1 — Send its torque command. TXs are non-blocking (kernel ring)
+
+        Phase 2 — for each motor, wait on its arrival event until the shared
+                  deadline. On timeout, inject NaN so the kill switch fires
+                  instead of letting stale data drive the controller.
+        """
+        t_submit = time.perf_counter()                                           # [timing]
+        for motor_index, amp in enumerate(current_cmd_amp):
+            driver = self.motor_drivers[motor_index]
+            self.torque_request_start_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
+            driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
+            self.torque_request_end_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
+        t_fired = time.perf_counter()                                            # [timing]
+
+        # Surface timings (read by controller_node timing log).
+        self._last_write_request_ms = (t_fired - t_submit) * 1e3
+        self._last_write_wait_ms = (t_fired - t_fired) * 1e3

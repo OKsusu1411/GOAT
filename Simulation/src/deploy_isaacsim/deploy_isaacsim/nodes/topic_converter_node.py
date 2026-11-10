@@ -181,10 +181,10 @@ class TopicConverterNode(Node):
         # --------------------------------------------------------------
         joint_out = JointState()
         joint_out.header = joint_msg.header
-        joint_out.name = list(joint_msg.name)
-        joint_out.position = list(joint_msg.position)
-        joint_out.velocity = list(joint_msg.velocity)
-        joint_out.effort = list(joint_msg.effort)
+        joint_out.name = ["hip_L_Joint", "hip_R_Joint"] + list(joint_msg.name)
+        joint_out.position = [0.0, 0.0] + list(joint_msg.position)
+        joint_out.velocity = [0.0, 0.0] + list(joint_msg.velocity)
+        joint_out.effort = [0.0, 0.0] + list(joint_msg.effort)
 
         # --------------------------------------------------------------
         # /sim_imu + /sim_odom -> /imu
@@ -216,10 +216,10 @@ class TopicConverterNode(Node):
         """
         sim_cmd_msg = JointState()
         sim_cmd_msg.header = msg.header
-        sim_cmd_msg.name = list(msg.name)
-        sim_cmd_msg.position = list(msg.position)
-        sim_cmd_msg.velocity = list(msg.velocity)
-        sim_cmd_msg.effort = list(msg.effort)
+        sim_cmd_msg.name = list(msg.name[2:])
+        sim_cmd_msg.position = list(msg.position[2:])
+        sim_cmd_msg.velocity = list(msg.velocity[2:])
+        sim_cmd_msg.effort = list(msg.effort[2:])
 
         self.sim_joint_command_publisher.publish(sim_cmd_msg)
 

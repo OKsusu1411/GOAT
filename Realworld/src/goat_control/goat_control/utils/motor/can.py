@@ -37,6 +37,7 @@ class CanInterface:
 
         # Background reader state.
         self.latest_rx_frames_by_key: dict[tuple[int, int], can.Message] = {}
+        self.latest_rx_time_by_key: dict[tuple[int, int], int] = {}
         self._rx_lock = threading.Lock()
         self._rx_stop_event = threading.Event()
         self._rx_thread: threading.Thread | None = None
@@ -85,6 +86,11 @@ class CanInterface:
         """Return the most recent cached frame for (arbitration_id, cmd_byte)."""
         with self._rx_lock:
             return self.latest_rx_frames_by_key.get((arbitration_id, cmd_byte))
+
+    def get_latest_frame_with_time(self, arbitration_id: int, cmd: int):
+        with self._rx_lock:
+            return (self.latest_rx_frames_by_key.get((arbitration_id, cmd)), 
+                    self.latest_rx_time_by_key.get((arbitration_id, cmd)))
 
     # ---------------
     # Event Managing
@@ -157,10 +163,14 @@ class CanInterface:
                 continue
             if msg is None or not msg.data:
                 continue
+
+            rx_time_ns = time.perf_counter()
+
             # Arbiration id : which motor ? msg.data[0] : which cause this reply ?
             key = (msg.arbitration_id, msg.data[0])
             with self._rx_lock:
                 self.latest_rx_frames_by_key[key] = msg
+                self.latest_rx_time_by_key[key] = rx_time_ns
                 self.rx_frame_count += 1
             ev = self.frame_events.get(key)
             if ev is not None:

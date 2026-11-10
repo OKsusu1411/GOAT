@@ -29,8 +29,8 @@ class MotorDriver:
         self.node_id = node_id
         self.can_ids = CanIds(tx_id=0x140 + node_id, rx_id=0x180 + node_id)
 
-        # 0xA1 (torque) reply may land on rx_id OR tx_id depending on the motor setup.
-        self.reply_event = self.can_interface.alias_event_keys((self.can_ids.rx_id, 0xA1), (self.can_ids.tx_id, 0xA1))
+        self.torque_reply_event = self.can_interface.alias_event_keys((self.can_ids.rx_id, 0xA1), (self.can_ids.tx_id, 0xA1))
+        self.state2_reply_event = self.can_interface.alias_event_keys((self.can_ids.rx_id, 0x9C), (self.can_ids.tx_id, 0x9C))
 
     # ========================
     # Initialization helpers
@@ -52,7 +52,7 @@ class MotorDriver:
     def read_state2(self, timeout: float = 0.05):
         """Read state2 (torque/current, output voltage, speed, encoder position).
 
-        Note: angle unit is 0.001°/LSB and speed unit is typically 0.01°/s per LSB (per YAML/manual).
+        Note: angle unit is 0.001°/LSB and speed unit is typically 0.1°/s per LSB (per YAML/manual).
         """
         return self._txrx(0x9C, E7, timeout)
 
@@ -76,6 +76,24 @@ class MotorDriver:
     # =======================
     # Manager helpers [WRITE]
     # =======================
+    def write_wheel_pi_gain_ram(self, iq_kp: int = 50, iq_ki: int = 35, timeout: float = 0.05):
+        values = [0, 0, 0, 0, iq_kp, iq_ki]
+
+        if any(v < 0 or v > 255 for v in values):
+            raise ValueError("PID gains must be uint8 values (0~255).")
+
+        payload = bytes([0x00,       # DATA[1]
+                         0,          # DATA[2]
+                         0,          # DATA[3]
+                         0,          # DATA[4]
+                         0,          # DATA[5]
+                         iq_kp,      # DATA[6]
+                         iq_ki,      # DATA[7]
+                        ])
+
+        return self._txrx(0x31, payload, timeout)
+
+
     def send_torque_only(self, amps: float, max_current_lsb: int, motor_current_amp_per_lsb: float) -> None:
         """Send 0xA1 torque command; response will be cached by reader thread."""
         current_lsb = int(round(amps / motor_current_amp_per_lsb))
@@ -88,45 +106,58 @@ class MotorDriver:
         """Send 0x9A state1 (error flags) request; reply cached by reader thread."""
         self.can_interface.send_only(self.can_ids.tx_id, bytes([0x9A]) + E7)
 
+    def send_state2_request(self) -> None:
+        """Send 0x9C State2 request. Reply is consumed by reader thread."""
+        self.can_interface.send_only(self.can_ids.tx_id, bytes([0x9C]) + E7)
+
     # =======================
     # State variables
     # =======================
-    def latest_state1(self):
-        """Return the most recent cached 0x9A reply for this motor (or None).
-
-        Tries rx_id first, then tx_id — see latest_state2() for rationale.
+    def latest_reply(self, command_byte: int):
         """
-        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0x9A)
+        Return the latest reply for a given command byte.
+        Prefer rx_id frame; fall back to tx_id (this hardware replies on tx_id).
+        """
+        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, command_byte)
         if msg is not None:
             return msg
-        return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0x9A)
+        return self.can_interface.get_latest_frame(self.can_ids.tx_id, command_byte)
     
-    def latest_state2(self):
-        """Return the most recent cached 0xA1 reply for this motor (or None).
-
-        Tries rx_id (0x180+node_id) first, then falls back to tx_id
-        (0x140+node_id). Mirrors the OLD txrx()'s `accept_tx_echo_diff=True`
-        path — some motor setups echo replies on the tx_id with modified data.
+    def latest_reply_with_time(self, command_byte: int):
         """
-        msg = self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
+        Return the latest reply for a given command byte along with its reception time.
+        Prefer rx_id frame; fall back to tx_id (this hardware replies on tx_id).
+        """
+        msg, rx_time = self.can_interface.get_latest_frame_with_time(self.can_ids.rx_id, command_byte)
         if msg is not None:
-            return msg
-        return self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1)
+            return (msg, rx_time)
+        return self.can_interface.get_latest_frame_with_time(self.can_ids.tx_id, command_byte)
 
     # =======================
     # External helpers
     # =======================
-    def clear_state2_event(self) -> None:
+    def clear_torque_reply_event(self) -> None:
         """Arm this motor for a fresh 0xA1 reply."""
-        self.reply_event.clear()
+        self.torque_reply_event.clear()
 
-    def await_state2(self, deadline_monotonic: float):
+    def clear_state2_reply_event(self) -> None:
+        """Arm this motor for a fresh 0x9C reply."""
+        self.state2_reply_event.clear()
+
+    def await_torque_reply(self, deadline_monotonic: float):
         """Block until a fresh 0xA1 reply arrives for this motor."""
         # rx_id and tx_id 0xA1 events are aliased to one shared Event.
         remaining = max(0.0, deadline_monotonic - time.monotonic())
-        arrive = self.reply_event.wait(remaining)  # woken on arrival, or fell through on timeout
+        arrive = self.torque_reply_event.wait(remaining)  # woken on arrival, or fell through on timeout
         if not arrive:
             return None # Timeout Signal
-        # Prefer rx_id frame; fall back to tx_id (this hardware replies on tx_id).
-        return (self.can_interface.get_latest_frame(self.can_ids.rx_id, 0xA1)
-                or self.can_interface.get_latest_frame(self.can_ids.tx_id, 0xA1))
+        return self.latest_reply(0xA1)
+
+    def await_state2_reply(self, deadline_monotonic: float):
+        """Wait for a fresh 0x9C reply."""
+        remaining = max(0.0, deadline_monotonic - time.monotonic())
+        arrived = self.state2_reply_event.wait(remaining)
+        if not arrived:
+            return (None, None) # Timeout Signal
+        # return self.latest_reply(0x9C)
+        return self.latest_reply_with_time(0x9C)

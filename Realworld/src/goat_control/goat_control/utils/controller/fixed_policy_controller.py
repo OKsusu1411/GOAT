@@ -97,19 +97,25 @@ class FixedBasePolicyController(PolicyController):
                     f"R={self._joint_command[r_idx]:.3f}\r")
 
         # Reset to default pose (zeros).
-        if key == " ":
+        elif key == " ":
             self._joint_command[:] = 0.0
             return "Joint command reset to zero\r"
 
-        if key == "d":
+        elif key == "d":
             self._joint_command = np.array([0.0, 0.0, 0.738, -0.738, 1.462, -1.462], dtype=np.float32)
             return "Default joint command is assigned\r"
+
+        elif key == "s":
+            self._start = True
+            self.count = 0
+            return "Policy Start.\r"
 
         return None
 
     def command_help(self) -> list[str]:
         return [
-            "--- Joint Position Command ---",
+            "--- Fixed Policy Command ---",
+            "'s' : Policy Start",
             "'1'/'2'/'3': select hip/thigh/knee",
             "Up/Down arrow: selected joint +/-",
             "'d': Default standing position",

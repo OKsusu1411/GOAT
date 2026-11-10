@@ -13,7 +13,7 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import ImuState
+from motor_interfaces.msg import ImuState, States
 from message_filters import Subscriber, TimeSynchronizer
 
 from goat_control.utils.controller.nominal_controller import NominalController
@@ -40,7 +40,7 @@ class SimControllerNode(Node):
         # ------------------------------------------------------------------
         # Parameters
         # ------------------------------------------------------------------
-        self.declare_parameter("control_rate_hz", 200.0)
+        self.declare_parameter("control_rate_hz", 100.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("checkpoint_path", "")
@@ -116,6 +116,7 @@ class SimControllerNode(Node):
         # command publisher
         # ------------------------------------------------------------------
         self.joint_command_publisher = self.create_publisher(JointState, "/commands", qos_profile=sim_qos_profile)
+        self.obs_publisher = self.create_publisher(States, "/obs", qos_profile=sim_qos_profile)
 
         # ------------------------------------------------------------------
         # Mode switch
@@ -267,12 +268,13 @@ class SimControllerNode(Node):
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau = np.zeros(self.num_joints, dtype=np.float32)
+        obs = np.zeros(self.policy_controller.policy_observation_dim, dtype=np.float32)
 
         # --------------------------------------------------------------
         # Proactive condition check
         # --------------------------------------------------------------
         if self.publish_mode is None:
-            self._publish_joint_command(q_ref, v_ref, tau, joint_msg.header.stamp)
+            self._publish_joint_command(q_ref, v_ref, tau, obs, joint_msg.header.stamp)
             return
         
         # --------------------------------------------------------------
@@ -287,14 +289,14 @@ class SimControllerNode(Node):
             # Command is owned and updated by the controller itself (handle_key).
             joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_msg,
                                                                               imu_msg,
-                                                                              dt_sec, True)
+                                                                              dt_sec)
 
             v_ref[-2:] = wheel_v_ref
 
         elif self.publish_mode == "nominal":
             joint_torque, q_ref, _ = self.nominal_controller.compute(joint_msg, 
                                                                      imu_msg, 
-                                                                     dt_sec, True)
+                                                                     dt_sec)
             v_ref[-2:] = 0.0
 
         else:
@@ -305,22 +307,23 @@ class SimControllerNode(Node):
         # # --------------------------------------------------------------
         joint_pos = np.asarray(joint_msg.position, dtype=float).flatten()
         joint_vel = np.asarray(joint_msg.velocity, dtype=float).flatten()
-        safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
+        # safe_torque, is_blocked = self.safety_limiter.apply(joint_torque, joint_pos, joint_vel)
 
 
-        if is_blocked:
-            q_ref = np.zeros(self.num_joints, dtype=np.float32)
-            v_ref = np.zeros(self.num_joints, dtype=np.float32)
-            safe_torque = np.zeros(self.num_joints, dtype=np.float32)
+        # if is_blocked:
+        #     q_ref = np.zeros(self.num_joints, dtype=np.float32)
+        #     v_ref = np.zeros(self.num_joints, dtype=np.float32)
+        #     safe_torque = np.zeros(self.num_joints, dtype=np.float32)
 
-        tau[:] = safe_torque
+        tau[:] = joint_torque
 
         # --------------------------------------------------------------
         # Publish command immediately in the same synchronized callback
         # --------------------------------------------------------------
-        self._publish_joint_command(q_ref, v_ref, tau, joint_msg.header.stamp)
+        obs[:] = self.policy_controller.observation[0]
+        self._publish_joint_command(q_ref, v_ref, tau, obs, joint_msg.header.stamp)
 
-    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray, stamp) -> None:
+    def _publish_joint_command(self, position: np.ndarray, velocity: np.ndarray, torque: np.ndarray, obs: np.ndarray,  stamp) -> None:
         """Publish command to /joint_command.
 
         Message semantic:
@@ -346,7 +349,12 @@ class SimControllerNode(Node):
         msg.velocity = velocity.tolist()
         msg.effort = torque.tolist()
 
+        obs_msg = States()
+        obs_msg.header.stamp = stamp
+        obs_msg.data = obs.tolist()
+
         self.joint_command_publisher.publish(msg)
+        self.obs_publisher.publish(obs_msg)
 
 
 def main(args=None):

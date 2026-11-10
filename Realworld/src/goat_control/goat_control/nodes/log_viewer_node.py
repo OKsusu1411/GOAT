@@ -13,6 +13,7 @@ from pathlib import Path
 from rclpy.node import Node
 from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
+from motor_interfaces.msg import States
 
 class LogViewerNode(Node):
     """
@@ -79,6 +80,7 @@ class LogViewerNode(Node):
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
             header += [f"{name}_actual_torque" for name in self.joint_names]
+            header += [f'obs_{i}' for i in range(26)]                       # NOTE: Observation logging
 
             self.csv_writer.writerow(header)
             self.csv_file.flush()
@@ -90,17 +92,19 @@ class LogViewerNode(Node):
         # Subscribers for synchronized CSV logging
         self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
         self.command_sub = Subscriber(self, JointState, "/commands")
-        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub], queue_size=20)
+        self.observation_sub = Subscriber(self, States, "/obs")              # NOTE: Debugging 
+        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub, self.observation_sub], queue_size=20)     # NOTE: Observation
         self.sync.registerCallback(self._on_synced_data)
 
         # Timer (rate-limit printing)
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState) -> None:
+    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState, obs: States) -> None:
         # Keep latest synchronized pair for terminal printing
         self.joint_current = joint_current
         self.joint_ref = joint_ref
+        self.obs = obs              # NOTE: Observation
 
         if not self.is_csv_logging:
             return
@@ -134,6 +138,7 @@ class LogViewerNode(Node):
         row += [float(joint_vel[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
+        row += [float(val) for val in obs.data] # NOTE: Observation
 
         self.csv_writer.writerow(row)
 
