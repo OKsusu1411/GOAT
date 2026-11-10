@@ -87,6 +87,7 @@ class MotorManager:
         self.motor_temperature_c: List[float] = [float("nan")] * self.motor_count
         self.motor_phase_current_amp: List[float] = [float("nan")] * self.motor_count
         self.motor_speed_deg_per_sec: List[float] = [float("nan")] * self.motor_count
+
         self.motor_encoder_count: List[int] = [0] * self.motor_count
         self.motor_pi_gain: List[List[int]] = [[0, 0] for _ in range(self.motor_count)]
 
@@ -252,6 +253,12 @@ class MotorManager:
         return True
 
     def poll_wheel_pi_gain(self, motor_index: int, timeout: float = 0.05) -> bool:
+        # write pi gain
+        # response_message = self.motor_drivers[motor_index].write_wheel_pi_gain_ram(timeout=timeout)
+        # if response_message is None:
+        #     return False
+
+        # read pi gain
         response_message = self.motor_drivers[motor_index].read_wheel_pi_gain(timeout=timeout)
         if response_message is None:
             return False
@@ -373,7 +380,6 @@ class MotorManager:
         total_count_delta = (current_count - anchor_count) + self.motor_encoder_wrap_count[motor_index] * counts_per_rev
         motor_angle_deg = anchor_angle_deg + total_count_delta * (360.0 / counts_per_rev)
 
-        # Write back in the same 0.001 deg/LSB units _package_motor_states reads.
         self.motor_multi_turn_angle_raw_0p001deg[motor_index] = int(round(motor_angle_deg / self.angle_deg_per_lsb))
 
     # =========================================================================
@@ -396,6 +402,7 @@ class MotorManager:
             response_message, rx_time = driver.await_state2_reply(deadline)
             if response_message is None:
                 # Force existing sensor-NaN safety path.
+                self.motor_temperature_c[motor_index] = float("nan")
                 self.motor_speed_deg_per_sec[motor_index] = float("nan")
                 self.motor_phase_current_amp[motor_index] = float("nan")
                 continue
@@ -436,26 +443,13 @@ class MotorManager:
                   deadline. On timeout, inject NaN so the kill switch fires
                   instead of letting stale data drive the controller.
         """
-        # Phase 1 — arm + fire. Sequential is fine: bus.send() goes into the
-        # kernel TX ring without blocking on the wire.
         t_submit = time.perf_counter()                                           # [timing]
         for motor_index, amp in enumerate(current_cmd_amp):
             driver = self.motor_drivers[motor_index]
-            # driver.clear_torque_reply_event()
             self.torque_request_start_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
             driver.send_torque_only(float(amp), self.max_current_lsb, self.motor_current_amp_per_lsb)
             self.torque_request_end_time_ms[motor_index] = (time.perf_counter() - t_submit) * 1e3
         t_fired = time.perf_counter()                                            # [timing]
-
-        # Phase 2 — bounded wait, one shared deadline so total RX time is
-        # bounded by `timeout` rather than 8 × per-motor timeout.
-        # deadline = time.monotonic() + timeout
-        # for motor_index in range(self.motor_count):
-        #     driver = self.motor_drivers[motor_index]
-        #     response_message = driver.await_torque_reply(deadline)
-        #     if response_message is None:
-        #         raise TimeoutError(f"Motor {motor_index}: 0xA1 torque reply timeout.")
-        # t_done = time.perf_counter()                                             # [timing]
 
         # Surface timings (read by controller_node timing log).
         self._last_write_request_ms = (t_fired - t_submit) * 1e3

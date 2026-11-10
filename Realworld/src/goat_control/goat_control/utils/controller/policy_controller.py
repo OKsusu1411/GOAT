@@ -22,13 +22,8 @@ class PolicyController(BaseController):
         - fixed-base  (jig)   : legs only, no base/wheel observation.
         - movable-base(normal): base observation + wheels.
     """
-
-    #: Mode key (set by subclass). Selects the ``policy_<MODE>`` config block.
     MODE: str = ""
-    #: Whether this setup actuates the wheels.
     HAS_WHEELS: bool = True
-    #: Tracking command semantics this controller consumes (set by subclass):
-    #: "joint_position" (fixed) or "base_velocity" (movable).
     COMMAND_TYPE: str = ""
 
     def __init__(self, cfg: dict, logger: Any | None) -> None:
@@ -255,12 +250,8 @@ class PolicyController(BaseController):
             if self.q_ref_traj is None:
                 self.q_ref_traj = np.zeros((self.num_traj_points, self.num_leg_joints), dtype=float)
                 for i in range(self.num_leg_joints):
-                    self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i], self.num_traj_points)
+                    self.q_ref_traj[:, i] = np.linspace(joint_pos[i], self._natural_pos[i] * 1.05, self.num_traj_points)
             target_leg_pos = self.q_ref_traj[min(self.num_traj_points-1, self.count), :]
-
-        # grav = self.get_gravity_orientation(base_quat)
-        # print(f"acc_x : {base_lin_vel[0]:4f} | acc_y : {base_lin_vel[1]:4f} | acc_z : {base_lin_vel[2]:4f}")
-        # print(f"grav_x : {grav[0]:4f} | grav_y : {grav[1]:4f} | grav_z : {grav[2]:4f}")
         
         # --- Error Calculation (Joint Space) ---
         leg_pos_err = target_leg_pos - joint_leg_pos

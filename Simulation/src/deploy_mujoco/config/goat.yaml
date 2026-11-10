@@ -9,7 +9,7 @@ wheel_indices: [4, 5]
 
 policy:
   # Resolved relative to this file when not absolute. Override with --checkpoint.
-  checkpoint: ../../../../Realworld/src/goat_control/checkpoint/stand.onnx
+  checkpoint: ../../../../Realworld/src/goat_control/checkpoint/stand2.onnx
   # Policy runs every N control ticks.
   decimation: 2
   action_scale: [0.5, 0.5, 0.5, 0.5, 5.0, 5.0]
@@ -20,16 +20,16 @@ policy:
 gains:
   leg_kp:   [3.0, 3.0, 3.0, 3.0]
   leg_kd:   [0.1, 0.1, 0.1, 0.1]
-  wheel_kp: [0.05, 0.05]
+  wheel_kp: [0.02, 0.02]
 
 command:
   vx_limit: 0.1
   wz_limit: 0.1
   vx_step:  0.01
   wz_step:  0.01
-  height_lower_limit: 0.4
+  height_lower_limit: 0.41
   height_upper_limit: 0.56
-  height_step: 0.02
+  height_step: 0.075
 
 safety:
   # [lower, upper] per joint, joint_names order. inf = unlimited (wheels).

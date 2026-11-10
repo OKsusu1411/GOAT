@@ -41,7 +41,7 @@ class ControllerNode(Node):
         super().__init__("controller_node")
 
         # Parameters by Launch File
-        self.declare_parameter("control_rate_hz", 200.0)
+        self.declare_parameter("control_rate_hz", 100.0)
         self.declare_parameter("yaml_path", "goat_config.yaml")
         self.declare_parameter("urdf_path", "WF_GOAT.urdf")
         self.declare_parameter("action_timeout_sec", 0.05)
@@ -150,14 +150,13 @@ class ControllerNode(Node):
         self.input_thread = threading.Thread(target=self._keyboard_listener_loop, daemon=True)
         self.input_thread.start()
 
-        # Control loop timer
-        # control_period_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        # self.control_timer = self.create_timer(control_period_sec, self._control_loop)
-
         # Timing
         self.last_tick_time = time.perf_counter()
         self.last_end_time = time.perf_counter()
-        self.q_receive_time = None
+        self.prev_write_time = None
+        self.write_delta_sum = 0.0
+        self.write_delta_min = 0.0
+        self.write_delta_max = 0.0
 
         # Hardware-control thread to skip ROS overhead and sleep
         self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
@@ -423,7 +422,19 @@ class ControllerNode(Node):
 
         # Publish torque command (only start mode)
         tau[:] = safe_torque
-        self.motor_io.write_motor(tau)                                  
+        self.motor_io.write_motor(tau)
+
+        write_time = time.perf_counter()
+        if self.prev_write_time is None:
+            self.prev_write_time = time.perf_counter()
+
+        delta_write_time = write_time - self.prev_write_time
+
+        self.prev_write_time = write_time   
+
+        self.write_delta_min = min(self.write_delta_min, delta_write_time)
+        self.write_delta_max = max(self.write_delta_max, delta_write_time)
+        self.write_delta_sum += delta_write_time                          
 
         # Publish for logging
         obs_msg.data = self.policy_controller.observation[0].tolist()
@@ -431,42 +442,30 @@ class ControllerNode(Node):
 
         if self._rate_cycle_count >= self._rate_check_interval:
             now = time.perf_counter()
-            elapsed = now - self._rate_window_start
-            avg_hz = self._rate_cycle_count / elapsed
             avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
+            avg_write_dt_ms = (self.write_delta_sum / self._rate_cycle_count) * 1e3
 
             self.logger.info(
-                f"[Rate] avg={avg_hz:.2f} Hz | "
                 f"[Time] mean={avg_dt_ms:.3f} ms | "
                 f"[Time] min={self._dt_min * 1e3:.3f} ms | "
                 f"[Time] max={self._dt_max * 1e3:.3f} ms | "
-                f"[Time] deadline miss={self.deadline_miss_count} | "
+                f"[Apply] mean={avg_write_dt_ms:.3f} ms | "
+                f"[Apply] min={self.write_delta_min * 1e3:.3f} ms | "
+                f"[Apply] max={self.write_delta_max * 1e3:.3f} ms | "
                 f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
                 f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
-                f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f} | "
-                f"[CAN] write_wait={self.motor_io.motor_manager._last_write_wait_ms:.3f}\r"
+                f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f}\r"
             )
-
-            motor_write_timing_str = " | ".join(
-                f"M{i}: "
-                f"{self.motor_io.motor_manager.torque_request_start_time_ms[i]:.3f}"
-                f"->{self.motor_io.motor_manager.torque_request_end_time_ms[i]:.3f} "
-                for i in range(self.motor_io.motor_manager.motor_count)
-            )
-            # motor_send_timing_str = " | ".join(
-            #     f"M{i}: "
-            #     f"{self.motor_io.motor_manager.motor_request_start_time_ms[i]:.3f}"
-            #     f"->{self.motor_io.motor_manager.motor_request_end_time_ms[i]:.3f} "
-            #     f"Wait={self.motor_io.motor_manager.motor_wait_time_ms[i]:.3f}"
-            #     for i in range(self.motor_io.motor_manager.motor_count)
-            # )
-            self.logger.info(f"[CAN] Motor torque timings: {motor_write_timing_str}\r")
 
             self._rate_window_start = now
             self._rate_cycle_count = 0
             self._dt_min = float("inf")
             self._dt_max = 0.0
             self._dt_sum = 0.0
+
+            self.write_delta_max = 0.0
+            self.write_delta_min = float("inf")
+            self.write_delta_sum = 0.0
 
     def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
@@ -531,7 +530,6 @@ class ControllerNode(Node):
             now_ns = time.perf_counter_ns()
             if now_ns > next_tick_ns:
                 self.deadline_miss_count += 1
-
 
     def stop_control_thread(self) -> None:
         """Stop and join the dedicated hardware-control thread."""

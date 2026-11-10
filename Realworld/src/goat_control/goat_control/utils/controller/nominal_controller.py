@@ -88,8 +88,7 @@ class NominalController(BaseController):
             # wheel_R_Joint
 
         # ========== Name Index Mapping =========== #
-        self.ros_joint_names = ['hip_L_Joint', 'hip_R_Joint',
-                                'thigh_L_Joint', 'thigh_R_Joint',
+        self.ros_joint_names = ['thigh_L_Joint', 'thigh_R_Joint',
                                 'knee_L_Joint', 'knee_R_Joint', 
                                 'wheel_L_Joint', 'wheel_R_Joint']
 
@@ -98,7 +97,7 @@ class NominalController(BaseController):
         self.ros_name_to_idx = {name: i for i, name in enumerate(self.ros_joint_names)}
         self.pin_name_to_idx = {name: i for i, name in enumerate(self.pin_joint_names)}
 
-        self.ros_to_pin_ids = [2, 4, 6, 3, 5, 7] # ROS[self.ros_to_pin_ids] = Pin Ids
+        self.ros_to_pin_ids = [0, 2, 4, 1, 3, 5] # ROS[self.ros_to_pin_ids] = Pin Ids
         # self.ros_to_pin_ids = [0, 2, 4, 6, 1, 3, 5, 7] # ROS[self.ros_to_pin_ids] = Pin Ids
 
         # actuator ordering
@@ -134,7 +133,7 @@ class NominalController(BaseController):
         self.wheel_inner_Kp = self.cfg.get("nsc_wheel_inner_proportional_gain")  
         self.wheel_inner_Kd = self.cfg.get("nsc_wheel_inner_derivative_gain")
         self.theta_cmd_limit = math.radians(self.cfg.get("nsc_theta_cmd_limit"))  
-        self.q_target = np.asarray([0.0, 0.0, 0.9756, -0.9756, 2.0944, -2.0944, 0.0, 0.0])[self.ros_to_pin_ids]  # Final target joint position
+        self.q_target = np.asarray([0.9756, -0.9756, 2.0944, -2.0944, 0.0, 0.0])[self.ros_to_pin_ids]  # Final target joint position
 
         # State variables
         self.S_leg = np.zeros((4, self.nv))

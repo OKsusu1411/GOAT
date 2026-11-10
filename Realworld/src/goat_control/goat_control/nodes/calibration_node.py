@@ -37,9 +37,8 @@ class CalibrationNode(Node):
         # YAML file
         with open(self.yaml_path, 'r', encoding='utf-8') as file_handle:
             self.cfg = yaml.safe_load(file_handle)
-
         self.old_joint_offsets = self.cfg["joint_offsets"]
-        self.old_imu_offsets = self.cfg["imu_offsets"]
+        self.kneel_joint_pos = self.cfg["kneel_pose_joint_pos"]
 
         # Data buffers
         self.latest_joint_state = None
@@ -56,9 +55,10 @@ class CalibrationNode(Node):
         self.get_logger().info("Calibration Node Started.\r")
         self.get_logger().info("=============================================")
         self.get_logger().info("[CONTROLS]")
-        self.get_logger().info("'j': All Joint Position Calibration")
-        self.get_logger().info("'w': Wheel Position Calibration")
-        self.get_logger().info("'i': IMU Calibration")
+        self.get_logger().info("'j': Joint Position Zero Calibration")
+        self.get_logger().info("'w': Wheel Position Zero Calibration")
+        self.get_logger().info("'k': Kneel Pose Joint Position Calibration")
+        self.get_logger().info("'i': IMU Upright Calibration")
         self.get_logger().info("'q': Quit")
         self.get_logger().info("=============================================\r")
 
@@ -93,19 +93,23 @@ class CalibrationNode(Node):
             key = self._get_key()
             
             if key == 'j':
-                self.get_logger().info("Key 'j' pressed: Starting Joint Calibration\r")
+                self.get_logger().info("Key 'j' pressed: Starting Joint Zero Calibration\r")
                 self._joint_calibration()
             
             elif key == 'w':
-                self.get_logger().info("Key 'w' pressed: Starting Wheel Calibration\r")
+                self.get_logger().info("Key 'w' pressed: Starting Wheel Zero Calibration\r")
                 self._joint_calibration()
+
+            elif key == 'k':
+                self.get_logger().info("Key 'k' pressed: Starting Kneel Joint Calibration\r")
+                self._joint_calibration(is_kneel_pose=True)
 
             elif key == 'i':
                 if self._is_controller_running():
-                    self.get_logger().warning("[IMU Calibration] controller_node is running.\r")
+                    self.get_logger().warning("[IMU Upright Calibration] controller_node is running.\r")
                     self.get_logger().warning("Stop controller_node before IMU calibration.\r")
                     continue
-                self.get_logger().info("Key 'i' pressed: Starting IMU Calibration\r")
+                self.get_logger().info("Key 'i' pressed: Starting IMU Upright Calibration\r")
                 self._imu_calibration()
                 
             elif key == 'q':
@@ -125,12 +129,13 @@ class CalibrationNode(Node):
                 self.get_logger().info("[CONTROLS]")
                 self.get_logger().info("'j': All Joint Position Calibration")
                 self.get_logger().info("'w': Wheel Position Calibration")
+                self.get_logger().info("'k': Knee Pose Joint Calibration")
                 self.get_logger().info("'i': IMU Calibration")
                 self.get_logger().info("'q': Quit")
                 self.get_logger().info("=============================================\r")
                 continue
 
-    def _joint_calibration(self, is_wheel_mode:bool = False):
+    def _joint_calibration(self, is_wheel_mode:bool = False, is_kneel_pose:bool = False):
         """Collect N samples, calculate average, and save offsets to YAML."""
         if self.latest_joint_state is None:
             self.get_logger().warn("No joint states received yet! Cannot calibrate joints.")
@@ -164,8 +169,14 @@ class CalibrationNode(Node):
         # Calculate Average
         avg_positions = np.mean(position_samples, axis=0)
 
-        # Calculate offsets (Average)
-        joint_offsets = avg_positions
+        # Calculate offsets
+        if is_kneel_pose:
+            # Kneel pose offset
+            kneel_reference = np.array(self.kneel_joint_pos, dtype=float)
+            joint_offsets = avg_positions - kneel_reference
+        else:
+            # Zero position offset
+            joint_offsets = avg_positions
 
         self.get_logger().info(f"Averaged Positions ({self.sample_count} samples): {avg_positions}")
         self.get_logger().info(f"Calculated Joint Offsets: {joint_offsets}")
@@ -229,109 +240,6 @@ class CalibrationNode(Node):
             
         except Exception as e:
             self.get_logger().error(f"Failed to write YAML file: {e}")
-
-    # def _imu_calibration(self):
-    #     """IMU Calibration without Yaw"""
-    #     # Settings for sampling
-    #     sleep_interval = 0.05                           # 20 * 0.05 = 1.0 second total duration
-
-    #     self.get_logger().info(f"Collecting {self.sample_count} samples (approx 1 sec)... Keep robot still.")
-        
-    #     # IMU buffer list
-    #     quat_samples = []
-    #     old_imu_offsets_inv = inverse_quat(self.old_imu_offsets)
-
-    #     # Sampling Loop
-    #     for i in range(self.sample_count):
-            
-    #         # Exception
-    #         if self.latest_imu_state is None:
-    #             self.get_logger().warn("IMU data lost during sampling!")
-    #             return
-            
-    #         # Store current positions
-    #         current_quat = np.array([self.latest_imu_state.quat.w,
-    #                                  self.latest_imu_state.quat.x,
-    #                                  self.latest_imu_state.quat.y,
-    #                                  self.latest_imu_state.quat.z], dtype=float)
-    #         current_quat = multiply_quat(old_imu_offsets_inv, current_quat)               # Restore original quaternion
-
-    #         # q and -q are the same rotation
-    #         if quat_samples and np.dot(quat_samples[0], current_quat) < 0.0:
-    #             current_quat = -current_quat
-
-    #         quat_samples.append(current_quat)
-            
-    #         # Wait for next update
-    #         time.sleep(sleep_interval)
-
-    #     # Calculate Average
-    #     avg_quat = np.mean(quat_samples, axis=0)
-    #     avg_norm = np.linalg.norm(avg_quat)
-    #     if avg_norm < 1e-8:
-    #         self.get_logger().info("Averaged quaternion is 0. Calibration failed.")
-    #         return
-    #     avg_quat /= avg_norm
-
-    #     # Local Z axis
-    #     z_axis_local = np.array([0.0, 0.0, 1.0])
-    #     v_up = rotate_vector_by_quat(avg_quat, z_axis_local)
-
-    #     # Target Z axis
-    #     v_target = np.array([0.0, 0.0, 1.0])
-
-    #     # Cross axis between local, target z axis
-    #     axis = np.cross(v_up, v_target)
-    #     axis_norm = np.linalg.norm(axis)
-    #     axis = axis / axis_norm
-
-    #     # Dot product
-    #     dot_prod = np.clip(np.dot(v_up, v_target), -1.0, 1.0)
-    #     angle = np.arccos(dot_prod)
-
-    #     # Already robot is upright
-    #     if axis_norm < 1e-8:
-    #         quat_offsets = np.array([1.0, 0.0, 0.0, 0.0])
-
-    #     # Offset quaternion
-    #     else:
-    #         quat_offsets = axis_angle_to_quat(axis, angle)
-
-    #     self.get_logger().info(f"Calculated IMU quaternion Offsets: {quat_offsets}")
-
-    #     # Save to YAML
-    #     self._save_imu_offsets_to_yaml(quat_offsets)
-
-    # def _save_imu_offsets_to_yaml(self, offsets):
-    #     # Read existing file
-    #     data = {}
-    #     if os.path.exists(self.yaml_path):
-    #         try:
-    #             with open(self.yaml_path, 'r') as f:
-    #                 data = yaml.safe_load(f) or {}
-    #         except Exception as e:
-    #             self.get_logger().error(f"Failed to load existing YAML: {e}")
-    #             return
-        
-    #     # Update data structure
-    #     formatted_offsets = [float(val) for val in offsets]
-        
-    #     if 'imu_offsets' not in data:
-    #         data['imu_offsets'] = {}
-            
-    #     data['imu_offsets'] = formatted_offsets
-
-    #     # Write to file
-    #     try:
-    #         os.makedirs(os.path.dirname(self.yaml_path), exist_ok=True)
-    #         with open(self.yaml_path, 'w') as f:
-    #             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-            
-    #         self.get_logger().info(f"\n[SUCCESS] IMU offsets saved to '{self.yaml_path}'\n !! Restart all nodes !!")
-            
-    #     except Exception as e:
-    #         self.get_logger().error(f"Failed to write YAML file: {e}")
-
 
 def main(args=None):
     rclpy.init(args=args)
