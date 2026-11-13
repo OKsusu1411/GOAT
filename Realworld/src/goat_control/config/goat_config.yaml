@@ -68,15 +68,15 @@ nsc_wheel_inner_proportional_gain: 3.0
 nsc_wheel_inner_derivative_gain: 0.1
 nsc_theta_cmd_limit: 10.0
 policy_mode: movable
-policy_checkpoint_path: src/goat_control/checkpoint/stand_more_friction_2.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/stand_1112_URDF_revised.onnx
 policy_device: cpu
 policy_command_vx_limit: 1.0
 policy_command_wz_limit: 0.1
-policy_command_height_lower_limit: 0.41
+policy_command_height_lower_limit: 0.42
 policy_command_height_upper_limit: 0.56
 policy_command_vx_step: 0.1
 policy_command_wz_step: 0.01
-policy_command_height_step: 0.075
+policy_command_height_step: 0.07
 policy_command_joint_step: 10.0
 policy_decimation: 2.0
 policy_leg_proportional_gain:
@@ -136,10 +136,10 @@ policy_movable:
   - 5.0
   - 5.0
   natural_joint_position:
-  - 0.9756
-  - -0.9756
-  - 2.0071
-  - -2.0071
+  - 1.0386
+  - -1.0386
+  - 2.0384
+  - -2.0384
   - 0.0
   - 0.0
   effective_joint_indices:
@@ -186,9 +186,9 @@ kneel_pose_joint_pos:
 - 0
 - 0
 joint_offsets:
-- -5.231327726880163
-- 3.178331834344273
-- 11.75930418829822
-- -8.198274008869145
-- 2.31137443500113
-- -1.1029608207978163
+- -5.2045543761545705
+- 3.146793734760736
+- 11.765273214340036
+- -8.210447680401801
+- 1.232621330928475
+- -4.007572668551818
