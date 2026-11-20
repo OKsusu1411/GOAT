@@ -72,10 +72,10 @@ class MovableBasePolicyController(PolicyController):
         elif key == "DOWN":
             self._base_command[0] = float(np.clip(self._base_command[0] - self._vx_step,
                                                   -self._vx_limit, self._vx_limit))
-        elif key == "RIGHT":
+        elif key == "LEFT":
             self._base_command[2] = float(np.clip(self._base_command[2] + self._wz_step,
                                                   -self._wz_limit, self._wz_limit))
-        elif key == "LEFT":
+        elif key == "RIGHT":
             self._base_command[2] = float(np.clip(self._base_command[2] - self._wz_step,
                                                   -self._wz_limit, self._wz_limit))
         elif key == "8":
