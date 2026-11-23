@@ -123,11 +123,6 @@ class ControllerNode(Node):
                                                         "/commands", 
                                                         qos_profile=qos_profile)
 
-        # Observation publisher for debbugging
-        self.observation_pub = self.create_publisher(States,
-                                                     "/obs",
-                                                     qos_profile=qos_profile)
-
         # Messages
         self.now_stamp = self.get_clock().now().to_msg()
         self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
@@ -335,17 +330,10 @@ class ControllerNode(Node):
 
     def _control_loop(self):
         """Main control loop called by create_timer at control_rate_hz."""
-        now_time = time.perf_counter()
-
         # Time information
+        now_time = time.perf_counter()
         dt_sec = (now_time - self.last_tick_time)
         if dt_sec <= 0.0: dt_sec = 1.0 / max(self.control_rate_hz, 1.0)
-        self.last_tick_time = now_time
-
-        self._rate_cycle_count += 1
-        self._dt_min = min(self._dt_min, dt_sec)
-        self._dt_max = max(self._dt_max, dt_sec)
-        self._dt_sum += dt_sec
 
         # Messages
         joint_state_msg = self.motor_io.read_joint_state()
@@ -357,7 +345,7 @@ class ControllerNode(Node):
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
 
-        #r =================== Proactive Condition Check ====================
+        # =================== Proactive Condition Check ====================
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
@@ -377,7 +365,8 @@ class ControllerNode(Node):
             self.motor_io.write_motor(tau)
             self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
             return
-        # ==================================================================
+
+        # =================== Controller ====================
 
         # Mode switch detection
         self._switch_mode(self.publish_mode)
@@ -385,23 +374,11 @@ class ControllerNode(Node):
         # Active controller execution                                 
         if self.publish_mode == 'policy':
             # Command is owned and updated by the controller itself (handle_key).
-            joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg,
-                                                                              imu_msg,
-                                                                              dt_sec)
-
+            joint_torque, q_ref, wheel_v_ref = self.policy_controller.compute(joint_state_msg, imu_msg, dt_sec)
             # Only write into wheel slots that actually exist in this config.
             wheel_indices = self.cfg["wheel_indices"]
             if len(wheel_indices) > 0:
                 v_ref[wheel_indices] = wheel_v_ref
-
-        # elif self.publish_mode == 'nominal':
-        #     joint_torque, q_ref, _ = self.nominal_controller.compute(joint_state_msg,
-        #                                                              imu_msg,
-        #                                                              dt_sec)
-        #     # Same wheel-slot guard as the policy branch.
-        #     wheel_indices = self.cfg["wheel_indices"]
-        #     if len(wheel_indices) > 0:
-        #         v_ref[wheel_indices] = 0.0
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
@@ -420,54 +397,50 @@ class ControllerNode(Node):
             self.motor_io.write_motor(tau)
             return
 
-        # Publish torque command (only start mode)
+        # Publish torque command
         tau[:] = safe_torque
         self.motor_io.write_motor(tau)
 
-        write_time = time.perf_counter()
-        if self.prev_write_time is None:
-            self.prev_write_time = time.perf_counter()
+        # =================== Logging ====================
+        
+        # write_time = time.perf_counter()
+        # if self.prev_write_time is None:
+        #     self.prev_write_time = time.perf_counter()
 
-        delta_write_time = write_time - self.prev_write_time
+        # delta_write_time = write_time - self.prev_write_time
+        # self.prev_write_time = write_time   
 
-        self.prev_write_time = write_time   
-
-        self.write_delta_min = min(self.write_delta_min, delta_write_time)
-        self.write_delta_max = max(self.write_delta_max, delta_write_time)
-        self.write_delta_sum += delta_write_time                          
+        # self.write_delta_min = min(self.write_delta_min, delta_write_time)
+        # self.write_delta_max = max(self.write_delta_max, delta_write_time)
+        # self.write_delta_sum += delta_write_time                          
 
         # Publish for logging
-        obs_msg.data = self.policy_controller.observation[0].tolist()
-        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg, obs_msg)  
+        # self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)  
 
-        if self._rate_cycle_count >= self._rate_check_interval:
-            now = time.perf_counter()
-            avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
-            avg_write_dt_ms = (self.write_delta_sum / self._rate_cycle_count) * 1e3
+        # self._rate_cycle_count += 1
+        # if self._rate_cycle_count >= self._rate_check_interval:
+        #     avg_dt_ms = (self._dt_sum / self._rate_cycle_count) * 1e3
+        #     avg_write_dt_ms = (self.write_delta_sum / self._rate_cycle_count) * 1e3
 
-            self.logger.info(
-                f"[Time] mean={avg_dt_ms:.3f} ms | "
-                f"[Time] min={self._dt_min * 1e3:.3f} ms | "
-                f"[Time] max={self._dt_max * 1e3:.3f} ms | "
-                f"[Apply] mean={avg_write_dt_ms:.3f} ms | "
-                f"[Apply] min={self.write_delta_min * 1e3:.3f} ms | "
-                f"[Apply] max={self.write_delta_max * 1e3:.3f} ms | "
-                f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
-                f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
-                f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f}\r"
-            )
+        #     self.logger.info(
+        #         f"[Apply] mean={avg_write_dt_ms:.3f} ms | "
+        #         f"[Apply] min={self.write_delta_min * 1e3:.3f} ms | "
+        #         f"[Apply] max={self.write_delta_max * 1e3:.3f} ms | "
+        #         f"[CAN] read_request={self.motor_io.motor_manager._last_read_request_ms:.3f} | "
+        #         f"[CAN] read_wait={self.motor_io.motor_manager._last_read_wait_ms:.3f} | "
+        #         f"[CAN] write_request={self.motor_io.motor_manager._last_write_request_ms:.3f}\r"
+        #     )
 
-            self._rate_window_start = now
-            self._rate_cycle_count = 0
-            self._dt_min = float("inf")
-            self._dt_max = 0.0
-            self._dt_sum = 0.0
+        #     self._rate_cycle_count = 0
+        #     self._dt_min = float("inf")
+        #     self._dt_max = 0.0
+        #     self._dt_sum = 0.0
 
-            self.write_delta_max = 0.0
-            self.write_delta_min = float("inf")
-            self.write_delta_sum = 0.0
+        #     self.write_delta_max = 0.0
+        #     self.write_delta_min = float("inf")
+        #     self.write_delta_sum = 0.0
 
-    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg, obs_msg) -> None:
+    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
         # Interrupting handling
         if not rclpy.ok():
@@ -504,32 +477,104 @@ class ControllerNode(Node):
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
 
-        # Observation
-        if not obs_msg.data:
-            obs_msg.data = [0.0] * self.policy_controller.policy_observation_dim
-        obs_msg.header.stamp = joint_state_msg.header.stamp
-        self.observation_pub.publish(obs_msg)
-
 
     def _control_thread_loop(self):
         """Run the hardware control step at a fixed absolute rate."""
-        # First cycle starts immediately.
         next_tick_ns = time.perf_counter_ns()
+        prev_start_ns = None
+
+        # Timing statistics
+        log_interval = 500
+        count = 0
+        period_sum = 0
+        period_min = float("inf")
+        period_max = 0
+        period_count = 0
+        wake_sum = 0
+        wake_min = float("inf")
+        wake_max = 0
+        wake_count = 0
+        exec_sum = 0
+        exec_min = float("inf")
+        exec_max = 0
+
+        def fmt_timing(total, minimum, maximum, n):
+            if n == 0:
+                return "N/A"
+            return (
+                f"mean={total / n / 1e6:.3f} ms | "
+                f"min={minimum / 1e6:.3f} ms | "
+                f"max={maximum / 1e6:.3f} ms"
+            )
+
         while rclpy.ok() and not self._control_stop_event.is_set():
-            # Wait until the absolute start time of this control cycle.
-            now_ns = time.perf_counter_ns()
-            remaining_ns = next_tick_ns - now_ns
-            if remaining_ns > 0:
-                # Event.wait() instead of time.sleep() so shutdown can interrupt the wait immediately.
-                if self._control_stop_event.wait(remaining_ns * 1e-9):
-                    break
-            # Execute exactly one control cycle.
+
+            # 1. Wait until absolute scheduled time
+            remaining_ns = next_tick_ns - time.perf_counter_ns()
+            waited = remaining_ns > 0
+
+            if self._control_stop_event.wait(remaining_ns * 1e-9):
+                break
+
+            # 2. Record actual start time
+            start_ns = time.perf_counter_ns()
+
+            # [STATS] Actual period
+            if prev_start_ns is not None:
+                period_ns = start_ns - prev_start_ns
+                period_sum += period_ns
+                period_min = min(period_min, period_ns)
+                period_max = max(period_max, period_ns)
+                period_count += 1
+            # [STATS] Wake-up delay
+            if waited:
+                wake_delay_ns = max(0, start_ns - next_tick_ns)
+                wake_sum += wake_delay_ns
+                wake_min = min(wake_min, wake_delay_ns)
+                wake_max = max(wake_max, wake_delay_ns)
+                wake_count += 1
+
+            prev_start_ns = start_ns
+
+            # 3. Execute control loop
             self._control_loop()
-            # Schedule the next absolute cycle.
+
+            # 4. Schedule next absolute cycle
             next_tick_ns += self.period_ns
-            now_ns = time.perf_counter_ns()
-            if now_ns > next_tick_ns:
-                self.deadline_miss_count += 1
+
+            # [STATS] Execution time
+            end_ns = time.perf_counter_ns()
+            execution_ns = end_ns - start_ns
+            exec_sum += execution_ns
+            exec_min = min(exec_min, execution_ns)
+            exec_max = max(exec_max, execution_ns)
+            # [STATS] Skip missed cycles
+            if end_ns >= next_tick_ns:
+                skipped = (end_ns - next_tick_ns) // self.period_ns + 1
+                self.deadline_miss_count += skipped
+                next_tick_ns += skipped * self.period_ns
+            # [STATS] Periodic timing report
+            count += 1
+            if count >= log_interval:
+                self.logger.info(
+                    "\n[Control Thread Timing]\n"
+                    f"Period    : {fmt_timing(period_sum, period_min, period_max, period_count)}\n"
+                    f"Wake Delay: {fmt_timing(wake_sum, wake_min, wake_max, wake_count)}\n"
+                    f"Execution : {fmt_timing(exec_sum, exec_min, exec_max, count)}\n"
+                    f"Total Deadline Miss : {self.deadline_miss_count}\r"
+                )
+                count = 0
+                period_sum = 0
+                period_min = float("inf")
+                period_max = 0
+                period_count = 0
+                wake_sum = 0
+                wake_min = float("inf")
+                wake_max = 0
+                wake_count = 0
+                exec_sum = 0
+                exec_min = float("inf")
+                exec_max = 0
 
     def stop_control_thread(self) -> None:
         """Stop and join the dedicated hardware-control thread."""
@@ -537,7 +582,6 @@ class ControllerNode(Node):
         control_thread = getattr(self, "control_thread", None)
         if control_thread is not None and control_thread.is_alive():
             control_thread.join(timeout=1.0)
-
 
 def main(args=None):
     rclpy.init(args=args)

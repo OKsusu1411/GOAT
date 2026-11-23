@@ -73,6 +73,19 @@ class PolicyController(BaseController):
             self.policy_observation_dim += v
             self.logger.info(f"Name : {k} | Dim : {v}\r")
 
+        # History Configuration
+        self.history_length = int(mode_cfg.get("history_length", 0))
+        self.current_obs_dim = (self.policy_observation_dim // (1 + self.history_length))
+
+        if self.history_length < 0:
+            raise ValueError("history_length must be >= 0")
+        if self.policy_observation_dim % (1 + self.history_length) != 0:
+            raise ValueError("Invalid observation/history dimension")
+
+        # History Buffer: [H, D]
+        self._obs_history = np.zeros((self.history_length, self.current_obs_dim), dtype=np.float32)
+        self._history_ptr = 0
+
         self.agent = self._load_agent(self.checkpoint_path, self.providers)
 
         # --- Validate lengths ---
@@ -164,6 +177,8 @@ class PolicyController(BaseController):
         self._wheel_speed_ref[:] = 0.0
         self._base_command[:] = 0.0
         self._joint_command[:] = 0.0
+        self._obs_history.fill(0.0)
+        self._history_ptr = 0
         self.previous_action[:] = 0.0
         self.count = 0
 
@@ -206,19 +221,41 @@ class PolicyController(BaseController):
                     base_quat: np.ndarray,
                     joint_pos: np.ndarray,
                     joint_vel: np.ndarray) -> None:
-        """Run policy inference and update action targets before compute().
 
-        Args:
-            base_lin_vel:  Base linear velocity             [m/s], shape (3,).
-            base_ang_vel:  Base angular velocity            [rad/s], shape (3,).
-            base_quat:     Base quaternion                  [w, x, y, z], shape (4,).
-            joint_pos:     Joint angle (all joints)         [rad], shape (J,).
-            joint_vel:     Joint velocity                   [rad/s], shape (J,).
-        """
-        self.observation = self._build_observation(base_lin_vel, base_ang_vel, base_quat, joint_pos, joint_vel)
+        # Current Observation
+        current_obs = self._build_observation(base_lin_vel,
+                                              base_ang_vel,
+                                              base_quat,
+                                              joint_pos,
+                                              joint_vel
+                                            )
+
+        if current_obs.shape != (1, self.current_obs_dim):
+            raise ValueError(f"Current observation shape mismatch: {current_obs.shape}")
+
+        D = self.current_obs_dim
+        H = self.history_length
+
+        # Current Observation
+        self.observation[0, :D] = current_obs[0]
+
+        # History Construction
+        if H > 0:
+            p = self._history_ptr
+            split = (H - p) * D
+            # Oldest -> Newest
+            self.observation[0, D:D + split] = (self._obs_history[p:].reshape(-1))
+            self.observation[0, D + split:] = (self._obs_history[:p].reshape(-1))
+
+        # Policy inference
         raw_action = self.agent.run([self._output_name], {self._input_name: self.observation})[0].reshape(-1)
         self._decode_action(raw_action)
-        self.previous_action = raw_action 
+
+        # History update
+        if H > 0:
+            self._obs_history[self._history_ptr] = current_obs[0]
+            self._history_ptr = (self._history_ptr + 1) % H
+        self.previous_action[:] = raw_action
 
     def compute(self,
                 joint_state: JointState,

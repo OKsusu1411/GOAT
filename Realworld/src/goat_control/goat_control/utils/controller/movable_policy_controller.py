@@ -30,7 +30,7 @@ class MovableBasePolicyController(PolicyController):
 
         self._vx_limit = float(cfg.get("policy_command_vx_limit", 1.0))
         self._wz_limit = float(cfg.get("policy_command_wz_limit", 0.5))
-        self._h_lower_limit = float(cfg.get("policy_command_height_lower_limit", 0.4))
+        self._h_lower_limit = float(cfg.get("policy_command_height_lower_limit", 0.42))
         self._h_upper_limit = float(cfg.get("policy_command_height_upper_limit", 0.56))
 
         # Command re-initialization
@@ -86,8 +86,12 @@ class MovableBasePolicyController(PolicyController):
                                                   self._h_lower_limit, self._h_upper_limit))
             
         elif key == "s":
-            self._start = True
-            self.count = 0
+            if not self._start:
+                self.previous_action.fill(0.0)
+                self._obs_history.fill(0.0)
+                self._history_ptr = 0
+                self._start = True
+                self.count = 0
             return "Policy Start.\r"
         
         elif key == " ":
