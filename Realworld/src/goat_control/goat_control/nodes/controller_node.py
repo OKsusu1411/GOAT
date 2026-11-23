@@ -338,7 +338,6 @@ class ControllerNode(Node):
         # Messages
         joint_state_msg = self.motor_io.read_joint_state()
         imu_msg = self.imu_io.read_imu() 
-        obs_msg = States()
 
         # Commands
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
@@ -350,20 +349,20 @@ class ControllerNode(Node):
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
             self.motor_io.write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
             self.motor_io.write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
         
         # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
         if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
             self.motor_io.write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             return
 
         # =================== Controller ====================
@@ -382,7 +381,7 @@ class ControllerNode(Node):
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg, obs_msg)
+            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
             self.motor_io.write_motor(tau)
             return
 
@@ -402,7 +401,7 @@ class ControllerNode(Node):
         self.motor_io.write_motor(tau)
 
         # =================== Logging ====================
-        
+
         # write_time = time.perf_counter()
         # if self.prev_write_time is None:
         #     self.prev_write_time = time.perf_counter()
