@@ -483,7 +483,7 @@ class ControllerNode(Node):
         prev_start_ns = None
 
         # Timing statistics
-        log_interval = 500
+        log_interval = 5000
         count = 0
         period_sum = 0
         period_min = float("inf")
@@ -560,7 +560,7 @@ class ControllerNode(Node):
                     f"Period    : {fmt_timing(period_sum, period_min, period_max, period_count)}\n"
                     f"Wake Delay: {fmt_timing(wake_sum, wake_min, wake_max, wake_count)}\n"
                     f"Execution : {fmt_timing(exec_sum, exec_min, exec_max, count)}\n"
-                    f"Total Deadline Miss : {self.deadline_miss_count}\r"
+                    f"Total Deadline Miss : {self.deadline_miss_count}"
                 )
                 count = 0
                 period_sum = 0
