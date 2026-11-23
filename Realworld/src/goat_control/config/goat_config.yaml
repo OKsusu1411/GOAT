@@ -121,6 +121,7 @@ policy_fixed:
   - 4
   - 5
 policy_movable:
+  history_length: 5
   observation_info:
     base_ang_vel: 3
     gravity_vector: 3
@@ -128,6 +129,7 @@ policy_movable:
     joint_pos: 4
     joint_vel: 6
     previous_action: 6
+    hist_info: 130
   action_scale_factor:
   - 0.5
   - 0.5
