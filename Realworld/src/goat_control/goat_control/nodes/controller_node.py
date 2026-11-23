@@ -483,7 +483,7 @@ class ControllerNode(Node):
         prev_start_ns = None
 
         # Timing statistics
-        log_interval = 5000
+        log_interval = 2000
         count = 0
         period_sum = 0
         period_min = float("inf")
