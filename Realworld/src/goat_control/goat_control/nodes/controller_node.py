@@ -367,7 +367,7 @@ class ControllerNode(Node):
         self.motor_io.write_motor(tau)
         
         # Publish for logging
-        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)  
+        self._publish(q_ref, v_ref, safe_torque, base_commands, joint_state_msg, imu_msg)  
 
         # =================== Logging ====================
 
