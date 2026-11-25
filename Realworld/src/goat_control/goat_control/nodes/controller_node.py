@@ -1,9 +1,6 @@
 # controller_node.py — ROS2 ControllerNode (main control loop)
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
-
 import numpy as np
 import sys
 import yaml
@@ -16,9 +13,8 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import States
 from motor_interfaces.msg import ImuState
-from message_filters import Subscriber
+from motor_interfaces.msg import BaseCommands
 
 from goat_control.utils.controller.nominal_controller import NominalController
 from goat_control.utils.controller.safety_limiter import SafetyLimiter
@@ -65,9 +61,6 @@ class ControllerNode(Node):
             raise ValueError("YAML root must be a mapping/dict.")
         self.cfg["nsc_urdf_path"] = copy.deepcopy(self.urdf_path)
 
-        # Policy checkpoint path
-        self.checkpoint_path = copy.deepcopy(self.cfg["policy_checkpoint_path"])
-
         # Logger
         self.logger = self.get_logger()
         self.logger.info(f"Python thread switch interval: {sys.getswitchinterval() * 1e3:.3f} ms")
@@ -109,29 +102,14 @@ class ControllerNode(Node):
         )
 
         # Publisher
-        self.joint_state_pub = self.create_publisher(JointState,
-                                                     "/joint_states",
-                                                     qos_profile=qos_profile)
-
-        # Publish IMU for logging (controller now reads in-process; this is the
-        # external view, not a feedback path).
-        self.imu_state_pub = self.create_publisher(ImuState,
-                                                   "/imu",
-                                                   qos_profile=qos_profile)
-
-        self.torque_command_pub = self.create_publisher(JointState, 
-                                                        "/commands", 
-                                                        qos_profile=qos_profile)
-
-        # Messages
-        self.now_stamp = self.get_clock().now().to_msg()
-        self.joint_state_msg = self.motor_io.latest_joint_state  # seeded by MotorIO's initial read
-        self.imu_msg = self.imu_io.latest_imu_state              # seeded by ImuIO's initial read
+        self.joint_state_pub = self.create_publisher(JointState, "/joint_states", qos_profile=qos_profile)
+        self.imu_state_pub = self.create_publisher(ImuState, "/imu", qos_profile=qos_profile)
+        self.torque_command_pub = self.create_publisher(JointState,  "/commands",  qos_profile=qos_profile)
+        self.base_command_pub = self.create_publisher(BaseCommands, "/base_commands", qos_profile=qos_profile)
         
         # Mode switch (None = idle, no torque until keyboard selects a mode)
         self.publish_mode = None
         self._prev_mode = None
-        self._start = False
 
         # HIL safety latch
         self.kill_switch_on = False
@@ -147,7 +125,6 @@ class ControllerNode(Node):
 
         # Timing
         self.last_tick_time = time.perf_counter()
-        self.last_end_time = time.perf_counter()
         self.prev_write_time = None
         self.write_delta_sum = 0.0
         self.write_delta_min = 0.0
@@ -156,9 +133,6 @@ class ControllerNode(Node):
         # Hardware-control thread to skip ROS overhead and sleep
         self.period_ns = int(1.0 / max(self.control_rate_hz, 1.0) * 1e9)
         self.deadline_miss_count = 0
-        self._dt_min = float("inf")
-        self._dt_max = 0.0
-        self._dt_sum = 0.0
 
         self._rate_cycle_count = 0
         self._rate_check_interval = 500
@@ -177,7 +151,6 @@ class ControllerNode(Node):
         self.logger.info("===========================================")
         self.logger.info("[Keydown Menu]")
         self.logger.info("'p': Policy Control Mode")
-        self.logger.info("'n': Nominal Control Mode [Deprecated]")
         self.logger.info("'r': Controller reset")
         self.logger.info("'q': Quit")
         self.logger.info("[Command Mode]")
@@ -194,7 +167,7 @@ class ControllerNode(Node):
         """
         try:
             # NOTE: stdin -> tty
-            tty.setraw(self.tty.fileno())
+            tty.setcbreak(self.tty.fileno())
             ch = self.tty.read(1).decode(errors="ignore")
             if ch == "\x1b":
                 seq = self.tty.read(2).decode(errors="ignore")
@@ -220,14 +193,6 @@ class ControllerNode(Node):
                     continue
                 self.publish_mode = 'policy'
                 self.logger.info("Mode changed: [Policy]\r")
-
-            elif key == 'n':
-                if self.kill_switch_on:
-                    self.logger.error(f"Cannot enter Nominal mode. Kill switch is ON: {self.kill_reason}\r")
-                    continue
-                self.publish_mode = 'nominal'
-                self.logger.info("Mode changed: [Nominal]\r")
-                self.logger.info("Current deprecated.")
 
             elif key == 'q':
                 self.logger.info("Shutting down Agent Node...\r")
@@ -343,26 +308,27 @@ class ControllerNode(Node):
         q_ref = np.zeros(self.num_joints, dtype=np.float32)
         v_ref = np.zeros(self.num_joints, dtype=np.float32)
         tau   = np.zeros(self.num_joints, dtype=np.float32)
+        base_commands = self.policy_controller._base_command
 
         # =================== Proactive Condition Check ====================
         # Kill latch: do not auto-recover.
         if self.kill_switch_on:
             self.logger.error(f"Kill switch is ON: {self.kill_reason}. Publishing zero torque.\r", throttle_duration_sec=1.0)
             self.motor_io.write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, base_commands, joint_state_msg, imu_msg)
             return
         
         # Idle: zero command, no controller compute.
         if self.publish_mode is None:
             self.motor_io.write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, base_commands, joint_state_msg, imu_msg)
             return
         
         # Sensor validity check: a NaN in joint/IMU state would propagate into the torque
         if self._sensor_data_has_nan(joint_state_msg, imu_msg):
             self._trigger_kill_switch("NaN detected in joint/IMU state")
             self.motor_io.write_motor(tau)
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, base_commands, joint_state_msg, imu_msg)
             return
 
         # =================== Controller ====================
@@ -381,7 +347,7 @@ class ControllerNode(Node):
 
         else:
             self._trigger_kill_switch(f"Invalid publish mode: {self.publish_mode}")
-            self._publish(q_ref, v_ref, tau, joint_state_msg, imu_msg)
+            self._publish(q_ref, v_ref, tau, base_commands, joint_state_msg, imu_msg)
             self.motor_io.write_motor(tau)
             return
 
@@ -439,7 +405,7 @@ class ControllerNode(Node):
         #     self.write_delta_min = float("inf")
         #     self.write_delta_sum = 0.0
 
-    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, joint_state_msg, imu_msg) -> None:
+    def _publish(self, position: np.ndarray, velocity: np.ndarray, effort: np.ndarray, base_command: np.ndarray, joint_state_msg, imu_msg) -> None:
         """Publish joint state, IMU, and torque commands for logging."""
         # Interrupting handling
         if not rclpy.ok():
@@ -471,10 +437,17 @@ class ControllerNode(Node):
         msg_command.velocity = velocity.tolist()
         msg_command.effort = effort.tolist()
 
+        msg_base_command = BaseCommands()
+        msg_base_command.header.stamp = joint_state_msg.header.stamp
+        msg_base_command.vx = base_command[0]
+        msg_base_command.wz = base_command[2]
+        msg_base_command.height = base_command[3]
+
         # Publish
         self.joint_state_pub.publish(msg_joint)
         self.imu_state_pub.publish(msg_imu)
         self.torque_command_pub.publish(msg_command)
+        self.base_command_pub.publish(msg_base_command)
 
 
     def _control_thread_loop(self):
@@ -552,7 +525,8 @@ class ControllerNode(Node):
                 skipped = (end_ns - next_tick_ns) // self.period_ns + 1
                 self.deadline_miss_count += skipped
                 next_tick_ns += skipped * self.period_ns
-            # [STATS] Periodic timing report
+
+            # [LOGGING] Periodic timing report
             count += 1
             if count >= log_interval:
                 self.logger.info(

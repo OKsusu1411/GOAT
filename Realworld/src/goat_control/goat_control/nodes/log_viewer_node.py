@@ -13,7 +13,7 @@ from pathlib import Path
 from rclpy.node import Node
 from message_filters import Subscriber, TimeSynchronizer
 from sensor_msgs.msg import JointState
-from motor_interfaces.msg import States
+from motor_interfaces.msg import BaseCommands
 
 class LogViewerNode(Node):
     """
@@ -37,7 +37,7 @@ class LogViewerNode(Node):
         self.declare_parameter("yaml_path", "src/goat_control/config/goat_config.yaml")
         self.declare_parameter("csv_path", "experiment_logs.csv")
         self.declare_parameter("log_degrees", False)
-        self.declare_parameter("csv", True)
+        self.declare_parameter("csv", False)
 
         # YAML file
         yaml_path = str(self.get_parameter("yaml_path").value)
@@ -47,24 +47,21 @@ class LogViewerNode(Node):
 
         self.declare_parameter("print_rate_hz", 10.0)
         self.declare_parameter("print_degrees", True)
-        self.declare_parameter("precision", 3)
+        self.declare_parameter("precision", 2)
 
         self.print_rate_hz = float(self.get_parameter("print_rate_hz").value)
         self.print_degrees = bool(self.get_parameter("print_degrees").value)
         self.precision = int(self.get_parameter("precision").value)
         self.start_time = None
         self.source_start_time = None
-        self.log_start = False
         
         # YAML parameters
         self.num_joints = self.cfg["num_joints"]
         self.joint_names = self.cfg["joint_names"]
-        self.wheel_indices = self.cfg["wheel_indices"]
-        self.gear_ratio = np.array(self.cfg["motor_gear_ratio"], dtype=float)
 
         self.joint_current: Optional[JointState] = None
         self.joint_ref: Optional[JointState] = None
-        self._print_count = 0
+        self.base_ref: Optional[BaseCommands] = None
         self.command_unit = "Nm"
 
         # CSV logging
@@ -91,17 +88,19 @@ class LogViewerNode(Node):
         # Subscribers for synchronized CSV logging
         self.joint_state_sub = Subscriber(self, JointState, "/joint_states")
         self.command_sub = Subscriber(self, JointState, "/commands")
-        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub], queue_size=20) 
+        self.base_command_sub = Subscriber(self, BaseCommands, "/base_commands")
+        self.sync = TimeSynchronizer([self.joint_state_sub, self.command_sub, self.base_command_sub], queue_size=20) 
         self.sync.registerCallback(self._on_synced_data)
 
         # Timer (rate-limit printing)
         period_sec = 1.0 / max(self.print_rate_hz, 0.5)
         self.create_timer(period_sec, self._tick)
 
-    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState) -> None:
+    def _on_synced_data(self, joint_current: JointState, joint_ref: JointState, base_ref: BaseCommands) -> None:
         # Keep latest synchronized pair for terminal printing
         self.joint_current = joint_current
         self.joint_ref = joint_ref
+        self.base_ref = base_ref
 
         if not self.is_csv_logging:
             return
@@ -140,11 +139,17 @@ class LogViewerNode(Node):
 
     def _tick(self) -> None:
         # No subscription
-        if self.joint_current is None:
-            return
-                
+        if self.joint_current is None or self.base_ref is None:
+            return        
         if self.joint_ref is None:
             self.joint_ref = self.joint_current
+
+        # Decode base command msg
+        command_str = (
+            f"vx = {self.base_ref.vx:+.{self.precision}f} m/s | "
+            f"wz = {self.base_ref.wz:+.{self.precision}f} rad/s | "
+            f"h = {self.base_ref.height:.{self.precision}f} m"
+        )
 
         # Decode torque msg
         joint_effort_ref = np.array(self.joint_ref.effort, dtype=float)
@@ -165,16 +170,28 @@ class LogViewerNode(Node):
             position_unit = "rad"
             velocity_unit = "rad/s"
 
-        # Print rows (batch: all joints in ONE log block)
+        # Print rows
         header_str = (f"{'ID':>3}  {'NAME':<12}  "f"{'POS':>15}  {'VEL':>12}  {'CMD_TAU':>12} {'REAL_TAU':>11}  {'CMD_POS':>12}  {'CMD_VEL':>12}")
-        div_str = "-" * len(header_str)
-        lines = [header_str, div_str]
+        table_width = len(header_str)
+        div_str = "=" * table_width
+        sub_div_str = "-" * table_width
+
+        lines = [
+            div_str,
+            "[Base Command]".center(table_width),
+            command_str.center(table_width),
+            div_str,
+            "[Joint Command]".center(table_width),
+            div_str,
+            header_str,
+            sub_div_str,
+        ]
 
         # Print log data
         for joint_index in range(self.num_joints):
             name = self.joint_names[joint_index] if joint_index < len(self.joint_names) else f"joint_{joint_index}"
 
-            # Integrate data (all data is !!motor!! based)
+            # Integrate data
             lines.append(
                 f"{joint_index:>3}  {name[:12]:<12}  "
                 f"{float(joint_pos_current[joint_index]):>9.{self.precision}f} {position_unit:<5}  "
