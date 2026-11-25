@@ -1,18 +1,18 @@
 #include "goat_control_cpp/imu/imu_io.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <iostream>
 #include <sstream>
 #include <Eigen/Geometry>
 #include <csignal>
+#include <yaml-cpp/yaml.h>
 // TODO: 200Hz 확인 필요
 // TODO: cfg를 yaml 통째로 받아서 imu_io 내부에서 처리하기 (일관성을 위해서)
 // #define IMU_IO_TEST_MAIN
 
 // Constructor
-ImuIO::ImuIO(ImuConfig cfg):cfg_(std::ref(cfg)){
+ImuIO::ImuIO(const YAML::Node cfg):cfg_(std::ref(cfg)){
   latest_raw_vector_.assign(cfg_.expected_length, 0.0);
   open();  
 }
@@ -29,11 +29,11 @@ goat_api::msg::ImuState ImuIO::read_imu() {
   std::vector<double> data;
   bool have_data;
   {
-    std::lock_guard<std::mutex> lock(mutex_);   // Thread lock
+    std::unique_lock<std::mutex> lock(imu_mutex_);
     have_data = has_valid_packet_;
-    data = latest_raw_vector_;                  // Raw data
+    data = latest_raw_vector_;                  // Data fetch
   }
-  if (!have_data) return msg;
+  if (!have_data) return msg;                   
 
   // Quaternion calibration
   const Eigen::Quaterniond quat_offset(cfg_.imu_offsets[0], cfg_.imu_offsets[1],
@@ -131,7 +131,7 @@ void ImuIO::read_loop(){
       if (float_values.size() != cfg_.expected_length) continue;
       
       {
-        std::lock_guard<std::mutex> lock(mutex_);         // Thread lock
+        std::lock_guard<std::mutex> lock(imu_mutex_);         // Thread lock
         has_valid_packet_ = true;
         latest_raw_vector_ = std::move(float_values);     // Raw data
       }

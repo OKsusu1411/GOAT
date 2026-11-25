@@ -28,7 +28,7 @@ struct ImuConfig {
 class ImuIO{
  public:
   // Constructor
-  explicit ImuIO(ImuConfig cfg);
+  explicit ImuIO(const YAML::Node cfg);
   ImuIO();
   
   // Copy constructor
@@ -44,10 +44,10 @@ class ImuIO{
  private:
   ImuConfig cfg_;
   std::unique_ptr<serial::Serial> serial_port_;
-  std::vector<double> latest_raw_vector_;
+  std::vector<double> latest_raw_vector_;       // Data buffer
   
-  std::thread reader_thread_;                   // Thread 
-  std::mutex mutex_;                            // Thread lock
+  std::thread reader_thread_;
+  std::mutex imu_mutex_;
   
   std::atomic<bool> stop_flag_{false};
   bool has_valid_packet_ = false;

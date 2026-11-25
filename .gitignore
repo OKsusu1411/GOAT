@@ -75,7 +75,10 @@ _build
 # CLAUDE
 **/*.md
 !README.md
-!sim2real_manual.md
+!CLAUDE.md
+!AGENTS.md
+!solution.md
+!consult.md
 
 # VS Code
 .vscode/

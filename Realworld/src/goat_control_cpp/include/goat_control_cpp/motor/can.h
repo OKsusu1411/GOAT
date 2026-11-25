@@ -13,7 +13,5 @@ class Can {
   void open();
   void close();
 
-  
-
 };
 #endif // CAN_H_
