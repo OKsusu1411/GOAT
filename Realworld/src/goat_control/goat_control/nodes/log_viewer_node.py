@@ -75,6 +75,8 @@ class LogViewerNode(Node):
 
             header = ["time_sec"] + ["source_time_sec"] + [f"{name}_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
             header += [f"{name}_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
+            header += [f"{name}_target_pos_{'deg' if self.log_degrees else 'rad'}" for name in self.joint_names]
+            header += [f"{name}_target_vel_{'deg/s' if self.log_degrees else 'rad/s'}" for name in self.joint_names]
             header += [f"{name}_torque" for name in self.joint_names]
             header += [f"{name}_actual_torque" for name in self.joint_names]
 
@@ -122,6 +124,8 @@ class LogViewerNode(Node):
         joint_effort_real = np.asarray(joint_current.effort, dtype=float)
 
         # Command from exactly the same controller cycle
+        joint_pos_ref = np.asarray(joint_ref.position, dtype=float)
+        joint_vel_ref = np.asarray(joint_ref.velocity, dtype=float)
         joint_effort_ref = np.asarray(joint_ref.effort, dtype=float)
 
         if self.log_degrees:
@@ -132,6 +136,8 @@ class LogViewerNode(Node):
         row += [source_time_sec]
         row += [float(joint_pos[i]) for i in range(self.num_joints)]
         row += [float(joint_vel[i]) for i in range(self.num_joints)]
+        row += [float(joint_pos_ref[i]) for i in range(self.num_joints)]
+        row += [float(joint_vel_ref[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_ref[i]) for i in range(self.num_joints)]
         row += [float(joint_effort_real[i]) for i in range(self.num_joints)]
 
