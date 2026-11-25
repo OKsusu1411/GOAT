@@ -365,6 +365,9 @@ class ControllerNode(Node):
         # Publish torque command
         tau[:] = safe_torque
         self.motor_io.write_motor(tau)
+        
+        # Publish for logging
+        self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)  
 
         # =================== Logging ====================
 
@@ -379,8 +382,6 @@ class ControllerNode(Node):
         # self.write_delta_max = max(self.write_delta_max, delta_write_time)
         # self.write_delta_sum += delta_write_time                          
 
-        # Publish for logging
-        # self._publish(q_ref, v_ref, safe_torque, joint_state_msg, imu_msg)  
 
         # self._rate_cycle_count += 1
         # if self._rate_cycle_count >= self._rate_check_interval:
