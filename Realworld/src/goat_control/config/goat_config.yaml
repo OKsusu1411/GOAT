@@ -68,14 +68,14 @@ nsc_wheel_inner_proportional_gain: 3.0
 nsc_wheel_inner_derivative_gain: 0.1
 nsc_theta_cmd_limit: 10.0
 policy_mode: movable
-policy_checkpoint_path: src/goat_control/checkpoint/track_1122_history_reward.onnx
+policy_checkpoint_path: src/goat_control/checkpoint/track_1123_history_smoother_reward.onnx
 policy_device: cpu
 policy_command_vx_limit: 1.0
-policy_command_wz_limit: 0.2
+policy_command_wz_limit: 0.5
 policy_command_height_lower_limit: 0.42
 policy_command_height_upper_limit: 0.56
 policy_command_vx_step: 0.1
-policy_command_wz_step: 0.05
+policy_command_wz_step: 0.1
 policy_command_height_step: 0.07
 policy_command_joint_step: 10.0
 policy_decimation: 2.0
